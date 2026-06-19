@@ -25,6 +25,7 @@
       </div>
       <div class="bar"><i id="xpBar"></i></div>
       <div class="combat-controls">
+        <button id="controlModeBtn" type="button">操作：鍵鼠模式</button>
         <button id="autoAimBtn" type="button">自動鎖定：OFF</button>
       </div>
       <div class="hint">WASD/方向鍵移動｜滑鼠控機身｜E 自動鎖定｜空白衝刺｜P 暫停｜自動存檔</div>
@@ -44,13 +45,12 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v2.6 機身滑鼠控制修正版</strong>
+          <strong>v2.7 手機觸控版</strong>
           <ul>
+            <li>手機預設「手機自動」：自動瞄準 ON、左搖桿移動、右側拖曳控制機身。</li>
+            <li>可切換「鍵鼠模式」：鍵盤移動、滑鼠控機身與手動瞄準。</li>
             <li>機身朝向永遠由滑鼠控制，自動鎖定不再搶走船頭方向。</li>
             <li>自動鎖定只輔助射擊方向；滑鼠操作時仍會優先聽滑鼠。</li>
-            <li>移除武器切換；主武器固定保留原本的脈衝主砲。</li>
-            <li>追蹤效果改為升級三選一技能「追蹤子彈」。</li>
-            <li>第 7 波後會出現精英敵人：護盾、分裂、狂暴、治療。</li>
           </ul>
         </div>
         <div id="offlineNotice" class="offline"></div>
@@ -67,6 +67,12 @@
 - 空白：相位衝刺，短時間無敵
 - P：暫停並保存
 
+手機：
+- 左下虛擬搖桿：移動
+- 右側瞄準區：拖曳控制機身朝向
+- 右下衝刺鍵：相位衝刺
+- 操作模式：手機自動 / 鍵鼠模式切換
+
 技巧：
 - 開局有 3.5 秒新手護盾，可以先熟悉移動與瞄準。
 - 碎晶不用冒死撿，升級「磁吸場」會變輕鬆。
@@ -76,6 +82,12 @@
 - 「無人機合約」會提高離線收益，適合零碎時間玩。
 - 波次越高敵人越快，但獎勵也越高。</pre>
       </div>
+    </div>
+
+    <div id="touchControls" aria-label="手機觸控操作">
+      <div id="joystick" class="touch-pad" aria-label="移動搖桿"><i></i><span>移動</span></div>
+      <div id="aimPad" class="touch-aim" aria-label="瞄準區"><span>瞄準</span></div>
+      <button id="dashTouch" type="button" aria-label="衝刺">衝刺</button>
     </div>
 
     <div id="toast" role="status"></div>

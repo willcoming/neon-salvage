@@ -280,6 +280,82 @@ h1, h2, p { margin: 0; }
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+#touchControls {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+}
+
+.touch-pad,
+.touch-aim,
+#dashTouch {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
+.touch-pad {
+  position: absolute;
+  left: 22px;
+  bottom: 270px;
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  border: 1px solid rgba(55, 246, 255, .34);
+  background: radial-gradient(circle, rgba(55,246,255,.18), rgba(5,7,18,.28));
+  box-shadow: 0 0 24px rgba(55,246,255,.18);
+  pointer-events: auto;
+}
+.touch-pad i {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 42px;
+  height: 42px;
+  margin: -21px 0 0 -21px;
+  border-radius: 50%;
+  background: var(--cyan);
+  box-shadow: 0 0 18px var(--cyan);
+  opacity: .88;
+}
+.touch-pad span,
+.touch-aim span {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: rgba(238,247,255,.72);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .1em;
+  pointer-events: none;
+}
+.touch-aim {
+  position: absolute;
+  right: 340px;
+  bottom: 270px;
+  width: min(42vw, 210px);
+  height: 145px;
+  border-radius: 26px;
+  border: 1px dashed rgba(255, 209, 102, .45);
+  background: linear-gradient(135deg, rgba(255,209,102,.11), rgba(255,61,242,.08));
+  pointer-events: auto;
+}
+#dashTouch {
+  position: absolute;
+  right: 344px;
+  bottom: 430px;
+  width: 86px;
+  height: 58px;
+  border-radius: 22px;
+  pointer-events: auto;
+}
+
+body[data-control-mode="touch"] #touchControls { display: block; }
+body[data-control-mode="keyboard"] #touchControls { display: none; }
+
 @media (max-width: 860px) {
   body { overflow: auto; }
   #app { min-height: 100vh; height: 100dvh; }
@@ -288,4 +364,6 @@ h1, h2, p { margin: 0; }
   #panel { left: 16px; right: 16px; top: auto; width: auto; height: 220px; }
   #game { height: calc(100vh - 235px); }
   .hint { display: none; }
+  .touch-aim { right: 18px; }
+  #dashTouch { right: 22px; }
 }

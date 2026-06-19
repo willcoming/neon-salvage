@@ -17,8 +17,13 @@
     howBtn: document.getElementById('howBtn'),
     how: document.getElementById('how'),
     toast: document.getElementById('toast'),
+    controlModeBtn: document.getElementById('controlModeBtn'),
     autoAimBtn: document.getElementById('autoAimBtn'),
-    offlineNotice: document.getElementById('offlineNotice')
+    offlineNotice: document.getElementById('offlineNotice'),
+    joystick: document.getElementById('joystick'),
+    joystickKnob: document.querySelector('#joystick i'),
+    aimPad: document.getElementById('aimPad'),
+    dashTouch: document.getElementById('dashTouch')
   };
 
   const SAVE_KEY = 'neon-salvage-save-v2';
@@ -45,6 +50,9 @@
 
   const keys = new Set();
   const mouse = { x: W / 2, y: H / 2, down: false, lastMove: performance.now() };
+  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth <= 860;
+  let controlMode = coarsePointer ? 'touch' : 'keyboard';
+  const touchMove = { x: 0, y: 0, active: false };
 
   const baseState = () => ({
     scrap: 0,
@@ -403,7 +411,25 @@
     updateCombatControls();
   }
 
+  function setControlMode(mode, announce = true) {
+    controlMode = mode === 'touch' ? 'touch' : 'keyboard';
+    document.body.dataset.controlMode = controlMode;
+    autoAim = controlMode === 'touch';
+    touchMove.x = 0; touchMove.y = 0; touchMove.active = false;
+    if (ui.joystickKnob) ui.joystickKnob.style.transform = '';
+    if (announce) flash(controlMode === 'touch' ? '手機自動模式：自動瞄準 ON' : '鍵鼠模式：鍵盤移動 / 滑鼠瞄準');
+    updateCombatControls();
+  }
+
+  function toggleControlMode() {
+    setControlMode(controlMode === 'touch' ? 'keyboard' : 'touch');
+  }
+
   function updateCombatControls() {
+    if (ui.controlModeBtn) {
+      ui.controlModeBtn.textContent = `操作：${controlMode === 'touch' ? '手機自動' : '鍵鼠模式'}`;
+      ui.controlModeBtn.classList.toggle('active', controlMode === 'touch');
+    }
     if (ui.autoAimBtn) {
       ui.autoAimBtn.textContent = `自動鎖定：${autoAim ? 'ON' : 'OFF'}`;
       ui.autoAimBtn.classList.toggle('active', autoAim);
@@ -540,8 +566,11 @@
     }
     shotTimer -= dt; spawnTimer -= dt; dashCooldown = Math.max(0, dashCooldown - dt); dashTime = Math.max(0, dashTime - dt); player.invuln = Math.max(0, player.invuln - dt); missionPulse += dt;
 
-    const ax = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
-    const ay = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+    const keyX = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+    const keyY = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
+    const useTouchMove = controlMode === 'touch' && touchMove.active;
+    const ax = useTouchMove ? touchMove.x : keyX;
+    const ay = useTouchMove ? touchMove.y : keyY;
     const len = Math.hypot(ax, ay) || 1;
     const dashMult = dashTime > 0 ? 3.25 : 1;
     player.vx = (ax / len) * speed() * dashMult;
@@ -947,14 +976,66 @@
     if (e.code === 'KeyE') toggleAutoAim();
   });
   window.addEventListener('keyup', e => keys.delete(e.code));
-  canvas.addEventListener('pointermove', e => { const rect = canvas.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top; mouse.lastMove = performance.now(); });
-  canvas.addEventListener('pointerdown', () => { mouse.down = true; });
+  function setMouseFromClient(clientX, clientY) {
+    const rect = canvas.getBoundingClientRect();
+    mouse.x = clamp(clientX - rect.left, 0, W);
+    mouse.y = clamp(clientY - rect.top, 0, H);
+    mouse.lastMove = performance.now();
+  }
+
+  canvas.addEventListener('pointermove', e => { setMouseFromClient(e.clientX, e.clientY); });
+  canvas.addEventListener('pointerdown', e => { mouse.down = true; setMouseFromClient(e.clientX, e.clientY); });
   canvas.addEventListener('pointerup', () => { mouse.down = false; });
   ui.startBtn.addEventListener('click', startOrResume);
   ui.howBtn.addEventListener('click', () => { ui.how.hidden = !ui.how.hidden; });
   ui.saveBtn.addEventListener('click', () => save(true));
   ui.resetBtn.addEventListener('click', resetSave);
+  ui.controlModeBtn?.addEventListener('click', toggleControlMode);
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
+
+  function bindTouchControls() {
+    const joy = ui.joystick;
+    const knob = ui.joystickKnob;
+    if (joy) {
+      const updateJoy = e => {
+        e.preventDefault();
+        const r = joy.getBoundingClientRect();
+        const max = Math.min(r.width, r.height) * .34;
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        let dx = e.clientX - cx;
+        let dy = e.clientY - cy;
+        const len = Math.hypot(dx, dy);
+        if (len > max) { dx = dx / len * max; dy = dy / len * max; }
+        touchMove.x = dx / max;
+        touchMove.y = dy / max;
+        touchMove.active = Math.hypot(touchMove.x, touchMove.y) > .08;
+        if (knob) knob.style.transform = `translate(${dx}px, ${dy}px)`;
+      };
+      const resetJoy = e => {
+        e?.preventDefault?.();
+        touchMove.x = 0; touchMove.y = 0; touchMove.active = false;
+        if (knob) knob.style.transform = '';
+      };
+      joy.addEventListener('pointerdown', e => { joy.setPointerCapture?.(e.pointerId); updateJoy(e); });
+      joy.addEventListener('pointermove', e => { if (joy.hasPointerCapture?.(e.pointerId)) updateJoy(e); });
+      joy.addEventListener('pointerup', resetJoy);
+      joy.addEventListener('pointercancel', resetJoy);
+    }
+
+    if (ui.aimPad) {
+      const aim = e => { e.preventDefault(); mouse.down = true; setMouseFromClient(e.clientX, e.clientY); };
+      ui.aimPad.addEventListener('pointerdown', e => { ui.aimPad.setPointerCapture?.(e.pointerId); aim(e); });
+      ui.aimPad.addEventListener('pointermove', e => { if (ui.aimPad.hasPointerCapture?.(e.pointerId)) aim(e); });
+      ui.aimPad.addEventListener('pointerup', e => { e.preventDefault(); mouse.down = false; });
+      ui.aimPad.addEventListener('pointercancel', () => { mouse.down = false; });
+    }
+
+    ui.dashTouch?.addEventListener('pointerdown', e => { e.preventDefault(); doDash(); });
+  }
+
+  bindTouchControls();
+  setControlMode(controlMode, false);
   window.addEventListener('beforeunload', () => save(false));
 
   if (!CanvasRenderingContext2D.prototype.roundRect) {
