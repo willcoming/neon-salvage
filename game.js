@@ -82,6 +82,9 @@
   let mission = null;
   let weaponMode = 'pulse';
   let autoAim = false;
+  let activeEvent = null;
+  let eventTimer = 0;
+  let meteorTimer = 0;
 
   const weaponDefs = {
     pulse: { name: '脈衝主砲', short: '主砲', color: '#37f6ff' },
@@ -94,7 +97,10 @@
     shieldRegen: 0,
     shardMultiplier: 0,
     slowField: 0,
-    orbitals: 0
+    orbitals: 0,
+    missileVolley: 0,
+    weakScan: 0,
+    harvestDrive: 0
   };
 
   const upgradeDefs = [
@@ -111,7 +117,10 @@
     { id: 'shieldRegen', name: '自修護盾', desc: '每秒緩慢回復護盾。' },
     { id: 'shardMultiplier', name: '碎晶精煉', desc: '敵人掉落碎晶增加。' },
     { id: 'slowField', name: '重力干擾', desc: '敵人靠近時會被減速。' },
-    { id: 'orbitals', name: '環繞刃翼', desc: '生成環繞玩家的近距離傷害刃翼。' }
+    { id: 'orbitals', name: '環繞刃翼', desc: '生成環繞玩家的近距離傷害刃翼。' },
+    { id: 'missileVolley', name: '飛彈齊射', desc: '追蹤飛彈額外發射側翼飛彈。' },
+    { id: 'weakScan', name: '弱點掃描', desc: '對精英與 Boss 造成額外傷害。' },
+    { id: 'harvestDrive', name: '收割引擎', desc: '連續擊殺會短暫提高射速。' }
   ];
 
   const enemyTypes = {
@@ -120,6 +129,20 @@
     tank: { label: '重甲機', color: '#ffd166', hp: 58, speed: 42, r: 24, sides: 6, scrap: 3 },
     shooter: { label: '狙擊球', color: '#ff3df2', hp: 27, speed: 50, r: 17, sides: 8, scrap: 2 },
     boss: { label: '星環吞噬者', color: '#ff4d6d', hp: 520, speed: 34, r: 48, sides: 10, scrap: 18 }
+  };
+
+  const eliteMods = {
+    shielded: { name: '護盾', color: '#7aa7ff', hp: 1.55, speed: .92, scrap: 2 },
+    splitter: { name: '分裂', color: '#ffd166', hp: 1.18, speed: 1.02, scrap: 2 },
+    berserk: { name: '狂暴', color: '#ff4d6d', hp: .9, speed: 1.42, scrap: 2 },
+    medic: { name: '治療', color: '#4dff88', hp: 1.28, speed: .96, scrap: 3 }
+  };
+
+  const eventDefs = {
+    meteor: { name: '流星雨', desc: '危險流星穿越戰場，擊中敵我皆會受傷。', color: '#ff7a3d' },
+    overclock: { name: '超頻風暴', desc: '你的射速提升，但敵人行動也更快。', color: '#37f6ff' },
+    blackout: { name: '電磁干擾', desc: '狙擊球變多，自動鎖定半徑縮短。', color: '#ff3df2' },
+    rich: { name: '碎晶富礦', desc: '敵人掉落增加，但精英出現率提高。', color: '#ffd166' }
   };
 
   const achievementDefs = [
@@ -240,7 +263,11 @@
   function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15; }
   function speed() { return 282 + (meta.upgrades.engine || 0) * 18; }
   function fireRate() { return Math.max(.075, .215 - (meta.upgrades.cannon || 0) * .011); }
-  function weaponFireRate() { return weaponMode === 'missile' ? fireRate() * 2.45 : fireRate(); }
+  function weaponFireRate() {
+    const harvest = upgradesRuntime.harvestDrive > 0 ? Math.max(.72, 1 - Math.min(.28, (runKills % 10) * .028 * upgradesRuntime.harvestDrive)) : 1;
+    const storm = activeEvent?.id === 'overclock' ? .78 : 1;
+    return (weaponMode === 'missile' ? fireRate() * 2.45 : fireRate()) * harvest * storm;
+  }
   function damage() { return 15 + (meta.upgrades.cannon || 0) * 2.45; }
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28; }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
@@ -249,7 +276,7 @@
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 17, hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = [];
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; bossActive = false; gameOver = false; skillChoosing = false;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0;
     mission = newMission();
     startWave(1);
     updateUi();
@@ -277,8 +304,18 @@
     bossActive = n % 5 === 0;
     spawnLeft = bossActive ? 0 : Math.floor(5 + n * 1.55 + Math.pow(n, 1.08));
     spawnTimer = bossActive ? .55 : n === 1 ? .85 : .45;
+    if (wave >= 9 && !bossActive && (wave % 3 === 0 || Math.random() < .28)) startEvent();
+    if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
     if (bossActive) spawnBoss();
-    flash(bossActive ? `Boss 波：第 ${wave} 波` : `第 ${wave} 波來襲`);
+    flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : `第 ${wave} 波來襲`);
+  }
+
+  function startEvent() {
+    const ids = ['meteor', 'overclock', 'blackout', 'rich'];
+    const id = choose(ids);
+    activeEvent = { id, ...eventDefs[id] };
+    eventTimer = 18 + Math.min(12, wave * .8);
+    meteorTimer = .8;
   }
 
   function spawnEnemy(typeId) {
@@ -294,14 +331,18 @@
       r: t.r + Math.min(9, wave * .18),
       hp: t.hp + wave * (pick === 'tank' ? 7.2 : pick === 'sprinter' ? 3.2 : 4.7),
       maxHp: 1,
-      speed: (t.speed + wave * (pick === 'sprinter' ? 3.25 : 2.05)) * (wave === 1 ? .82 : 1),
+      speed: (t.speed + wave * (pick === 'sprinter' ? 3.25 : 2.05)) * (wave === 1 ? .82 : 1) * (activeEvent?.id === 'overclock' ? 1.14 : 1),
       spin: rand(-3, 3),
       color: t.color,
       sides: t.sides,
       scrap: t.scrap,
       hit: 0,
-      shootClock: rand(.8, 2.4)
+      shootClock: rand(.8, 2.4),
+      elite: null,
+      healClock: rand(1.1, 2.0),
+      splitDone: false
     };
+    maybeApplyElite(e, pick);
     e.maxHp = e.hp;
     enemies.push(e);
   }
@@ -309,15 +350,31 @@
   function pickEnemyType() {
     const pool = ['chaser', 'chaser', 'chaser'];
     if (wave >= 2) pool.push('sprinter');
-    if (wave >= 3) pool.push('shooter');
+    if (wave >= 3 || activeEvent?.id === 'blackout') pool.push('shooter');
     if (wave >= 4) pool.push('tank');
     if (wave >= 8) pool.push('sprinter', 'shooter');
+    if (activeEvent?.id === 'blackout') pool.push('shooter', 'shooter');
     return choose(pool);
+  }
+
+  function maybeApplyElite(e, pick) {
+    if (pick === 'boss' || wave < 7) return;
+    const chance = Math.min(.12 + wave * .012 + (activeEvent?.id === 'rich' ? .12 : 0), .38);
+    if (Math.random() > chance) return;
+    const id = choose(['shielded', 'splitter', 'berserk', 'medic']);
+    const mod = eliteMods[id];
+    e.elite = { id, name: mod.name, color: mod.color };
+    e.label = `${mod.name}${e.label}`;
+    e.hp *= mod.hp;
+    e.speed *= mod.speed;
+    e.scrap += mod.scrap;
+    e.r += id === 'shielded' ? 4 : 2;
+    e.color = mod.color;
   }
 
   function spawnBoss() {
     const t = enemyTypes.boss;
-    const e = { type: 'boss', label: t.label, x: W / 2, y: -80, r: t.r + wave * 1.5, hp: t.hp + wave * 75, maxHp: t.hp + wave * 75, speed: t.speed + wave, spin: .7, color: t.color, sides: t.sides, scrap: t.scrap + wave, hit: 0, shootClock: 1.1 };
+    const e = { type: 'boss', label: t.label, x: W / 2, y: -80, r: t.r + wave * 1.5, hp: t.hp + wave * 75, maxHp: t.hp + wave * 75, speed: t.speed + wave, spin: .7, color: t.color, sides: t.sides, scrap: t.scrap + wave, hit: 0, shootClock: 1.1, phase2: false, elite: null };
     enemies.push(e);
   }
 
@@ -334,7 +391,7 @@
   }
 
   function aimAngle() {
-    const target = autoAim ? nearestEnemy() : null;
+    const target = autoAim ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : Infinity) : null;
     if (target) return Math.atan2(target.y - player.y, target.x - player.x);
     return Math.atan2(mouse.y - player.y, mouse.x - player.x);
   }
@@ -366,20 +423,24 @@
   function shoot() {
     const angle = aimAngle();
     if (weaponMode === 'missile') {
-      const target = nearestEnemy(900);
+      const target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 900);
       const speed = 430;
-      bullets.push({
-        type: 'missile', target, turn: 7.2,
-        x: player.x + Math.cos(angle) * 24,
-        y: player.y + Math.sin(angle) * 24,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        life: 2.6,
-        r: 6.5,
-        dmg: damage() * 1.9,
-        splash: 72 + (meta.upgrades.cannon || 0) * 1.8,
-        pierce: 0
-      });
+      const volley = 1 + Math.min(2, upgradesRuntime.missileVolley);
+      for (let i = 0; i < volley; i++) {
+        const off = volley === 1 ? 0 : (i - (volley - 1) / 2) * .18;
+        bullets.push({
+          type: 'missile', target, turn: 7.2,
+          x: player.x + Math.cos(angle + off) * 24,
+          y: player.y + Math.sin(angle + off) * 24,
+          vx: Math.cos(angle + off) * speed,
+          vy: Math.sin(angle + off) * speed,
+          life: 2.6,
+          r: 6.5,
+          dmg: damage() * 1.9 * (volley > 1 ? .78 : 1),
+          splash: 72 + (meta.upgrades.cannon || 0) * 1.8,
+          pierce: 0
+        });
+      }
       return;
     }
 
@@ -392,10 +453,10 @@
 
   function enemyShoot(e) {
     const a = Math.atan2(player.y - e.y, player.x - e.x);
-    const count = e.type === 'boss' ? 7 : 1;
+    const count = e.type === 'boss' ? (e.phase2 ? 11 : 7) : 1;
     for (let i = 0; i < count; i++) {
-      const off = count === 1 ? 0 : (i - 3) * .16;
-      enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(a + off) * (e.type === 'boss' ? 205 : 250), vy: Math.sin(a + off) * (e.type === 'boss' ? 205 : 250), r: e.type === 'boss' ? 5 : 4, life: 4, dmg: e.type === 'boss' ? 12 : 8 });
+      const off = count === 1 ? 0 : (i - (count - 1) / 2) * (e.phase2 ? .13 : .16);
+      enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(a + off) * (e.type === 'boss' ? (e.phase2 ? 235 : 205) : 250), vy: Math.sin(a + off) * (e.type === 'boss' ? (e.phase2 ? 235 : 205) : 250), r: e.type === 'boss' ? 5 : 4, life: 4, dmg: e.type === 'boss' ? (e.phase2 ? 15 : 12) : 8 });
     }
   }
 
@@ -431,8 +492,9 @@
     const scoreGain = Math.floor((e.type === 'boss' ? 400 : 16) + wave * (e.type === 'boss' ? 24 : 3.5));
     meta.score += scoreGain;
     totalKills++; runKills++;
-    xp += e.type === 'boss' ? 8 : e.type === 'tank' ? 2 : 1;
-    dropShard(e.x, e.y, e.scrap + Math.floor(wave / 5));
+    xp += e.type === 'boss' ? 8 : e.elite ? 3 : e.type === 'tank' ? 2 : 1;
+    if (e.elite?.id === 'splitter' && !e.splitDone) spawnSplinters(e);
+    dropShard(e.x, e.y, e.scrap + Math.floor(wave / 5) + (activeEvent?.id === 'rich' ? 2 : 0));
     maybeDropPowerup(e.x, e.y);
     burst(e.x, e.y, e.color, e.type === 'boss' ? 44 : 18, e.type === 'boss' ? 1.5 : 1);
     addText(e.x, e.y - e.r - 10, `+${scoreGain}`, e.color);
@@ -443,6 +505,21 @@
     }
     if (upgradesRuntime.chain > 0) chainArc(e.x, e.y, e.type === 'boss' ? 80 : 42);
     checkAchievements();
+  }
+
+  function spawnSplinters(e) {
+    for (let i = 0; i < 2; i++) {
+      const t = enemyTypes.sprinter;
+      enemies.push({ type: 'sprinter', label: '分裂碎片', x: e.x + rand(-16, 16), y: e.y + rand(-16, 16), r: 9, hp: 10 + wave * 2.2, maxHp: 10 + wave * 2.2, speed: t.speed + wave * 3.8, spin: rand(-4, 4), color: '#ffd166', sides: 3, scrap: 1, hit: 0, shootClock: rand(1, 2), elite: null, healClock: 2, splitDone: true });
+    }
+  }
+
+  function spawnMeteor() {
+    const fromLeft = Math.random() < .5;
+    const y = rand(90, H - 40);
+    const vx = (fromLeft ? 1 : -1) * rand(360, 520);
+    const vy = rand(-60, 60);
+    enemyShots.push({ type: 'meteor', x: fromLeft ? -35 : W + 35, y, vx, vy, r: rand(10, 18), life: 3.2, dmg: 18 + wave * .5, color: '#ff7a3d' });
   }
 
   function chainArc(x, y, amount) {
@@ -476,6 +553,11 @@
     if (!running || paused || gameOver || skillChoosing) return;
     dt = Math.min(dt, .033);
     runTime += dt;
+    if (activeEvent) {
+      eventTimer -= dt;
+      if (activeEvent.id === 'meteor') { meteorTimer -= dt; if (meteorTimer <= 0) { spawnMeteor(); meteorTimer = rand(.75, 1.35); } }
+      if (eventTimer <= 0) { flash(`${activeEvent.name} 結束`); activeEvent = null; }
+    }
     shotTimer -= dt; spawnTimer -= dt; dashCooldown = Math.max(0, dashCooldown - dt); dashTime = Math.max(0, dashTime - dt); player.invuln = Math.max(0, player.invuln - dt); missionPulse += dt;
 
     const ax = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -515,7 +597,7 @@
       const d = Math.hypot(e.x - b.x, e.y - b.y);
       if (d <= b.splash + e.r) {
         const falloff = clamp(1 - d / (b.splash + e.r), .25, 1);
-        e.hp -= b.dmg * falloff;
+        e.hp -= b.dmg * falloff * ((upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1);
         e.hit = .12;
         if (e.hp <= 0) killEnemy(e);
       }
@@ -548,7 +630,7 @@
         const rr = b.r + e.r;
         if (dist2(b, e) < rr * rr) {
           if (b.type === 'missile') { explodeMissile(b, e); break; }
-          e.hp -= b.dmg; e.hit = .08; burst(b.x, b.y, '#37f6ff', 4, .55);
+          e.hp -= b.dmg * ((upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1); e.hit = .08; burst(b.x, b.y, '#37f6ff', 4, .55);
           if (e.hp <= 0) killEnemy(e);
           if (b.pierce > 0) b.pierce--; else b.dead = true;
           break;
@@ -567,10 +649,19 @@
       const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
       e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
       e.y += Math.sin(a) * e.speed * slow * bossStop * dt;
+      if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash('Boss 進入二階段：星環暴走'); burst(e.x, e.y, '#ff4d6d', 48, 1.5); }
+      if (e.elite?.id === 'medic') {
+        e.healClock -= dt;
+        if (e.healClock <= 0) {
+          for (const ally of enemies) if (!ally.dead && ally !== e && Math.hypot(ally.x - e.x, ally.y - e.y) < 145) ally.hp = Math.min(ally.maxHp, ally.hp + 9 + wave * 1.2);
+          particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: .34, max: .34, r: 18, color: '#4dff88', ring: true });
+          e.healClock = rand(1.2, 2.1);
+        }
+      }
       e.hit = Math.max(0, e.hit - dt);
       if (e.type === 'shooter' || e.type === 'boss') {
         e.shootClock -= dt;
-        if (e.shootClock <= 0) { enemyShoot(e); e.shootClock = e.type === 'boss' ? rand(1.0, 1.65) : rand(1.7, 2.7); }
+        if (e.shootClock <= 0) { enemyShoot(e); e.shootClock = e.type === 'boss' ? (e.phase2 ? rand(.72, 1.12) : rand(1.0, 1.65)) : rand(1.7, 2.7); }
       }
       const rr = e.r + player.r;
       if (dist2(e, player) < rr * rr && !isPlayerProtected()) {
@@ -587,6 +678,10 @@
   function updateEnemyShots(dt) {
     for (const s of enemyShots) {
       s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
+      if (s.type === 'meteor') {
+        for (const e of enemies) if (!e.dead && dist2(s, e) < Math.pow(s.r + e.r, 2)) { e.hp -= s.dmg * 1.7; e.hit = .12; if (e.hp <= 0) killEnemy(e); }
+        particles.push({ x: s.x, y: s.y, vx: rand(-10, 10), vy: rand(-10, 10), life: .2, max: .2, r: 3, color: s.color || '#ff7a3d', ring: false });
+      }
       if (dist2(s, player) < Math.pow(s.r + player.r, 2) && !isPlayerProtected()) {
         s.dead = true; player.hp -= s.dmg; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
         if (player.hp <= 0) endRun();
@@ -803,13 +898,14 @@
     }
     ctx.restore();
   }
-  function drawEnemyShots() { ctx.save(); for (const s of enemyShots) { ctx.shadowColor = '#ff3df2'; ctx.shadowBlur = 14; ctx.fillStyle = '#ff9af8'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TWO_PI); ctx.fill(); } ctx.restore(); }
+  function drawEnemyShots() { ctx.save(); for (const s of enemyShots) { ctx.shadowColor = s.type === 'meteor' ? '#ff7a3d' : '#ff3df2'; ctx.shadowBlur = s.type === 'meteor' ? 24 : 14; ctx.fillStyle = s.type === 'meteor' ? '#ffb36b' : '#ff9af8'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TWO_PI); ctx.fill(); if (s.type === 'meteor') { ctx.strokeStyle = '#ff7a3d'; ctx.lineWidth = 2; ctx.stroke(); } } ctx.restore(); }
 
   function drawEnemies() {
     ctx.save();
     for (const e of enemies) {
       ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(performance.now() * .001 * e.spin);
       ctx.shadowColor = e.color; ctx.shadowBlur = e.hit > 0 ? 30 : 15; ctx.fillStyle = e.hit > 0 ? '#fff' : e.color;
+      if (e.elite || e.phase2) { ctx.strokeStyle = e.elite?.color || '#ff4d6d'; ctx.lineWidth = 3; ctx.globalAlpha = .45 + Math.sin(performance.now() * .006) * .18; ctx.beginPath(); ctx.arc(0, 0, e.r + 8, 0, TWO_PI); ctx.stroke(); ctx.globalAlpha = 1; }
       ctx.beginPath();
       for (let i = 0; i < e.sides * 2; i++) { const a = i / (e.sides * 2) * TWO_PI; const r = i % 2 ? e.r * .66 : e.r; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
       ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke(); ctx.restore();
@@ -840,7 +936,7 @@
 
   function drawMission() {
     ctx.save();
-    const x = 18; const y = 118; const w = 300; const h = 54;
+    const x = 18; const y = 118; const w = 318; const h = activeEvent ? 78 : 54;
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 13px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 14, y + 22);
@@ -851,6 +947,12 @@
       ctx.fillStyle = '#ffd166';
       ctx.font = '800 12px system-ui';
       ctx.fillText(`新手護盾 ${Math.ceil(shieldLeft)}s`, x + 14, y + h + 22);
+    }
+    if (activeEvent) {
+      ctx.fillStyle = activeEvent.color; ctx.font = '900 12px system-ui';
+      ctx.fillText(`事件：${activeEvent.name} ${Math.ceil(eventTimer)}s`, x + 14, y + 58);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 14, y + 65, w - 28, 5);
+      ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 14, y + 65, (w - 28) * clamp(eventTimer / 30, 0, 1), 5);
     }
     ctx.fillStyle = autoAim ? '#4dff88' : '#92a5c8';
     ctx.font = '800 12px system-ui';
