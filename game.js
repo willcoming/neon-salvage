@@ -44,7 +44,7 @@
   let runTime = 0;
 
   const keys = new Set();
-  const mouse = { x: W / 2, y: H / 2, down: false };
+  const mouse = { x: W / 2, y: H / 2, down: false, lastMove: performance.now() };
 
   const baseState = () => ({
     scrap: 0,
@@ -383,10 +383,26 @@
     return best;
   }
 
-  function aimAngle() {
-    const target = autoAim ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : Infinity) : null;
-    if (target) return Math.atan2(target.y - player.y, target.x - player.x);
+  function mouseAimAngle() {
     return Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  }
+
+  function isMouseAiming() {
+    return mouse.down || performance.now() - mouse.lastMove < 1500;
+  }
+
+  function aimAngle() {
+    if (autoAim && !isMouseAiming()) {
+      const target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : Infinity);
+      if (target) return Math.atan2(target.y - player.y, target.x - player.x);
+    }
+    return mouseAimAngle();
+  }
+
+  function shotTarget() {
+    const target = autoAim && !isMouseAiming() ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : Infinity) : null;
+    if (target) return Math.atan2(target.y - player.y, target.x - player.x);
+    return mouseAimAngle();
   }
 
   function toggleAutoAim() {
@@ -403,7 +419,7 @@
   }
 
   function shoot() {
-    const angle = aimAngle();
+    const angle = shotTarget();
     const split = Math.min(2, upgradesRuntime.splitShot);
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
     const homing = upgradesRuntime.homingRounds > 0;
@@ -910,7 +926,7 @@
     }
     ctx.fillStyle = autoAim ? '#4dff88' : '#92a5c8';
     ctx.font = '800 12px system-ui';
-    ctx.fillText(`主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜自動鎖定 ${autoAim ? 'ON' : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
+    ctx.fillText(`主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜自動鎖定 ${autoAim ? (isMouseAiming() ? '滑鼠優先' : 'ON') : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
     ctx.restore();
   }
 
@@ -939,7 +955,7 @@
     if (e.code === 'KeyE') toggleAutoAim();
   });
   window.addEventListener('keyup', e => keys.delete(e.code));
-  canvas.addEventListener('pointermove', e => { const rect = canvas.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top; });
+  canvas.addEventListener('pointermove', e => { const rect = canvas.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top; mouse.lastMove = performance.now(); });
   canvas.addEventListener('pointerdown', () => { mouse.down = true; });
   canvas.addEventListener('pointerup', () => { mouse.down = false; });
   ui.startBtn.addEventListener('click', startOrResume);
