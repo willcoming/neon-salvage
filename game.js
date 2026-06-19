@@ -391,14 +391,6 @@
     return mouse.down || performance.now() - mouse.lastMove < 1500;
   }
 
-  function aimAngle() {
-    if (autoAim && !isMouseAiming()) {
-      const target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : Infinity);
-      if (target) return Math.atan2(target.y - player.y, target.x - player.x);
-    }
-    return mouseAimAngle();
-  }
-
   function shotTarget() {
     const target = autoAim && !isMouseAiming() ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : Infinity) : null;
     if (target) return Math.atan2(target.y - player.y, target.x - player.x);
@@ -813,7 +805,7 @@
     if (!player) return;
     ctx.save();
     ctx.translate(player.x, player.y);
-    const a = aimAngle();
+    const a = mouseAimAngle();
     ctx.rotate(a);
     const flicker = isPlayerProtected() && Math.sin(performance.now() * .05) > 0;
     ctx.globalAlpha = flicker ? .45 : 1;
@@ -926,7 +918,7 @@
     }
     ctx.fillStyle = autoAim ? '#4dff88' : '#92a5c8';
     ctx.font = '800 12px system-ui';
-    ctx.fillText(`主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜自動鎖定 ${autoAim ? (isMouseAiming() ? '滑鼠優先' : 'ON') : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
+    ctx.fillText(`機身：滑鼠｜主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜鎖定 ${autoAim ? (isMouseAiming() ? '滑鼠優先' : 'ON') : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
     ctx.restore();
   }
 
