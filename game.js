@@ -17,6 +17,8 @@
     howBtn: document.getElementById('howBtn'),
     how: document.getElementById('how'),
     toast: document.getElementById('toast'),
+    weaponBtn: document.getElementById('weaponBtn'),
+    autoAimBtn: document.getElementById('autoAimBtn'),
     offlineNotice: document.getElementById('offlineNotice')
   };
 
@@ -78,6 +80,13 @@
   let gameOver = false;
   let bossActive = false;
   let mission = null;
+  let weaponMode = 'pulse';
+  let autoAim = false;
+
+  const weaponDefs = {
+    pulse: { name: '脈衝主砲', short: '主砲', color: '#37f6ff' },
+    missile: { name: '追蹤飛彈', short: '飛彈', color: '#ffd166' }
+  };
 
   const upgradesRuntime = {
     splitShot: 0,
@@ -231,6 +240,7 @@
   function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15; }
   function speed() { return 282 + (meta.upgrades.engine || 0) * 18; }
   function fireRate() { return Math.max(.075, .215 - (meta.upgrades.cannon || 0) * .011); }
+  function weaponFireRate() { return weaponMode === 'missile' ? fireRate() * 2.45 : fireRate(); }
   function damage() { return 15 + (meta.upgrades.cannon || 0) * 2.45; }
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28; }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
@@ -311,12 +321,72 @@
     enemies.push(e);
   }
 
+  function nearestEnemy(maxRange = Infinity) {
+    if (!player) return null;
+    let best = null;
+    let bestD = maxRange * maxRange;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const d = dist2(player, e);
+      if (d < bestD) { bestD = d; best = e; }
+    }
+    return best;
+  }
+
+  function aimAngle() {
+    const target = autoAim ? nearestEnemy() : null;
+    if (target) return Math.atan2(target.y - player.y, target.x - player.x);
+    return Math.atan2(mouse.y - player.y, mouse.x - player.x);
+  }
+
+  function toggleWeapon() {
+    weaponMode = weaponMode === 'pulse' ? 'missile' : 'pulse';
+    shotTimer = Math.min(shotTimer, .08);
+    flash(`主武器：${weaponDefs[weaponMode].name}`);
+    updateCombatControls();
+  }
+
+  function toggleAutoAim() {
+    autoAim = !autoAim;
+    flash(autoAim ? '自動鎖定最近敵人：ON' : '自動鎖定最近敵人：OFF');
+    updateCombatControls();
+  }
+
+  function updateCombatControls() {
+    if (ui.weaponBtn) {
+      ui.weaponBtn.textContent = `武器：${weaponDefs[weaponMode].name}`;
+      ui.weaponBtn.classList.toggle('active', weaponMode === 'missile');
+    }
+    if (ui.autoAimBtn) {
+      ui.autoAimBtn.textContent = `自動鎖定：${autoAim ? 'ON' : 'OFF'}`;
+      ui.autoAimBtn.classList.toggle('active', autoAim);
+    }
+  }
+
   function shoot() {
-    const angle = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+    const angle = aimAngle();
+    if (weaponMode === 'missile') {
+      const target = nearestEnemy(900);
+      const speed = 430;
+      bullets.push({
+        type: 'missile', target, turn: 7.2,
+        x: player.x + Math.cos(angle) * 24,
+        y: player.y + Math.sin(angle) * 24,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 2.6,
+        r: 6.5,
+        dmg: damage() * 1.9,
+        splash: 72 + (meta.upgrades.cannon || 0) * 1.8,
+        pierce: 0
+      });
+      return;
+    }
+
     const split = Math.min(2, upgradesRuntime.splitShot);
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
     for (const s of spread) {
-      bullets.push({ x: player.x + Math.cos(angle + s) * 23, y: player.y + Math.sin(angle + s) * 23, vx: Math.cos(angle + s) * 690, vy: Math.sin(angle + s) * 690, life: 1.05, r: 4.5, dmg: damage() * (spread.length > 1 ? .76 : 1), pierce: upgradesRuntime.chain > 1 ? 1 : 0 });
+      bullets.push({ type: 'pulse', x: player.x + Math.cos(angle + s) * 23, y: player.y + Math.sin(angle + s) * 23, vx: Math.cos(angle + s) * 690, vy: Math.sin(angle + s) * 690, life: 1.05, r: 4.5, dmg: damage() * (spread.length > 1 ? .76 : 1), pierce: upgradesRuntime.chain > 1 ? 1 : 0 });
     }
   }
 
@@ -425,7 +495,7 @@
       }
     }
 
-    if (shotTimer <= 0) { shoot(); shotTimer = fireRate(); }
+    if (shotTimer <= 0) { shoot(); shotTimer = weaponFireRate(); }
     if (spawnLeft > 0 && spawnTimer <= 0) { spawnEnemy(); spawnLeft--; spawnTimer = Math.max(.20, (wave === 1 ? 1.05 : .9) - wave * .016); }
 
     updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updatePickups(dt); updateParticles(dt);
@@ -437,14 +507,47 @@
     updateUi();
   }
 
+  function explodeMissile(b, hitEnemy = null) {
+    b.dead = true;
+    burst(b.x, b.y, '#ffd166', 18, .9);
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const d = Math.hypot(e.x - b.x, e.y - b.y);
+      if (d <= b.splash + e.r) {
+        const falloff = clamp(1 - d / (b.splash + e.r), .25, 1);
+        e.hp -= b.dmg * falloff;
+        e.hit = .12;
+        if (e.hp <= 0) killEnemy(e);
+      }
+    }
+    if (hitEnemy && !hitEnemy.dead) hitEnemy.hit = .14;
+  }
+
   function updateBullets(dt) {
-    for (const b of bullets) { b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt; }
+    for (const b of bullets) {
+      if (b.type === 'missile') {
+        if (!b.target || b.target.dead) b.target = nearestEnemy(920);
+        if (b.target) {
+          const desired = Math.atan2(b.target.y - b.y, b.target.x - b.x);
+          const current = Math.atan2(b.vy, b.vx);
+          let diff = ((desired - current + Math.PI * 3) % TWO_PI) - Math.PI;
+          diff = clamp(diff, -b.turn * dt, b.turn * dt);
+          const speed = Math.hypot(b.vx, b.vy) || 430;
+          const next = current + diff;
+          b.vx = Math.cos(next) * speed;
+          b.vy = Math.sin(next) * speed;
+        }
+        particles.push({ x: b.x - b.vx * .012, y: b.y - b.vy * .012, vx: rand(-12, 12), vy: rand(-12, 12), life: .18, max: .18, r: rand(1.8, 3.2), color: '#ffd166', ring: false });
+      }
+      b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
+    }
     for (const b of bullets) {
       if (b.dead) continue;
       for (const e of enemies) {
         if (e.dead) continue;
         const rr = b.r + e.r;
         if (dist2(b, e) < rr * rr) {
+          if (b.type === 'missile') { explodeMissile(b, e); break; }
           e.hp -= b.dmg; e.hit = .08; burst(b.x, b.y, '#37f6ff', 4, .55);
           if (e.hp <= 0) killEnemy(e);
           if (b.pierce > 0) b.pierce--; else b.dead = true;
@@ -452,7 +555,7 @@
         }
       }
     }
-    bullets = bullets.filter(b => !b.dead && b.life > 0 && b.x > -60 && b.x < W + 60 && b.y > -60 && b.y < H + 60);
+    bullets = bullets.filter(b => !b.dead && b.life > 0 && b.x > -80 && b.x < W + 80 && b.y > -80 && b.y < H + 80);
   }
 
   function updateEnemies(dt) {
@@ -539,6 +642,7 @@
     card.querySelector('.eyebrow').textContent = 'LEVEL UP // 選擇一項本局技能';
     card.querySelector('h2').textContent = '飛船核心升級';
     card.querySelector('p:not(.eyebrow)').textContent = '這些技能只在本局有效。選一個強化方向，繼續撐過下一波。';
+    card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.style.display = 'none';
     ui.howBtn.style.display = 'none';
     ui.how.hidden = true;
@@ -595,6 +699,7 @@
     ui.scrap.textContent = Math.floor(meta.scrap);
     ui.score.textContent = Math.floor(meta.score);
     ui.xpBar.style.width = `${clamp((xp / xpNeed) * 100, 0, 100)}%`;
+    updateCombatControls();
     renderUpgradeButtonStateOnly();
   }
 
@@ -642,7 +747,7 @@
     if (!player) return;
     ctx.save();
     ctx.translate(player.x, player.y);
-    const a = Math.atan2(mouse.y - player.y, mouse.x - player.x);
+    const a = aimAngle();
     ctx.rotate(a);
     const flicker = isPlayerProtected() && Math.sin(performance.now() * .05) > 0;
     ctx.globalAlpha = flicker ? .45 : 1;
@@ -677,7 +782,27 @@
     }
   }
 
-  function drawBullets() { ctx.save(); for (const b of bullets) { ctx.shadowColor = '#37f6ff'; ctx.shadowBlur = 15; ctx.fillStyle = '#bdfcff'; ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TWO_PI); ctx.fill(); } ctx.restore(); }
+  function drawBullets() {
+    ctx.save();
+    for (const b of bullets) {
+      const isMissile = b.type === 'missile';
+      const a = Math.atan2(b.vy, b.vx);
+      ctx.save();
+      ctx.translate(b.x, b.y);
+      ctx.rotate(a);
+      ctx.shadowColor = isMissile ? '#ffd166' : '#37f6ff';
+      ctx.shadowBlur = isMissile ? 20 : 15;
+      if (isMissile) {
+        ctx.fillStyle = '#ffd166';
+        ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-8, -5); ctx.lineTo(-5, 0); ctx.lineTo(-8, 5); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ff7a3d'; ctx.beginPath(); ctx.moveTo(-8, -3); ctx.lineTo(-16, 0); ctx.lineTo(-8, 3); ctx.fill();
+      } else {
+        ctx.fillStyle = '#bdfcff'; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TWO_PI); ctx.fill();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
   function drawEnemyShots() { ctx.save(); for (const s of enemyShots) { ctx.shadowColor = '#ff3df2'; ctx.shadowBlur = 14; ctx.fillStyle = '#ff9af8'; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, TWO_PI); ctx.fill(); } ctx.restore(); }
 
   function drawEnemies() {
@@ -727,6 +852,9 @@
       ctx.font = '800 12px system-ui';
       ctx.fillText(`新手護盾 ${Math.ceil(shieldLeft)}s`, x + 14, y + h + 22);
     }
+    ctx.fillStyle = autoAim ? '#4dff88' : '#92a5c8';
+    ctx.font = '800 12px system-ui';
+    ctx.fillText(`武器：${weaponDefs[weaponMode].short}｜自動鎖定 ${autoAim ? 'ON' : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
     ctx.restore();
   }
 
@@ -747,7 +875,14 @@
   function loop(now) { const dt = (now - lastTime) / 1000; lastTime = now; update(dt); draw(); requestAnimationFrame(loop); }
 
   window.addEventListener('resize', resize);
-  window.addEventListener('keydown', e => { keys.add(e.code); if (e.code === 'Space') { e.preventDefault(); doDash(); } if (e.code === 'KeyP') togglePause(); });
+  window.addEventListener('keydown', e => {
+    keys.add(e.code);
+    if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) doDash(); }
+    if (e.repeat) return;
+    if (e.code === 'KeyP') togglePause();
+    if (e.code === 'KeyQ') toggleWeapon();
+    if (e.code === 'KeyE') toggleAutoAim();
+  });
   window.addEventListener('keyup', e => keys.delete(e.code));
   canvas.addEventListener('pointermove', e => { const rect = canvas.getBoundingClientRect(); mouse.x = e.clientX - rect.left; mouse.y = e.clientY - rect.top; });
   canvas.addEventListener('pointerdown', () => { mouse.down = true; });
@@ -756,6 +891,8 @@
   ui.howBtn.addEventListener('click', () => { ui.how.hidden = !ui.how.hidden; });
   ui.saveBtn.addEventListener('click', () => save(true));
   ui.resetBtn.addEventListener('click', resetSave);
+  ui.weaponBtn?.addEventListener('click', toggleWeapon);
+  ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
   window.addEventListener('beforeunload', () => save(false));
 
   if (!CanvasRenderingContext2D.prototype.roundRect) {
