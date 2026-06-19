@@ -17,7 +17,6 @@
     howBtn: document.getElementById('howBtn'),
     how: document.getElementById('how'),
     toast: document.getElementById('toast'),
-    weaponBtn: document.getElementById('weaponBtn'),
     autoAimBtn: document.getElementById('autoAimBtn'),
     offlineNotice: document.getElementById('offlineNotice')
   };
@@ -80,16 +79,10 @@
   let gameOver = false;
   let bossActive = false;
   let mission = null;
-  let weaponMode = 'pulse';
   let autoAim = false;
   let activeEvent = null;
   let eventTimer = 0;
   let meteorTimer = 0;
-
-  const weaponDefs = {
-    pulse: { name: '脈衝主砲', short: '主砲', color: '#37f6ff' },
-    missile: { name: '追蹤飛彈', short: '飛彈', color: '#ffd166' }
-  };
 
   const upgradesRuntime = {
     splitShot: 0,
@@ -98,7 +91,7 @@
     shardMultiplier: 0,
     slowField: 0,
     orbitals: 0,
-    missileVolley: 0,
+    homingRounds: 0,
     weakScan: 0,
     harvestDrive: 0
   };
@@ -118,7 +111,7 @@
     { id: 'shardMultiplier', name: '碎晶精煉', desc: '敵人掉落碎晶增加。' },
     { id: 'slowField', name: '重力干擾', desc: '敵人靠近時會被減速。' },
     { id: 'orbitals', name: '環繞刃翼', desc: '生成環繞玩家的近距離傷害刃翼。' },
-    { id: 'missileVolley', name: '飛彈齊射', desc: '追蹤飛彈額外發射側翼飛彈。' },
+    { id: 'homingRounds', name: '追蹤子彈', desc: '原本的脈衝主砲子彈會微幅追蹤敵人。' },
     { id: 'weakScan', name: '弱點掃描', desc: '對精英與 Boss 造成額外傷害。' },
     { id: 'harvestDrive', name: '收割引擎', desc: '連續擊殺會短暫提高射速。' }
   ];
@@ -266,7 +259,7 @@
   function weaponFireRate() {
     const harvest = upgradesRuntime.harvestDrive > 0 ? Math.max(.72, 1 - Math.min(.28, (runKills % 10) * .028 * upgradesRuntime.harvestDrive)) : 1;
     const storm = activeEvent?.id === 'overclock' ? .78 : 1;
-    return (weaponMode === 'missile' ? fireRate() * 2.45 : fireRate()) * harvest * storm;
+    return fireRate() * harvest * storm;
   }
   function damage() { return 15 + (meta.upgrades.cannon || 0) * 2.45; }
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28; }
@@ -396,13 +389,6 @@
     return Math.atan2(mouse.y - player.y, mouse.x - player.x);
   }
 
-  function toggleWeapon() {
-    weaponMode = weaponMode === 'pulse' ? 'missile' : 'pulse';
-    shotTimer = Math.min(shotTimer, .08);
-    flash(`主武器：${weaponDefs[weaponMode].name}`);
-    updateCombatControls();
-  }
-
   function toggleAutoAim() {
     autoAim = !autoAim;
     flash(autoAim ? '自動鎖定最近敵人：ON' : '自動鎖定最近敵人：OFF');
@@ -410,10 +396,6 @@
   }
 
   function updateCombatControls() {
-    if (ui.weaponBtn) {
-      ui.weaponBtn.textContent = `武器：${weaponDefs[weaponMode].name}`;
-      ui.weaponBtn.classList.toggle('active', weaponMode === 'missile');
-    }
     if (ui.autoAimBtn) {
       ui.autoAimBtn.textContent = `自動鎖定：${autoAim ? 'ON' : 'OFF'}`;
       ui.autoAimBtn.classList.toggle('active', autoAim);
@@ -422,32 +404,22 @@
 
   function shoot() {
     const angle = aimAngle();
-    if (weaponMode === 'missile') {
-      const target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 900);
-      const speed = 430;
-      const volley = 1 + Math.min(2, upgradesRuntime.missileVolley);
-      for (let i = 0; i < volley; i++) {
-        const off = volley === 1 ? 0 : (i - (volley - 1) / 2) * .18;
-        bullets.push({
-          type: 'missile', target, turn: 7.2,
-          x: player.x + Math.cos(angle + off) * 24,
-          y: player.y + Math.sin(angle + off) * 24,
-          vx: Math.cos(angle + off) * speed,
-          vy: Math.sin(angle + off) * speed,
-          life: 2.6,
-          r: 6.5,
-          dmg: damage() * 1.9 * (volley > 1 ? .78 : 1),
-          splash: 72 + (meta.upgrades.cannon || 0) * 1.8,
-          pierce: 0
-        });
-      }
-      return;
-    }
-
     const split = Math.min(2, upgradesRuntime.splitShot);
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
+    const homing = upgradesRuntime.homingRounds > 0;
+    const target = homing ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 860) : null;
     for (const s of spread) {
-      bullets.push({ type: 'pulse', x: player.x + Math.cos(angle + s) * 23, y: player.y + Math.sin(angle + s) * 23, vx: Math.cos(angle + s) * 690, vy: Math.sin(angle + s) * 690, life: 1.05, r: 4.5, dmg: damage() * (spread.length > 1 ? .76 : 1), pierce: upgradesRuntime.chain > 1 ? 1 : 0 });
+      bullets.push({
+        type: 'pulse', homing, target, turn: 3.8 + upgradesRuntime.homingRounds * 1.3,
+        x: player.x + Math.cos(angle + s) * 23,
+        y: player.y + Math.sin(angle + s) * 23,
+        vx: Math.cos(angle + s) * 690,
+        vy: Math.sin(angle + s) * 690,
+        life: homing ? 1.24 : 1.05,
+        r: homing ? 5.4 : 4.5,
+        dmg: damage() * (spread.length > 1 ? .76 : 1),
+        pierce: upgradesRuntime.chain > 1 ? 1 : 0
+      });
     }
   }
 
@@ -589,26 +561,10 @@
     updateUi();
   }
 
-  function explodeMissile(b, hitEnemy = null) {
-    b.dead = true;
-    burst(b.x, b.y, '#ffd166', 18, .9);
-    for (const e of enemies) {
-      if (e.dead) continue;
-      const d = Math.hypot(e.x - b.x, e.y - b.y);
-      if (d <= b.splash + e.r) {
-        const falloff = clamp(1 - d / (b.splash + e.r), .25, 1);
-        e.hp -= b.dmg * falloff * ((upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1);
-        e.hit = .12;
-        if (e.hp <= 0) killEnemy(e);
-      }
-    }
-    if (hitEnemy && !hitEnemy.dead) hitEnemy.hit = .14;
-  }
-
   function updateBullets(dt) {
     for (const b of bullets) {
-      if (b.type === 'missile') {
-        if (!b.target || b.target.dead) b.target = nearestEnemy(920);
+      if (b.homing) {
+        if (!b.target || b.target.dead) b.target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 860);
         if (b.target) {
           const desired = Math.atan2(b.target.y - b.y, b.target.x - b.x);
           const current = Math.atan2(b.vy, b.vx);
@@ -619,7 +575,7 @@
           b.vx = Math.cos(next) * speed;
           b.vy = Math.sin(next) * speed;
         }
-        particles.push({ x: b.x - b.vx * .012, y: b.y - b.vy * .012, vx: rand(-12, 12), vy: rand(-12, 12), life: .18, max: .18, r: rand(1.8, 3.2), color: '#ffd166', ring: false });
+        particles.push({ x: b.x - b.vx * .01, y: b.y - b.vy * .01, vx: rand(-10, 10), vy: rand(-10, 10), life: .14, max: .14, r: rand(1.2, 2.4), color: '#ffd166', ring: false });
       }
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
     }
@@ -629,8 +585,7 @@
         if (e.dead) continue;
         const rr = b.r + e.r;
         if (dist2(b, e) < rr * rr) {
-          if (b.type === 'missile') { explodeMissile(b, e); break; }
-          e.hp -= b.dmg * ((upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1); e.hit = .08; burst(b.x, b.y, '#37f6ff', 4, .55);
+          e.hp -= b.dmg * ((upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1); e.hit = .08; burst(b.x, b.y, b.homing ? '#ffd166' : '#37f6ff', b.homing ? 6 : 4, .55);
           if (e.hp <= 0) killEnemy(e);
           if (b.pierce > 0) b.pierce--; else b.dead = true;
           break;
@@ -880,17 +835,16 @@
   function drawBullets() {
     ctx.save();
     for (const b of bullets) {
-      const isMissile = b.type === 'missile';
       const a = Math.atan2(b.vy, b.vx);
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(a);
-      ctx.shadowColor = isMissile ? '#ffd166' : '#37f6ff';
-      ctx.shadowBlur = isMissile ? 20 : 15;
-      if (isMissile) {
+      ctx.shadowColor = b.homing ? '#ffd166' : '#37f6ff';
+      ctx.shadowBlur = b.homing ? 20 : 15;
+      if (b.homing) {
         ctx.fillStyle = '#ffd166';
-        ctx.beginPath(); ctx.moveTo(10, 0); ctx.lineTo(-8, -5); ctx.lineTo(-5, 0); ctx.lineTo(-8, 5); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#ff7a3d'; ctx.beginPath(); ctx.moveTo(-8, -3); ctx.lineTo(-16, 0); ctx.lineTo(-8, 3); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(0, 0, b.r + 3, b.r, 0, 0, TWO_PI); ctx.fill();
+        ctx.fillStyle = '#fff6c7'; ctx.beginPath(); ctx.arc(3, 0, b.r * .48, 0, TWO_PI); ctx.fill();
       } else {
         ctx.fillStyle = '#bdfcff'; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TWO_PI); ctx.fill();
       }
@@ -956,7 +910,7 @@
     }
     ctx.fillStyle = autoAim ? '#4dff88' : '#92a5c8';
     ctx.font = '800 12px system-ui';
-    ctx.fillText(`武器：${weaponDefs[weaponMode].short}｜自動鎖定 ${autoAim ? 'ON' : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
+    ctx.fillText(`主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜自動鎖定 ${autoAim ? 'ON' : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
     ctx.restore();
   }
 
@@ -982,7 +936,6 @@
     if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) doDash(); }
     if (e.repeat) return;
     if (e.code === 'KeyP') togglePause();
-    if (e.code === 'KeyQ') toggleWeapon();
     if (e.code === 'KeyE') toggleAutoAim();
   });
   window.addEventListener('keyup', e => keys.delete(e.code));
@@ -993,7 +946,6 @@
   ui.howBtn.addEventListener('click', () => { ui.how.hidden = !ui.how.hidden; });
   ui.saveBtn.addEventListener('click', () => save(true));
   ui.resetBtn.addEventListener('click', resetSave);
-  ui.weaponBtn?.addEventListener('click', toggleWeapon);
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
   window.addEventListener('beforeunload', () => save(false));
 
