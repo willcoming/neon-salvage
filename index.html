@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>霓虹拾荒者 Neon Salvage</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app">
+    <canvas id="game" width="1280" height="720" aria-label="霓虹拾荒者遊戲畫面"></canvas>
+    <section id="hud" aria-live="polite">
+      <div class="brand">
+        <span class="sigil">◆</span>
+        <div>
+          <h1>霓虹拾荒者</h1>
+          <p>Neon Salvage // endless roguelite</p>
+        </div>
+      </div>
+      <div class="stats">
+        <div><b id="wave">1</b><span>波次</span></div>
+        <div><b id="hp">100</b><span>護盾</span></div>
+        <div><b id="scrap">0</b><span>碎晶</span></div>
+        <div><b id="score">0</b><span>分數</span></div>
+      </div>
+      <div class="bar"><i id="xpBar"></i></div>
+      <div class="hint">WASD/方向鍵移動｜滑鼠瞄準｜空白衝刺｜P 暫停｜自動存檔</div>
+    </section>
+
+    <aside id="panel" class="glass">
+      <h2>艦載升級</h2>
+      <p class="muted">在戰鬥中收集碎晶，升級後會立即保存。離線期間探勘無人機也會替你慢慢帶回碎晶。</p>
+      <div id="upgrades"></div>
+      <button id="saveBtn">立即存檔</button>
+      <button id="resetBtn" class="danger">重置宇宙</button>
+    </aside>
+
+    <div id="overlay" class="glass visible">
+      <div class="card">
+        <p class="eyebrow">一局可以只玩 30 秒，也可以玩一整晚</p>
+        <h2>在破碎星環裡活下來。</h2>
+        <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
+        <div class="version-card">
+          <strong>v2.1 新手保護版</strong>
+          <ul>
+            <li>開局 3.5 秒新手護盾，左側任務框會顯示倒數。</li>
+            <li>第一波敵人速度與生成節奏放緩，更適合第一次上手。</li>
+            <li>保留 v2 的 Boss 波、技能三選一、任務、成就與道具掉落。</li>
+          </ul>
+        </div>
+        <div id="offlineNotice" class="offline"></div>
+        <div class="actions">
+          <button id="startBtn">開始 / 繼續</button>
+          <button id="howBtn" class="secondary">玩法說明</button>
+        </div>
+        <pre id="how" hidden>目標：撐過更多波次，累積碎晶與永久升級。
+
+操作：
+- WASD / 方向鍵：推進
+- 滑鼠：瞄準，主砲會自動射擊
+- 空白：相位衝刺，短時間無敵
+- P：暫停並保存
+
+技巧：
+- 開局有 3.5 秒新手護盾，可以先熟悉移動與瞄準。
+- 碎晶不用冒死撿，升級「磁吸場」會變輕鬆。
+- 每次升級會出現三選一技能，適合組出不同流派。
+- 第 5、10、15... 波會出現 Boss「星環吞噬者」。
+- 「無人機合約」會提高離線收益，適合零碎時間玩。
+- 波次越高敵人越快，但獎勵也越高。</pre>
+      </div>
+    </div>
+
+    <div id="toast" role="status"></div>
+  </div>
+  <script src="./game.js"></script>
+</body>
+</html>
