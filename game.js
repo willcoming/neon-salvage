@@ -10,6 +10,10 @@
     score: document.getElementById('score'),
     xpBar: document.getElementById('xpBar'),
     upgrades: document.getElementById('upgrades'),
+    upgradeModal: document.getElementById('upgradeModal'),
+    upgradeMenuBtn: document.getElementById('upgradeMenuBtn'),
+    closeUpgradeBtn: document.getElementById('closeUpgradeBtn'),
+    resumeFromUpgradeBtn: document.getElementById('resumeFromUpgradeBtn'),
     saveBtn: document.getElementById('saveBtn'),
     resetBtn: document.getElementById('resetBtn'),
     overlay: document.getElementById('overlay'),
@@ -165,7 +169,6 @@
     dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
     W = window.innerWidth;
     H = window.innerHeight;
-    if (window.innerWidth <= 860) H = Math.max(360, window.innerHeight - 235);
     canvas.width = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width = `${W}px`;
@@ -234,7 +237,44 @@
     return Math.floor(def.base * Math.pow(def.scale, lvl));
   }
 
+  function canUsePermanentUpgrades() {
+    return running && paused && !gameOver && !skillChoosing;
+  }
+
+  function isUpgradeModalOpen() {
+    return !!ui.upgradeModal && !ui.upgradeModal.hidden;
+  }
+
+  function updateUpgradeAccessUi() {
+    const allowed = canUsePermanentUpgrades();
+    if (ui.upgradeMenuBtn) {
+      ui.upgradeMenuBtn.hidden = !allowed;
+      ui.upgradeMenuBtn.textContent = '艦載升級';
+    }
+    if (!allowed && isUpgradeModalOpen()) closeUpgradeModal();
+    renderUpgradeButtonStateOnly();
+  }
+
+  function openUpgradeModal() {
+    if (!canUsePermanentUpgrades()) return flash('請先按 P 暫停，再開啟升級');
+    renderUpgrades();
+    ui.upgradeModal.hidden = false;
+    resetTouchDirection();
+  }
+
+  function closeUpgradeModal() {
+    if (ui.upgradeModal) ui.upgradeModal.hidden = true;
+    if (ui.upgradeMenuBtn) ui.upgradeMenuBtn.hidden = !canUsePermanentUpgrades();
+  }
+
+  function resumeFromUpgradeModal() {
+    closeUpgradeModal();
+    if (running && paused && !gameOver && !skillChoosing) paused = false;
+    updateUi();
+  }
+
   function buyUpgrade(id) {
+    if (!canUsePermanentUpgrades()) return flash('請先按 P 暫停，再升級');
     const def = upgradeDefs.find(u => u.id === id);
     if (!def) return;
     const lvl = meta.upgrades[id] || 0;
@@ -259,7 +299,7 @@
       const cost = upgradeCost(def);
       const el = document.createElement('article');
       el.className = 'upgrade';
-      el.innerHTML = `<header><strong>${def.name}</strong><span class="level">Lv.${lvl}/${def.max}</span></header><p>${def.desc}</p><button ${lvl >= def.max || meta.scrap < cost ? 'disabled' : ''}>${lvl >= def.max ? '已滿級' : `升級｜${cost} 碎晶`}</button>`;
+      el.innerHTML = `<header><strong>${def.name}</strong><span class="level">Lv.${lvl}/${def.max}</span></header><p>${def.desc}</p><button ${!canUsePermanentUpgrades() || lvl >= def.max || meta.scrap < cost ? 'disabled' : ''}>${lvl >= def.max ? '已滿級' : `升級｜${cost} 碎晶`}</button>`;
       el.querySelector('button').addEventListener('click', () => buyUpgrade(def.id));
       ui.upgrades.appendChild(el);
     }
@@ -811,6 +851,7 @@
   }
 
   function openSkillChoices() {
+    closeUpgradeModal();
     skillChoosing = true;
     paused = true;
     const choices = [...skillPool].sort(() => Math.random() - .5).slice(0, 3);
@@ -856,6 +897,7 @@
   }
 
   function endRun() {
+    closeUpgradeModal();
     gameOver = true;
     meta.bestWave = Math.max(meta.bestWave, wave);
     save(false);
@@ -877,7 +919,7 @@
     ui.score.textContent = Math.floor(meta.score);
     ui.xpBar.style.width = `${clamp((xp / xpNeed) * 100, 0, 100)}%`;
     updateCombatControls();
-    renderUpgradeButtonStateOnly();
+    updateUpgradeAccessUi();
   }
 
   function renderUpgradeButtonStateOnly() {
@@ -885,7 +927,7 @@
     upgradeDefs.forEach((def, i) => {
       const btn = buttons[i]; if (!btn) return;
       const lvl = meta.upgrades[def.id] || 0; const cost = upgradeCost(def);
-      btn.disabled = lvl >= def.max || meta.scrap < cost;
+      btn.disabled = !canUsePermanentUpgrades() || lvl >= def.max || meta.scrap < cost;
       btn.textContent = lvl >= def.max ? '已滿級' : `升級｜${cost} 碎晶`;
       const level = btn.closest('.upgrade')?.querySelector('.level'); if (level) level.textContent = `Lv.${lvl}/${def.max}`;
     });
@@ -1101,7 +1143,7 @@
   function drawMiniMap() {
     if (!player) return;
     const size = Math.min(150, Math.max(110, W * .12));
-    const x = W > 860 ? W - size - 342 : W - size - 18;
+    const x = W - size - 18;
     const y = H - size - 18;
     const scale = size / 1800;
     ctx.save();
@@ -1187,13 +1229,25 @@
   function flash(message) { ui.toast.textContent = message; ui.toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 1800); }
 
   function startOrResume() {
+    closeUpgradeModal();
     if (gameOver || !player) hardResetRun();
     running = true; paused = false; gameOver = false; skillChoosing = false;
     ui.overlay.classList.remove('visible'); ui.startBtn.textContent = '開始 / 繼續'; ui.startBtn.style.display = ''; ui.howBtn.style.display = '';
     save(false);
+    updateUi();
   }
 
-  function togglePause() { if (!running || gameOver || skillChoosing) return; paused = !paused; if (paused) save(true); }
+  function togglePause() {
+    if (!running || gameOver || skillChoosing) return;
+    paused = !paused;
+    if (paused) {
+      save(true);
+      openUpgradeModal();
+    } else {
+      closeUpgradeModal();
+      updateUi();
+    }
+  }
   function doDash() { if (controlMode === 'touch' || !running || paused || gameOver || skillChoosing || dashCooldown > 0) return; dashTime = .16; dashCooldown = Math.max(.55, 1.32 - (meta.upgrades.engine || 0) * .065); player.invuln = .24; burst(player.x, player.y, '#ffd166', 11); }
 
   function loop(now) { const dt = (now - lastTime) / 1000; lastTime = now; update(dt); draw(); requestAnimationFrame(loop); }
@@ -1221,6 +1275,9 @@
   ui.howBtn.addEventListener('click', () => { ui.how.hidden = !ui.how.hidden; });
   ui.saveBtn.addEventListener('click', () => save(true));
   ui.resetBtn.addEventListener('click', resetSave);
+  ui.upgradeMenuBtn?.addEventListener('click', openUpgradeModal);
+  ui.closeUpgradeBtn?.addEventListener('click', closeUpgradeModal);
+  ui.resumeFromUpgradeBtn?.addEventListener('click', resumeFromUpgradeModal);
   ui.controlModeBtn?.addEventListener('click', toggleControlMode);
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
 
@@ -1268,7 +1325,7 @@
   function bindTouchControls() {
     const touchStart = e => {
       if (controlMode !== 'touch') return;
-      if (ui.overlay.classList.contains('visible')) return;
+      if (ui.overlay.classList.contains('visible') || isUpgradeModalOpen()) return;
       e.preventDefault();
       setTouchDirectionFromClient(e, true);
     };

@@ -27,17 +27,26 @@
       <div class="combat-controls">
         <button id="controlModeBtn" type="button">操作：鍵鼠模式</button>
         <button id="autoAimBtn" type="button">自動鎖定：OFF</button>
+        <button id="upgradeMenuBtn" type="button" hidden>艦載升級</button>
       </div>
-      <div class="hint">WASD/方向鍵移動｜滑鼠控機身｜E 自動鎖定｜空白衝刺｜P 暫停｜自動存檔</div>
+      <div class="hint">WASD/方向鍵移動｜滑鼠控機身｜E 自動鎖定｜空白衝刺｜P 暫停升級｜自動存檔</div>
     </section>
 
-    <aside id="panel" class="glass">
-      <h2>艦載升級</h2>
-      <p class="muted">在戰鬥中收集碎晶，升級後會立即保存。離線期間探勘無人機也會替你慢慢帶回碎晶。</p>
-      <div id="upgrades"></div>
-      <button id="saveBtn">立即存檔</button>
-      <button id="resetBtn" class="danger">重置宇宙</button>
-    </aside>
+    <div id="upgradeModal" class="modal-backdrop" hidden>
+      <aside id="panel" class="glass" role="dialog" aria-modal="true" aria-labelledby="upgradeTitle">
+        <header class="modal-head">
+          <div>
+            <h2 id="upgradeTitle">艦載升級</h2>
+            <p class="muted">在戰鬥中收集碎晶；按 P 暫停後才可以開啟升級彈窗。購買後會立即保存，離線探勘無人機也會替你慢慢帶回碎晶。</p>
+          </div>
+          <button id="closeUpgradeBtn" class="icon-btn" type="button" aria-label="關閉升級視窗">×</button>
+        </header>
+        <div id="upgrades"></div>
+        <button id="saveBtn">立即存檔</button>
+        <button id="resumeFromUpgradeBtn" class="secondary">繼續遊戲</button>
+        <button id="resetBtn" class="danger">重置宇宙</button>
+      </aside>
+    </div>
 
     <div id="overlay" class="glass visible">
       <div class="card">
@@ -45,13 +54,12 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v2.12 單手浮動方向鍵版</strong>
+          <strong>v2.13 暫停升級彈窗版</strong>
           <ul>
-            <li>手機控制改為單手浮動方向鍵：手指按下的位置就是方向鍵中心。</li>
-            <li>拇指往上、下、左、右滑一點就決定方向；持續按著才會移動。</li>
-            <li>放開螢幕會立刻停止，方向鍵盤也會消失。</li>
-            <li>按住時會出現半透明方向鍵盤、拇指點與目前方向高亮。</li>
-            <li>開放式地圖、小地圖雷達與後期事件 / Boss 變體都保留。</li>
+            <li>介面優化：永久升級不再常駐右側/底部面板，改成暫停時開啟彈窗。</li>
+            <li>戰鬥進行中不能購買永久升級；按 P 暫停後才可以升級。</li>
+            <li>升級彈窗內可立即存檔、重置宇宙或繼續遊戲。</li>
+            <li>單手浮動方向鍵、小地圖雷達、開放式地圖與後期事件 / Boss 變體都保留。</li>
           </ul>
         </div>
         <div id="offlineNotice" class="offline"></div>
@@ -66,7 +74,7 @@
 - 滑鼠：控制機身朝向與手動瞄準
 - E：開關自動鎖定最近敵人；自動鎖定只輔助射擊，不會搶機身方向
 - 空白：相位衝刺，短時間無敵
-- P：暫停並保存
+- P：暫停並開啟艦載升級彈窗；暫停時才可購買永久升級
 
 手機：
 - 單手浮動方向鍵：手指按下的位置就是方向鍵中心
