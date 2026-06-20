@@ -20,10 +20,7 @@
     controlModeBtn: document.getElementById('controlModeBtn'),
     autoAimBtn: document.getElementById('autoAimBtn'),
     offlineNotice: document.getElementById('offlineNotice'),
-    joystick: document.getElementById('joystick'),
-    joystickKnob: document.querySelector('#joystick i'),
-    aimPad: document.getElementById('aimPad'),
-    dashTouch: document.getElementById('dashTouch')
+    touchGuide: document.getElementById('touchGuide')
   };
 
   const SAVE_KEY = 'neon-salvage-save-v2';
@@ -36,6 +33,8 @@
     const dy = a.y - b.y;
     return dx * dx + dy * dy;
   };
+  const camera = () => player ? { x: player.x - W / 2, y: player.y - H / 2 } : { x: 0, y: 0 };
+  const screenToWorld = (x, y) => { const c = camera(); return { x: c.x + x, y: c.y + y }; };
 
   let W = 1280;
   let H = 720;
@@ -163,10 +162,7 @@
     canvas.style.width = `${W}px`;
     canvas.style.height = `${H}px`;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    if (player) {
-      player.x = clamp(player.x, 40, W - 40);
-      player.y = clamp(player.y, 78, H - 40);
-    }
+    // Open-world camera keeps the player centered; do not clamp world position on resize.
     makeSpaceDust();
   }
 
@@ -327,8 +323,8 @@
     const e = {
       type: pick,
       label: t.label,
-      x: side === 0 ? -pad : side === 1 ? W + pad : rand(0, W),
-      y: side === 2 ? -pad : side === 3 ? H + pad : rand(0, H),
+      x: (() => { const c = camera(); return side === 0 ? c.x - pad : side === 1 ? c.x + W + pad : rand(c.x, c.x + W); })(),
+      y: (() => { const c = camera(); return side === 2 ? c.y - pad : side === 3 ? c.y + H + pad : rand(c.y, c.y + H); })(),
       r: t.r + Math.min(9, wave * .18),
       hp: t.hp + wave * (pick === 'tank' ? 7.2 : pick === 'sprinter' ? 3.2 : 4.7),
       maxHp: 1,
@@ -375,7 +371,8 @@
 
   function spawnBoss() {
     const t = enemyTypes.boss;
-    const e = { type: 'boss', label: t.label, x: W / 2, y: -80, r: t.r + wave * 1.5, hp: t.hp + wave * 75, maxHp: t.hp + wave * 75, speed: t.speed + wave, spin: .7, color: t.color, sides: t.sides, scrap: t.scrap + wave, hit: 0, shootClock: 1.1, phase2: false, elite: null };
+    const c = camera();
+    const e = { type: 'boss', label: t.label, x: player.x, y: c.y - 80, r: t.r + wave * 1.5, hp: t.hp + wave * 75, maxHp: t.hp + wave * 75, speed: t.speed + wave, spin: .7, color: t.color, sides: t.sides, scrap: t.scrap + wave, hit: 0, shootClock: 1.1, phase2: false, elite: null };
     enemies.push(e);
   }
 
@@ -392,10 +389,11 @@
   }
 
   function mouseAimAngle() {
-    return Math.atan2(mouse.y - player.y, mouse.x - player.x);
+    return Math.atan2(mouse.y - H / 2, mouse.x - W / 2);
   }
 
   function isMouseAiming() {
+    if (controlMode === 'touch') return false;
     return mouse.down || performance.now() - mouse.lastMove < 1500;
   }
 
@@ -416,7 +414,6 @@
     document.body.dataset.controlMode = controlMode;
     autoAim = controlMode === 'touch';
     touchMove.x = 0; touchMove.y = 0; touchMove.active = false;
-    if (ui.joystickKnob) ui.joystickKnob.style.transform = '';
     if (announce) flash(controlMode === 'touch' ? '手機自動模式：自動瞄準 ON' : '鍵鼠模式：鍵盤移動 / 滑鼠瞄準');
     updateCombatControls();
   }
@@ -522,10 +519,11 @@
 
   function spawnMeteor() {
     const fromLeft = Math.random() < .5;
-    const y = rand(90, H - 40);
+    const c = camera();
+    const y = rand(c.y + 90, c.y + H - 40);
     const vx = (fromLeft ? 1 : -1) * rand(360, 520);
     const vy = rand(-60, 60);
-    enemyShots.push({ type: 'meteor', x: fromLeft ? -35 : W + 35, y, vx, vy, r: rand(10, 18), life: 3.2, dmg: 18 + wave * .5, color: '#ff7a3d' });
+    enemyShots.push({ type: 'meteor', x: fromLeft ? c.x - 35 : c.x + W + 35, y, vx, vy, r: rand(10, 18), life: 3.2, dmg: 18 + wave * .5, color: '#ff7a3d' });
   }
 
   function chainArc(x, y, amount) {
@@ -575,8 +573,8 @@
     const dashMult = dashTime > 0 ? 3.25 : 1;
     player.vx = (ax / len) * speed() * dashMult;
     player.vy = (ay / len) * speed() * dashMult;
-    player.x = clamp(player.x + player.vx * dt, 24, W - 24);
-    player.y = clamp(player.y + player.vy * dt, 78, H - 24);
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
 
     if (upgradesRuntime.shieldRegen > 0 && player.hp < player.maxHp) {
       player.regenClock += dt;
@@ -629,7 +627,7 @@
         }
       }
     }
-    bullets = bullets.filter(b => !b.dead && b.life > 0 && b.x > -80 && b.x < W + 80 && b.y > -80 && b.y < H + 80);
+    { const c = camera(); bullets = bullets.filter(b => !b.dead && b.life > 0 && b.x > c.x - 160 && b.x < c.x + W + 160 && b.y > c.y - 160 && b.y < c.y + H + 160); }
   }
 
   function updateEnemies(dt) {
@@ -679,7 +677,7 @@
         if (player.hp <= 0) endRun();
       }
     }
-    enemyShots = enemyShots.filter(s => !s.dead && s.life > 0 && s.x > -80 && s.x < W + 80 && s.y > -80 && s.y < H + 80);
+    { const c = camera(); enemyShots = enemyShots.filter(s => !s.dead && s.life > 0 && s.x > c.x - 180 && s.x < c.x + W + 180 && s.y > c.y - 180 && s.y < c.y + H + 180); }
   }
 
   function updatePickups(dt) {
@@ -803,7 +801,13 @@
 
   function draw() {
     ctx.clearRect(0, 0, W, H);
-    drawBackground(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles(); drawMission();
+    drawBackground();
+    const c = camera();
+    ctx.save();
+    ctx.translate(-c.x, -c.y);
+    drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
+    ctx.restore();
+    drawMission();
     if (paused && running && !ui.overlay.classList.contains('visible')) drawPause();
   }
 
@@ -827,6 +831,17 @@
       s.tw += .01 * s.z; ctx.globalAlpha = .2 + Math.sin(s.tw) * .18 + s.z * .36; ctx.fillStyle = s.z > .75 ? '#37f6ff' : '#eef7ff';
       ctx.fillRect(s.x, s.y, s.z * 2, s.z * 2); s.y += s.z * .09; if (s.y > H) s.y = 0;
     }
+    ctx.restore();
+
+    const c = camera();
+    ctx.save();
+    ctx.strokeStyle = 'rgba(55,246,255,.055)';
+    ctx.lineWidth = 1;
+    const grid = 180;
+    const ox = -((c.x % grid) + grid) % grid;
+    const oy = -((c.y % grid) + grid) % grid;
+    for (let x = ox; x < W; x += grid) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = oy; y < H; y += grid) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
     ctx.restore();
   }
 
@@ -947,7 +962,7 @@
     }
     ctx.fillStyle = autoAim ? '#4dff88' : '#92a5c8';
     ctx.font = '800 12px system-ui';
-    ctx.fillText(`機身：滑鼠｜主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜鎖定 ${autoAim ? (isMouseAiming() ? '滑鼠優先' : 'ON') : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
+    ctx.fillText(`機身：${controlMode === 'touch' ? '觸控' : '滑鼠'}｜主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜鎖定 ${autoAim ? (isMouseAiming() ? '手動優先' : 'ON') : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
     ctx.restore();
   }
 
@@ -963,7 +978,7 @@
   }
 
   function togglePause() { if (!running || gameOver || skillChoosing) return; paused = !paused; if (paused) save(true); }
-  function doDash() { if (!running || paused || gameOver || skillChoosing || dashCooldown > 0) return; dashTime = .16; dashCooldown = Math.max(.55, 1.32 - (meta.upgrades.engine || 0) * .065); player.invuln = .24; burst(player.x, player.y, '#ffd166', 11); }
+  function doDash() { if (controlMode === 'touch' || !running || paused || gameOver || skillChoosing || dashCooldown > 0) return; dashTime = .16; dashCooldown = Math.max(.55, 1.32 - (meta.upgrades.engine || 0) * .065); player.invuln = .24; burst(player.x, player.y, '#ffd166', 11); }
 
   function loop(now) { const dt = (now - lastTime) / 1000; lastTime = now; update(dt); draw(); requestAnimationFrame(loop); }
 
@@ -993,45 +1008,51 @@
   ui.controlModeBtn?.addEventListener('click', toggleControlMode);
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
 
+  function setTouchDirectionFromClient(e) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = clamp(e.clientX - rect.left, 0, W);
+    const sy = clamp(e.clientY - rect.top, 0, H);
+    const dx = sx - W / 2;
+    const dy = sy - H / 2;
+    const len = Math.hypot(dx, dy);
+    touchMove.x = len > 8 ? dx / len : 0;
+    touchMove.y = len > 8 ? dy / len : 0;
+    touchMove.active = len > 8;
+    mouse.x = sx;
+    mouse.y = sy;
+    mouse.down = true;
+    mouse.lastMove = performance.now();
+  }
+
+  function resetTouchDirection() {
+    touchMove.x = 0;
+    touchMove.y = 0;
+    touchMove.active = false;
+    mouse.down = false;
+  }
+
   function bindTouchControls() {
-    const joy = ui.joystick;
-    const knob = ui.joystickKnob;
-    if (joy) {
-      const updateJoy = e => {
-        e.preventDefault();
-        const r = joy.getBoundingClientRect();
-        const max = Math.min(r.width, r.height) * .34;
-        const cx = r.left + r.width / 2;
-        const cy = r.top + r.height / 2;
-        let dx = e.clientX - cx;
-        let dy = e.clientY - cy;
-        const len = Math.hypot(dx, dy);
-        if (len > max) { dx = dx / len * max; dy = dy / len * max; }
-        touchMove.x = dx / max;
-        touchMove.y = dy / max;
-        touchMove.active = Math.hypot(touchMove.x, touchMove.y) > .08;
-        if (knob) knob.style.transform = `translate(${dx}px, ${dy}px)`;
-      };
-      const resetJoy = e => {
-        e?.preventDefault?.();
-        touchMove.x = 0; touchMove.y = 0; touchMove.active = false;
-        if (knob) knob.style.transform = '';
-      };
-      joy.addEventListener('pointerdown', e => { joy.setPointerCapture?.(e.pointerId); updateJoy(e); });
-      joy.addEventListener('pointermove', e => { if (joy.hasPointerCapture?.(e.pointerId)) updateJoy(e); });
-      joy.addEventListener('pointerup', resetJoy);
-      joy.addEventListener('pointercancel', resetJoy);
-    }
-
-    if (ui.aimPad) {
-      const aim = e => { e.preventDefault(); mouse.down = true; setMouseFromClient(e.clientX, e.clientY); };
-      ui.aimPad.addEventListener('pointerdown', e => { ui.aimPad.setPointerCapture?.(e.pointerId); aim(e); });
-      ui.aimPad.addEventListener('pointermove', e => { if (ui.aimPad.hasPointerCapture?.(e.pointerId)) aim(e); });
-      ui.aimPad.addEventListener('pointerup', e => { e.preventDefault(); mouse.down = false; });
-      ui.aimPad.addEventListener('pointercancel', () => { mouse.down = false; });
-    }
-
-    ui.dashTouch?.addEventListener('pointerdown', e => { e.preventDefault(); doDash(); });
+    const touchStart = e => {
+      if (controlMode !== 'touch') return;
+      if (ui.overlay.classList.contains('visible')) return;
+      e.preventDefault();
+      setTouchDirectionFromClient(e);
+    };
+    const touchMoveHandler = e => {
+      if (controlMode !== 'touch') return;
+      if (!touchMove.active) return;
+      e.preventDefault();
+      setTouchDirectionFromClient(e);
+    };
+    const touchEnd = e => {
+      if (controlMode !== 'touch') return;
+      e.preventDefault();
+      resetTouchDirection();
+    };
+    canvas.addEventListener('pointerdown', touchStart);
+    canvas.addEventListener('pointermove', touchMoveHandler);
+    canvas.addEventListener('pointerup', touchEnd);
+    canvas.addEventListener('pointercancel', touchEnd);
   }
 
   bindTouchControls();
