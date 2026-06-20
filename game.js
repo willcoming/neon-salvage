@@ -323,6 +323,8 @@
   }
 
   function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15; }
+  function playerScale() { return controlMode === 'touch' ? .78 : 1; }
+  function playerRadius() { return 17 * playerScale(); }
   function speed() { return (282 + (meta.upgrades.engine || 0) * 18) * (controlMode === 'touch' ? .88 : 1); }
   function fireRate() { return Math.max(.075, .215 - (meta.upgrades.cannon || 0) * .011); }
   function weaponFireRate() {
@@ -335,7 +337,7 @@
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
   function hardResetRun() {
-    player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 17, hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0 };
+    player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = makeBeacon(); zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0;
@@ -487,6 +489,7 @@
     controlMode = mode === 'touch' ? 'touch' : 'keyboard';
     document.body.dataset.controlMode = controlMode;
     autoAim = controlMode === 'touch';
+    if (player) player.r = playerRadius();
     touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pressed = false; touchMove.dir = ''; touchMove.force = 0;
     if (announce) flash(controlMode === 'touch' ? '手機自動模式：自動瞄準 ON' : '鍵鼠模式：鍵盤移動 / 滑鼠瞄準');
     updateCombatControls();
@@ -1041,6 +1044,7 @@
     ctx.translate(player.x, player.y);
     const a = mouseAimAngle();
     ctx.rotate(a);
+    ctx.scale(playerScale(), playerScale());
     const flicker = isPlayerProtected() && Math.sin(performance.now() * .05) > 0;
     ctx.globalAlpha = flicker ? .45 : 1;
     ctx.shadowColor = dashTime > 0 ? '#ffd166' : '#37f6ff'; ctx.shadowBlur = 24;
