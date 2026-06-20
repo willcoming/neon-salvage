@@ -23,6 +23,7 @@
     toast: document.getElementById('toast'),
     controlModeBtn: document.getElementById('controlModeBtn'),
     autoAimBtn: document.getElementById('autoAimBtn'),
+    upgradePrompt: document.getElementById('upgradePrompt'),
     offlineNotice: document.getElementById('offlineNotice'),
     touchGuide: document.getElementById('touchGuide')
   };
@@ -55,7 +56,7 @@
   const mouse = { x: W / 2, y: H / 2, down: false, lastMove: performance.now() };
   const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth <= 860;
   let controlMode = coarsePointer ? 'touch' : 'keyboard';
-  const touchMove = { x: 0, y: 0, active: false, pressed: false, sx: W / 2, sy: H / 2, cx: W / 2, cy: H / 2, dir: '' };
+  const touchMove = { x: 0, y: 0, active: false, pressed: false, sx: W / 2, sy: H / 2, cx: W / 2, cy: H / 2, dir: '', force: 0 };
 
   const baseState = () => ({
     scrap: 0,
@@ -237,6 +238,13 @@
     return Math.floor(def.base * Math.pow(def.scale, lvl));
   }
 
+  function availableUpgradeCount() {
+    return upgradeDefs.filter(def => {
+      const lvl = meta.upgrades[def.id] || 0;
+      return lvl < def.max && meta.scrap >= upgradeCost(def);
+    }).length;
+  }
+
   function canUsePermanentUpgrades() {
     return running && paused && !gameOver && !skillChoosing;
   }
@@ -247,9 +255,17 @@
 
   function updateUpgradeAccessUi() {
     const allowed = canUsePermanentUpgrades();
+    const available = availableUpgradeCount();
+    const hasAvailable = available > 0;
     if (ui.upgradeMenuBtn) {
       ui.upgradeMenuBtn.hidden = !allowed;
-      ui.upgradeMenuBtn.textContent = '艦載升級';
+      ui.upgradeMenuBtn.textContent = hasAvailable ? `艦載升級！×${available}` : '艦載升級';
+      ui.upgradeMenuBtn.classList.toggle('ready', hasAvailable);
+    }
+    if (ui.upgradePrompt) {
+      const showPrompt = running && !paused && !gameOver && !skillChoosing && hasAvailable;
+      ui.upgradePrompt.hidden = !showPrompt;
+      ui.upgradePrompt.textContent = `可升級 ×${available}｜按 P`;
     }
     if (!allowed && isUpgradeModalOpen()) closeUpgradeModal();
     renderUpgradeButtonStateOnly();
@@ -471,7 +487,7 @@
     controlMode = mode === 'touch' ? 'touch' : 'keyboard';
     document.body.dataset.controlMode = controlMode;
     autoAim = controlMode === 'touch';
-    touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pressed = false; touchMove.dir = '';
+    touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pressed = false; touchMove.dir = ''; touchMove.force = 0;
     if (announce) flash(controlMode === 'touch' ? '手機自動模式：自動瞄準 ON' : '鍵鼠模式：鍵盤移動 / 滑鼠瞄準');
     updateCombatControls();
   }
@@ -701,9 +717,10 @@
     const ax = useTouchMove ? touchMove.x : keyX;
     const ay = useTouchMove ? touchMove.y : keyY;
     const len = Math.hypot(ax, ay) || 1;
+    const touchForce = useTouchMove ? clamp(touchMove.force || 1, .45, 1) : 1;
     const dashMult = dashTime > 0 ? 3.25 : 1;
-    player.vx = (ax / len) * speed() * dashMult;
-    player.vy = (ay / len) * speed() * dashMult;
+    player.vx = (ax / len) * speed() * touchForce * dashMult;
+    player.vy = (ay / len) * speed() * touchForce * dashMult;
     player.x += player.vx * dt;
     player.y += player.vy * dt;
     updateWorldFeatures(dt);
@@ -1204,8 +1221,12 @@
     ctx.beginPath(); ctx.arc(0, 0, 84, 0, TWO_PI); ctx.fill(); ctx.stroke();
     ctx.fillStyle = 'rgba(238,247,255,.10)';
     ctx.beginPath(); ctx.arc(0, 0, 18, 0, TWO_PI); ctx.fill();
-    const knobX = clamp(touchMove.cx - touchMove.sx, -44, 44);
-    const knobY = clamp(touchMove.cy - touchMove.sy, -44, 44);
+    const force = clamp(touchMove.force || 0, 0, 1);
+    ctx.strokeStyle = 'rgba(255,209,102,.58)';
+    ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(0, 0, 26 + force * 44, -Math.PI / 2, -Math.PI / 2 + TWO_PI * force); ctx.stroke();
+    const knobX = clamp(touchMove.cx - touchMove.sx, -54, 54);
+    const knobY = clamp(touchMove.cy - touchMove.sy, -54, 54);
     ctx.fillStyle = 'rgba(255,255,255,.42)';
     ctx.strokeStyle = 'rgba(189,252,255,.72)';
     ctx.beginPath(); ctx.arc(knobX, knobY, 10, 0, TWO_PI); ctx.fill(); ctx.stroke();
@@ -1298,11 +1319,13 @@
     touchMove.pressed = true;
     const dx = sx - touchMove.sx;
     const dy = sy - touchMove.sy;
+    const distance = Math.hypot(dx, dy);
     const deadZone = 18;
-    if (Math.hypot(dx, dy) <= deadZone) {
+    if (distance <= deadZone) {
       touchMove.x = 0;
       touchMove.y = 0;
       touchMove.dir = '';
+      touchMove.force = 0;
       touchMove.active = false;
     } else {
       const eightWay = [
@@ -1320,6 +1343,7 @@
       touchMove.x = move.x;
       touchMove.y = move.y;
       touchMove.dir = move.dir;
+      touchMove.force = .45 + clamp((distance - deadZone) / 58, 0, 1) * .55;
       touchMove.active = true;
     }
     mouse.x = sx;
@@ -1332,6 +1356,7 @@
     touchMove.x = 0;
     touchMove.y = 0;
     touchMove.dir = '';
+    touchMove.force = 0;
     touchMove.active = false;
     touchMove.pressed = false;
     mouse.down = false;

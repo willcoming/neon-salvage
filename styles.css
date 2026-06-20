@@ -161,6 +161,30 @@ h1, h2, p { margin: 0; }
   color: var(--cyan);
   box-shadow: 0 0 18px rgba(55, 246, 255, .18);
 }
+.combat-controls button.ready,
+.upgrade-prompt {
+  border-color: rgba(255, 209, 102, .85);
+  color: var(--gold);
+  background: rgba(255, 209, 102, .16);
+  box-shadow: 0 0 18px rgba(255, 209, 102, .26);
+  animation: upgradePulse 1.15s ease-in-out infinite;
+}
+.upgrade-prompt {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 209, 102, .85);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .04em;
+}
+.upgrade-prompt[hidden] { display: none; }
+@keyframes upgradePulse {
+  0%, 100% { filter: brightness(1); transform: translateY(0); }
+  50% { filter: brightness(1.28); transform: translateY(-1px); }
+}
 
 .hint {
   grid-column: 1 / -1;

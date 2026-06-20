@@ -27,6 +27,7 @@
       <div class="combat-controls">
         <button id="controlModeBtn" type="button">操作：鍵鼠模式</button>
         <button id="autoAimBtn" type="button">自動鎖定：OFF</button>
+        <span id="upgradePrompt" class="upgrade-prompt" hidden>可升級｜按 P</span>
         <button id="upgradeMenuBtn" type="button" hidden>艦載升級</button>
       </div>
       <div class="hint">WASD/方向鍵移動｜滑鼠控機身｜E 自動鎖定｜空白衝刺｜P 暫停升級｜自動存檔</div>
@@ -54,12 +55,13 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v2.14 八軸浮動方向鍵版</strong>
+          <strong>v2.15 升級提示與力度方向鍵版</strong>
           <ul>
             <li>介面優化：永久升級不再常駐右側/底部面板，改成暫停時開啟彈窗。</li>
             <li>戰鬥進行中不能購買永久升級；按 P 暫停後才可以升級。</li>
             <li>升級彈窗內可立即存檔、重置宇宙或繼續遊戲。</li>
-            <li>手機單手浮動方向鍵升級為八軸，支援斜向移動與方向高亮。</li>
+            <li>戰鬥中會提示可購買的永久升級數量；按 P 暫停後升級入口會發光。</li>
+            <li>手機八軸浮動方向鍵加入力度感，拇指推遠一點會加速推進。</li>
             <li>小地圖雷達、開放式地圖與後期事件 / Boss 變體都保留。</li>
           </ul>
         </div>
@@ -79,7 +81,7 @@
 
 手機：
 - 單手浮動方向鍵：手指按下的位置就是方向鍵中心
-- 拇指往 8 個方向滑一點決定方向，上下左右與四個斜向都能移動，持續按著才會移動
+- 拇指往 8 個方向滑一點決定方向，上下左右與四個斜向都能移動；推遠一點會提高推進力度
 - 放開螢幕會立刻停止，方向鍵盤也會消失
 - 按住時會出現半透明方向鍵盤、拇指點與目前方向高亮
 - 手機自動模式：自動瞄準 ON，沒有衝刺鍵
