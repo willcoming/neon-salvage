@@ -55,7 +55,7 @@
   const mouse = { x: W / 2, y: H / 2, down: false, lastMove: performance.now() };
   const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth <= 860;
   let controlMode = coarsePointer ? 'touch' : 'keyboard';
-  const touchMove = { x: 0, y: 0, active: false, pressed: false, sx: W / 2, sy: H / 2, cx: W / 2, cy: H / 2 };
+  const touchMove = { x: 0, y: 0, active: false, pressed: false, sx: W / 2, sy: H / 2, cx: W / 2, cy: H / 2, dir: '' };
 
   const baseState = () => ({
     scrap: 0,
@@ -471,7 +471,7 @@
     controlMode = mode === 'touch' ? 'touch' : 'keyboard';
     document.body.dataset.controlMode = controlMode;
     autoAim = controlMode === 'touch';
-    touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pressed = false;
+    touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pressed = false; touchMove.dir = '';
     if (announce) flash(controlMode === 'touch' ? '手機自動模式：自動瞄準 ON' : '鍵鼠模式：鍵盤移動 / 滑鼠瞄準');
     updateCombatControls();
   }
@@ -1179,15 +1179,19 @@
 
   function drawTouchDpad() {
     if (controlMode !== 'touch' || !touchMove.pressed) return;
-    const maxX = W > 860 ? W - 420 : W - 74;
-    const x = clamp(touchMove.sx, 74, maxX);
-    const y = clamp(touchMove.sy, 112, H - 112);
-    const active = touchMove.active ? (touchMove.x > 0 ? 'right' : touchMove.x < 0 ? 'left' : touchMove.y > 0 ? 'down' : touchMove.y < 0 ? 'up' : '') : '';
+    const maxX = W > 860 ? W - 420 : W - 86;
+    const x = clamp(touchMove.sx, 86, maxX);
+    const y = clamp(touchMove.sy, 124, H - 124);
+    const active = touchMove.active ? touchMove.dir : '';
     const pads = [
-      { id: 'up', label: '▲', x: 0, y: -42 },
-      { id: 'down', label: '▼', x: 0, y: 42 },
-      { id: 'left', label: '◀', x: -42, y: 0 },
-      { id: 'right', label: '▶', x: 42, y: 0 }
+      { id: 'upLeft', label: '↖', x: -44, y: -44, size: 36 },
+      { id: 'up', label: '▲', x: 0, y: -56, size: 42 },
+      { id: 'upRight', label: '↗', x: 44, y: -44, size: 36 },
+      { id: 'left', label: '◀', x: -56, y: 0, size: 42 },
+      { id: 'right', label: '▶', x: 56, y: 0, size: 42 },
+      { id: 'downLeft', label: '↙', x: -44, y: 44, size: 36 },
+      { id: 'down', label: '▼', x: 0, y: 56, size: 42 },
+      { id: 'downRight', label: '↘', x: 44, y: 44, size: 36 }
     ];
     ctx.save();
     ctx.translate(x, y);
@@ -1197,7 +1201,7 @@
     ctx.lineWidth = 2;
     ctx.shadowColor = '#37f6ff';
     ctx.shadowBlur = 16;
-    ctx.beginPath(); ctx.arc(0, 0, 72, 0, TWO_PI); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(0, 0, 84, 0, TWO_PI); ctx.fill(); ctx.stroke();
     ctx.fillStyle = 'rgba(238,247,255,.10)';
     ctx.beginPath(); ctx.arc(0, 0, 18, 0, TWO_PI); ctx.fill();
     const knobX = clamp(touchMove.cx - touchMove.sx, -44, 44);
@@ -1216,7 +1220,7 @@
       ctx.strokeStyle = isActive ? '#bdfcff' : 'rgba(238,247,255,.22)';
       ctx.shadowColor = isActive ? '#37f6ff' : 'transparent';
       ctx.shadowBlur = isActive ? 20 : 0;
-      ctx.beginPath(); ctx.roundRect(-23, -23, 46, 46, 13); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.roundRect(-p.size / 2, -p.size / 2, p.size, p.size, 12); ctx.fill(); ctx.stroke();
       ctx.fillStyle = isActive ? '#050712' : 'rgba(238,247,255,.70)';
       ctx.fillText(p.label, 0, 1);
       ctx.restore();
@@ -1298,14 +1302,24 @@
     if (Math.hypot(dx, dy) <= deadZone) {
       touchMove.x = 0;
       touchMove.y = 0;
+      touchMove.dir = '';
       touchMove.active = false;
-    } else if (Math.abs(dx) >= Math.abs(dy)) {
-      touchMove.x = Math.sign(dx);
-      touchMove.y = 0;
-      touchMove.active = true;
     } else {
-      touchMove.x = 0;
-      touchMove.y = Math.sign(dy);
+      const eightWay = [
+        { dir: 'right', x: 1, y: 0 },
+        { dir: 'downRight', x: 1, y: 1 },
+        { dir: 'down', x: 0, y: 1 },
+        { dir: 'downLeft', x: -1, y: 1 },
+        { dir: 'left', x: -1, y: 0 },
+        { dir: 'upLeft', x: -1, y: -1 },
+        { dir: 'up', x: 0, y: -1 },
+        { dir: 'upRight', x: 1, y: -1 }
+      ];
+      const sector = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+      const move = eightWay[(sector + 8) % 8];
+      touchMove.x = move.x;
+      touchMove.y = move.y;
+      touchMove.dir = move.dir;
       touchMove.active = true;
     }
     mouse.x = sx;
@@ -1317,6 +1331,7 @@
   function resetTouchDirection() {
     touchMove.x = 0;
     touchMove.y = 0;
+    touchMove.dir = '';
     touchMove.active = false;
     touchMove.pressed = false;
     mouse.down = false;
