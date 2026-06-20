@@ -90,6 +90,10 @@
   let activeEvent = null;
   let eventTimer = 0;
   let meteorTimer = 0;
+  let worldFeatures = [];
+  let featurePulse = 0;
+  let zoneTick = 0;
+  let beacon = null;
 
   const upgradesRuntime = {
     splitShot: 0,
@@ -135,14 +139,19 @@
     shielded: { name: '護盾', color: '#7aa7ff', hp: 1.55, speed: .92, scrap: 2 },
     splitter: { name: '分裂', color: '#ffd166', hp: 1.18, speed: 1.02, scrap: 2 },
     berserk: { name: '狂暴', color: '#ff4d6d', hp: .9, speed: 1.42, scrap: 2 },
-    medic: { name: '治療', color: '#4dff88', hp: 1.28, speed: .96, scrap: 3 }
+    medic: { name: '治療', color: '#4dff88', hp: 1.28, speed: .96, scrap: 3 },
+    phantom: { name: '幻影', color: '#bdfcff', hp: .82, speed: 1.64, scrap: 3 },
+    juggernaut: { name: '巨像', color: '#ff9f1c', hp: 2.05, speed: .72, scrap: 4 }
   };
 
   const eventDefs = {
     meteor: { name: '流星雨', desc: '危險流星穿越戰場，擊中敵我皆會受傷。', color: '#ff7a3d' },
     overclock: { name: '超頻風暴', desc: '你的射速提升，但敵人行動也更快。', color: '#37f6ff' },
     blackout: { name: '電磁干擾', desc: '狙擊球變多，自動鎖定半徑縮短。', color: '#ff3df2' },
-    rich: { name: '碎晶富礦', desc: '敵人掉落增加，但精英出現率提高。', color: '#ffd166' }
+    rich: { name: '碎晶富礦', desc: '敵人掉落增加，但精英出現率提高。', color: '#ffd166' },
+    hazard: { name: '輻射裂隙', desc: '危險區域擴散，靠近會持續受損。', color: '#ff4d6d' },
+    supply: { name: '補給航道', desc: '補給站出現率提高，適合喘息與回復。', color: '#4dff88' },
+    eliteStorm: { name: '菁英獵殺令', desc: '菁英敵人大量出現，但擊破獎勵提高。', color: '#bdfcff' }
   };
 
   const achievementDefs = [
@@ -258,7 +267,7 @@
   }
 
   function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15; }
-  function speed() { return 282 + (meta.upgrades.engine || 0) * 18; }
+  function speed() { return (282 + (meta.upgrades.engine || 0) * 18) * (controlMode === 'touch' ? .88 : 1); }
   function fireRate() { return Math.max(.075, .215 - (meta.upgrades.cannon || 0) * .011); }
   function weaponFireRate() {
     const harvest = upgradesRuntime.harvestDrive > 0 ? Math.max(.72, 1 - Math.min(.28, (runKills % 10) * .028 * upgradesRuntime.harvestDrive)) : 1;
@@ -271,7 +280,7 @@
 
   function hardResetRun() {
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 17, hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0 };
-    bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = [];
+    bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = makeBeacon(); zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0;
     mission = newMission();
@@ -299,16 +308,18 @@
   function startWave(n) {
     wave = n;
     bossActive = n % 5 === 0;
-    spawnLeft = bossActive ? 0 : Math.floor(5 + n * 1.55 + Math.pow(n, 1.08));
-    spawnTimer = bossActive ? .55 : n === 1 ? .85 : .45;
+    const mobileEase = controlMode === 'touch' ? .84 : 1;
+    spawnLeft = bossActive ? 0 : Math.floor((5 + n * 1.55 + Math.pow(n, 1.08)) * mobileEase);
+    spawnTimer = bossActive ? .55 : n === 1 ? .95 : controlMode === 'touch' ? .58 : .45;
     if (wave >= 9 && !bossActive && (wave % 3 === 0 || Math.random() < .28)) startEvent();
+    if (!beacon || wave % 3 === 1) beacon = makeBeacon();
     if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
     if (bossActive) spawnBoss();
     flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : `第 ${wave} 波來襲`);
   }
 
   function startEvent() {
-    const ids = ['meteor', 'overclock', 'blackout', 'rich'];
+    const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm'];
     const id = choose(ids);
     activeEvent = { id, ...eventDefs[id] };
     eventTimer = 18 + Math.min(12, wave * .8);
@@ -356,15 +367,15 @@
 
   function maybeApplyElite(e, pick) {
     if (pick === 'boss' || wave < 7) return;
-    const chance = Math.min(.12 + wave * .012 + (activeEvent?.id === 'rich' ? .12 : 0), .38);
+    const chance = Math.min(.12 + wave * .012 + (activeEvent?.id === 'rich' ? .12 : 0) + (activeEvent?.id === 'eliteStorm' ? .20 : 0), .48);
     if (Math.random() > chance) return;
-    const id = choose(['shielded', 'splitter', 'berserk', 'medic']);
+    const id = choose(wave >= 12 ? ['shielded', 'splitter', 'berserk', 'medic', 'phantom', 'juggernaut'] : ['shielded', 'splitter', 'berserk', 'medic']);
     const mod = eliteMods[id];
     e.elite = { id, name: mod.name, color: mod.color };
     e.label = `${mod.name}${e.label}`;
     e.hp *= mod.hp;
     e.speed *= mod.speed;
-    e.scrap += mod.scrap;
+    e.scrap += mod.scrap + (activeEvent?.id === 'eliteStorm' ? 2 : 0);
     e.r += id === 'shielded' ? 4 : 2;
     e.color = mod.color;
   }
@@ -372,7 +383,14 @@
   function spawnBoss() {
     const t = enemyTypes.boss;
     const c = camera();
-    const e = { type: 'boss', label: t.label, x: player.x, y: c.y - 80, r: t.r + wave * 1.5, hp: t.hp + wave * 75, maxHp: t.hp + wave * 75, speed: t.speed + wave, spin: .7, color: t.color, sides: t.sides, scrap: t.scrap + wave, hit: 0, shootClock: 1.1, phase2: false, elite: null };
+    const variants = [
+      { id: 'ring', label: '星環吞噬者', color: '#ff4d6d', hp: 1, speed: 1, sides: 10, shot: 1 },
+      { id: 'forge', label: '熔核鍛造者', color: '#ff9f1c', hp: 1.18, speed: .86, sides: 8, shot: .88 },
+      { id: 'void', label: '虛空指揮官', color: '#b66dff', hp: .92, speed: 1.22, sides: 12, shot: 1.18 }
+    ];
+    const v = variants[Math.floor((wave / 5 - 1) % variants.length)];
+    const hp = (t.hp + wave * 75) * v.hp;
+    const e = { type: 'boss', bossVariant: v.id, label: v.label, x: player.x, y: c.y - 80, r: t.r + wave * 1.5, hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + 6, hit: 0, shootClock: 1.1, shotMult: v.shot, phase2: false, elite: null };
     enemies.push(e);
   }
 
@@ -456,10 +474,11 @@
 
   function enemyShoot(e) {
     const a = Math.atan2(player.y - e.y, player.x - e.x);
-    const count = e.type === 'boss' ? (e.phase2 ? 11 : 7) : 1;
+    const count = e.type === 'boss' ? (e.bossVariant === 'void' ? (e.phase2 ? 15 : 9) : e.phase2 ? 11 : 7) : 1;
     for (let i = 0; i < count; i++) {
       const off = count === 1 ? 0 : (i - (count - 1) / 2) * (e.phase2 ? .13 : .16);
-      enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(a + off) * (e.type === 'boss' ? (e.phase2 ? 235 : 205) : 250), vy: Math.sin(a + off) * (e.type === 'boss' ? (e.phase2 ? 235 : 205) : 250), r: e.type === 'boss' ? 5 : 4, life: 4, dmg: e.type === 'boss' ? (e.phase2 ? 15 : 12) : 8 });
+      const bossSpeed = (e.type === 'boss' ? (e.phase2 ? 235 : 205) * (e.shotMult || 1) : 250);
+      enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(a + off) * bossSpeed, vy: Math.sin(a + off) * bossSpeed, r: e.type === 'boss' ? 5 : 4, life: 4, dmg: e.type === 'boss' ? (e.phase2 ? 15 : 12) : 8 });
     }
   }
 
@@ -553,6 +572,75 @@
     }
   }
 
+
+  function makeBeacon() {
+    const a = Math.random() * TWO_PI;
+    const d = rand(760, 1450);
+    return { x: player ? player.x + Math.cos(a) * d : W / 2 + 900, y: player ? player.y + Math.sin(a) * d : H / 2 - 700, r: 86, pulse: 0 };
+  }
+
+  function addWorldFeature(kind = null) {
+    if (!player) return;
+    const types = kind ? [kind] : ['asteroid', 'debris', 'resource', 'resource', 'hazard', 'repair'];
+    const type = choose(types);
+    const a = Math.random() * TWO_PI;
+    const d = rand(Math.min(W, H) * .72, Math.max(W, H) * 1.9);
+    const base = {
+      type,
+      x: player.x + Math.cos(a) * d,
+      y: player.y + Math.sin(a) * d,
+      r: type === 'asteroid' ? rand(34, 72) : type === 'debris' ? rand(24, 48) : type === 'repair' ? 44 : type === 'hazard' ? rand(110, 190) : rand(95, 165),
+      spin: rand(-1, 1),
+      seed: Math.random() * 999,
+      cool: 0
+    };
+    worldFeatures.push(base);
+  }
+
+  function maintainWorldFeatures() {
+    if (!player) return;
+    const keep = Math.max(W, H) * 2.8;
+    worldFeatures = worldFeatures.filter(f => Math.hypot(f.x - player.x, f.y - player.y) < keep);
+    const target = 24 + Math.min(14, Math.floor(wave / 2));
+    while (worldFeatures.length < target) addWorldFeature();
+  }
+
+  function updateWorldFeatures(dt) {
+    if (!player) return;
+    for (const f of worldFeatures) {
+      f.cool = Math.max(0, f.cool - dt);
+      f.spin += dt * .2;
+      const d = Math.hypot(player.x - f.x, player.y - f.y);
+      if ((f.type === 'asteroid' || f.type === 'debris') && d < player.r + f.r * .76) {
+        const a = Math.atan2(player.y - f.y, player.x - f.x);
+        const push = (player.r + f.r * .76 - d) + 1;
+        player.x += Math.cos(a) * push;
+        player.y += Math.sin(a) * push;
+        if (f.cool <= 0 && !isPlayerProtected()) { player.hp -= f.type === 'asteroid' ? 8 : 4; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
+      }
+      if (f.type === 'hazard' && d < f.r) {
+        if (zoneTick <= 0 && !isPlayerProtected()) { player.hp -= 3 + wave * .12; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); }
+      }
+      if (f.type === 'repair' && d < f.r && f.cool <= 0) {
+        player.hp = Math.min(player.maxHp, player.hp + 14);
+        f.cool = 3.2;
+        addText(player.x, player.y - 34, '補給 +14', '#4dff88');
+      }
+      if (f.type === 'resource' && d < f.r && f.cool <= 0) {
+        dropShard(player.x + rand(-24, 24), player.y + rand(-24, 24), 1);
+        f.cool = 2.4;
+      }
+      for (const e of enemies) {
+        if (!e.dead && (f.type === 'asteroid' || f.type === 'debris') && dist2(e, f) < Math.pow(e.r + f.r * .7, 2)) {
+          const a = Math.atan2(e.y - f.y, e.x - f.x);
+          e.x += Math.cos(a) * 22 * dt;
+          e.y += Math.sin(a) * 22 * dt;
+        }
+      }
+    }
+    if (zoneTick <= 0) zoneTick = .55;
+  }
+
   function update(dt) {
     if (!running || paused || gameOver || skillChoosing) return;
     dt = Math.min(dt, .033);
@@ -560,8 +648,11 @@
     if (activeEvent) {
       eventTimer -= dt;
       if (activeEvent.id === 'meteor') { meteorTimer -= dt; if (meteorTimer <= 0) { spawnMeteor(); meteorTimer = rand(.75, 1.35); } }
+      if (activeEvent.id === 'hazard' && Math.random() < dt * .55) addWorldFeature('hazard');
+      if (activeEvent.id === 'supply' && Math.random() < dt * .38) addWorldFeature('repair');
       if (eventTimer <= 0) { flash(`${activeEvent.name} 結束`); activeEvent = null; }
     }
+    featurePulse += dt; zoneTick -= dt; maintainWorldFeatures();
     shotTimer -= dt; spawnTimer -= dt; dashCooldown = Math.max(0, dashCooldown - dt); dashTime = Math.max(0, dashTime - dt); player.invuln = Math.max(0, player.invuln - dt); missionPulse += dt;
 
     const keyX = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
@@ -575,6 +666,7 @@
     player.vy = (ay / len) * speed() * dashMult;
     player.x += player.vx * dt;
     player.y += player.vy * dt;
+    updateWorldFeatures(dt);
 
     if (upgradesRuntime.shieldRegen > 0 && player.hp < player.maxHp) {
       player.regenClock += dt;
@@ -585,7 +677,7 @@
     }
 
     if (shotTimer <= 0) { shoot(); shotTimer = weaponFireRate(); }
-    if (spawnLeft > 0 && spawnTimer <= 0) { spawnEnemy(); spawnLeft--; spawnTimer = Math.max(.20, (wave === 1 ? 1.05 : .9) - wave * .016); }
+    if (spawnLeft > 0 && spawnTimer <= 0) { spawnEnemy(); spawnLeft--; spawnTimer = Math.max(controlMode === 'touch' ? .28 : .20, (wave === 1 ? 1.05 : .9) - wave * .016 + (controlMode === 'touch' ? .12 : 0)); }
 
     updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updatePickups(dt); updateParticles(dt);
 
@@ -756,7 +848,7 @@
 
   function finishWave() {
     meta.bestWave = Math.max(meta.bestWave, wave + 1);
-    const reward = 5 + Math.floor(wave * 1.25) + (bossActive ? 20 : 0);
+    const reward = 5 + Math.floor(wave * 1.25) + (bossActive ? 20 : 0) + (beacon && Math.hypot(player.x - beacon.x, player.y - beacon.y) < 130 ? 10 : 0);
     meta.scrap += reward;
     addText(player.x, player.y - 44, `波次獎勵 +${reward}`, '#ffd166');
     startWave(wave + 1);
@@ -805,9 +897,9 @@
     const c = camera();
     ctx.save();
     ctx.translate(-c.x, -c.y);
-    drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
+    drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
     ctx.restore();
-    drawMission();
+    drawMission(); drawMiniMap();
     if (paused && running && !ui.overlay.classList.contains('visible')) drawPause();
   }
 
@@ -842,6 +934,45 @@
     const oy = -((c.y % grid) + grid) % grid;
     for (let x = ox; x < W; x += grid) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for (let y = oy; y < H; y += grid) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    ctx.restore();
+  }
+
+
+  function drawWorldFeatures() {
+    if (!worldFeatures.length) return;
+    ctx.save();
+    for (const f of worldFeatures) {
+      ctx.save();
+      ctx.translate(f.x, f.y);
+      ctx.rotate(f.spin + f.seed);
+      if (f.type === 'asteroid' || f.type === 'debris') {
+        const color = f.type === 'asteroid' ? '#6f7d9c' : '#37f6ff';
+        ctx.shadowColor = color; ctx.shadowBlur = f.type === 'asteroid' ? 10 : 18;
+        ctx.fillStyle = f.type === 'asteroid' ? 'rgba(111,125,156,.72)' : 'rgba(55,246,255,.18)';
+        ctx.strokeStyle = f.type === 'asteroid' ? 'rgba(238,247,255,.34)' : 'rgba(55,246,255,.7)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        const sides = f.type === 'asteroid' ? 9 : 4;
+        for (let i = 0; i < sides; i++) {
+          const a = i / sides * TWO_PI;
+          const rr = f.r * (f.type === 'asteroid' ? rand(.62, 1.0) : (i % 2 ? .55 : 1));
+          ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
+        }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+      } else {
+        const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' ? '#4dff88' : '#ffd166';
+        ctx.globalAlpha = .18 + Math.sin(performance.now() * .004 + f.seed) * .04;
+        ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, f.r, 0, TWO_PI); ctx.fill(); ctx.globalAlpha = .72; ctx.stroke();
+        ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.font = '900 18px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(f.type === 'hazard' ? '危' : f.type === 'repair' ? '+' : '◇', 0, 0);
+      }
+      ctx.restore();
+    }
+    if (beacon) {
+      beacon.pulse = (beacon.pulse || 0) + .02;
+      ctx.save(); ctx.translate(beacon.x, beacon.y); ctx.globalAlpha = .35 + Math.sin(beacon.pulse) * .12; ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 3; ctx.shadowColor = '#bdfcff'; ctx.shadowBlur = 22; ctx.beginPath(); ctx.arc(0, 0, beacon.r, 0, TWO_PI); ctx.stroke(); ctx.fillStyle = '#bdfcff'; ctx.font = '900 16px system-ui'; ctx.textAlign = 'center'; ctx.fillText('目標', 0, 5); ctx.restore();
+    }
     ctx.restore();
   }
 
@@ -963,6 +1094,44 @@
     ctx.fillStyle = autoAim ? '#4dff88' : '#92a5c8';
     ctx.font = '800 12px system-ui';
     ctx.fillText(`機身：${controlMode === 'touch' ? '觸控' : '滑鼠'}｜主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜鎖定 ${autoAim ? (isMouseAiming() ? '手動優先' : 'ON') : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
+    ctx.restore();
+  }
+
+
+  function drawMiniMap() {
+    if (!player) return;
+    const size = Math.min(150, Math.max(110, W * .12));
+    const x = W > 860 ? W - size - 342 : W - size - 18;
+    const y = H - size - 18;
+    const scale = size / 1800;
+    ctx.save();
+    ctx.globalAlpha = .9;
+    ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = 'rgba(55,246,255,.28)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(x, y, size, size, 16); ctx.fill(); ctx.stroke();
+    ctx.save(); ctx.beginPath(); ctx.rect(x, y, size, size); ctx.clip();
+    const cx = x + size / 2, cy = y + size / 2;
+    ctx.strokeStyle = 'rgba(255,255,255,.08)';
+    ctx.beginPath(); ctx.moveTo(cx, y + 10); ctx.lineTo(cx, y + size - 10); ctx.moveTo(x + 10, cy); ctx.lineTo(x + size - 10, cy); ctx.stroke();
+    for (const f of worldFeatures) {
+      const px = cx + (f.x - player.x) * scale; const py = cy + (f.y - player.y) * scale;
+      if (px < x + 5 || px > x + size - 5 || py < y + 5 || py > y + size - 5) continue;
+      ctx.fillStyle = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' ? '#4dff88' : f.type === 'resource' ? '#ffd166' : '#92a5c8';
+      ctx.beginPath(); ctx.arc(px, py, f.type === 'hazard' ? 3 : 2.2, 0, TWO_PI); ctx.fill();
+    }
+    for (const e of enemies) {
+      const px = cx + (e.x - player.x) * scale; const py = cy + (e.y - player.y) * scale;
+      if (px < x + 5 || px > x + size - 5 || py < y + 5 || py > y + size - 5) continue;
+      ctx.fillStyle = e.type === 'boss' ? '#ff4d6d' : '#ff9af8'; ctx.fillRect(px - 1.5, py - 1.5, 3, 3);
+    }
+    if (beacon) {
+      const px = cx + (beacon.x - player.x) * scale; const py = cy + (beacon.y - player.y) * scale;
+      ctx.strokeStyle = '#bdfcff'; ctx.beginPath(); ctx.arc(clamp(px, x + 8, x + size - 8), clamp(py, y + 8, y + size - 8), 5, 0, TWO_PI); ctx.stroke();
+    }
+    ctx.fillStyle = '#37f6ff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, TWO_PI); ctx.fill();
+    ctx.restore();
+    const nearestResource = worldFeatures.filter(f => ['resource', 'repair'].includes(f.type)).sort((a,b) => dist2(player,a)-dist2(player,b))[0];
+    const distLabel = nearestResource ? `${nearestResource.type === 'repair' ? '補給' : '資源'} ${Math.round(Math.sqrt(dist2(player, nearestResource)))}m` : '掃描中';
+    ctx.fillStyle = 'rgba(238,247,255,.76)'; ctx.font = '800 11px system-ui'; ctx.textAlign = 'center'; ctx.fillText(distLabel, x + size / 2, y + size - 10);
     ctx.restore();
   }
 
