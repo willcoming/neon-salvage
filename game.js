@@ -51,7 +51,7 @@
   const mouse = { x: W / 2, y: H / 2, down: false, lastMove: performance.now() };
   const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth <= 860;
   let controlMode = coarsePointer ? 'touch' : 'keyboard';
-  const touchMove = { x: 0, y: 0, active: false };
+  const touchMove = { x: 0, y: 0, active: false, pressed: false, sx: W / 2, sy: H / 2, cx: W / 2, cy: H / 2 };
 
   const baseState = () => ({
     scrap: 0,
@@ -431,7 +431,7 @@
     controlMode = mode === 'touch' ? 'touch' : 'keyboard';
     document.body.dataset.controlMode = controlMode;
     autoAim = controlMode === 'touch';
-    touchMove.x = 0; touchMove.y = 0; touchMove.active = false;
+    touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pressed = false;
     if (announce) flash(controlMode === 'touch' ? '手機自動模式：自動瞄準 ON' : '鍵鼠模式：鍵盤移動 / 滑鼠瞄準');
     updateCombatControls();
   }
@@ -657,7 +657,7 @@
 
     const keyX = (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) - (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
     const keyY = (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0) - (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0);
-    const useTouchMove = controlMode === 'touch' && touchMove.active;
+    const useTouchMove = controlMode === 'touch' && touchMove.pressed && touchMove.active;
     const ax = useTouchMove ? touchMove.x : keyX;
     const ay = useTouchMove ? touchMove.y : keyY;
     const len = Math.hypot(ax, ay) || 1;
@@ -899,7 +899,7 @@
     ctx.translate(-c.x, -c.y);
     drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
     ctx.restore();
-    drawMission(); drawMiniMap();
+    drawMission(); drawMiniMap(); drawTouchDpad();
     if (paused && running && !ui.overlay.classList.contains('visible')) drawPause();
   }
 
@@ -1135,6 +1135,53 @@
     ctx.restore();
   }
 
+  function drawTouchDpad() {
+    if (controlMode !== 'touch' || !touchMove.pressed) return;
+    const maxX = W > 860 ? W - 420 : W - 74;
+    const x = clamp(touchMove.sx, 74, maxX);
+    const y = clamp(touchMove.sy, 112, H - 112);
+    const active = touchMove.active ? (touchMove.x > 0 ? 'right' : touchMove.x < 0 ? 'left' : touchMove.y > 0 ? 'down' : touchMove.y < 0 ? 'up' : '') : '';
+    const pads = [
+      { id: 'up', label: '▲', x: 0, y: -42 },
+      { id: 'down', label: '▼', x: 0, y: 42 },
+      { id: 'left', label: '◀', x: -42, y: 0 },
+      { id: 'right', label: '▶', x: 42, y: 0 }
+    ];
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.globalAlpha = .88;
+    ctx.fillStyle = 'rgba(5,7,18,.38)';
+    ctx.strokeStyle = 'rgba(55,246,255,.36)';
+    ctx.lineWidth = 2;
+    ctx.shadowColor = '#37f6ff';
+    ctx.shadowBlur = 16;
+    ctx.beginPath(); ctx.arc(0, 0, 72, 0, TWO_PI); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = 'rgba(238,247,255,.10)';
+    ctx.beginPath(); ctx.arc(0, 0, 18, 0, TWO_PI); ctx.fill();
+    const knobX = clamp(touchMove.cx - touchMove.sx, -44, 44);
+    const knobY = clamp(touchMove.cy - touchMove.sy, -44, 44);
+    ctx.fillStyle = 'rgba(255,255,255,.42)';
+    ctx.strokeStyle = 'rgba(189,252,255,.72)';
+    ctx.beginPath(); ctx.arc(knobX, knobY, 10, 0, TWO_PI); ctx.fill(); ctx.stroke();
+    ctx.font = '900 22px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const p of pads) {
+      const isActive = active === p.id;
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.fillStyle = isActive ? 'rgba(55,246,255,.78)' : 'rgba(238,247,255,.18)';
+      ctx.strokeStyle = isActive ? '#bdfcff' : 'rgba(238,247,255,.22)';
+      ctx.shadowColor = isActive ? '#37f6ff' : 'transparent';
+      ctx.shadowBlur = isActive ? 20 : 0;
+      ctx.beginPath(); ctx.roundRect(-23, -23, 46, 46, 13); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = isActive ? '#050712' : 'rgba(238,247,255,.70)';
+      ctx.fillText(p.label, 0, 1);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
   function drawPause() { ctx.save(); ctx.fillStyle = 'rgba(5,7,18,.45)'; ctx.fillRect(0, 0, W, H); ctx.fillStyle = '#eef7ff'; ctx.textAlign = 'center'; ctx.font = '800 42px system-ui'; ctx.fillText('暫停中', W / 2, H / 2); ctx.font = '16px system-ui'; ctx.fillText('按 P 繼續｜狀態已保存', W / 2, H / 2 + 38); ctx.restore(); }
 
   function flash(message) { ui.toast.textContent = message; ui.toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => ui.toast.classList.remove('show'), 1800); }
@@ -1177,16 +1224,33 @@
   ui.controlModeBtn?.addEventListener('click', toggleControlMode);
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
 
-  function setTouchDirectionFromClient(e) {
+  function setTouchDirectionFromClient(e, start = false) {
     const rect = canvas.getBoundingClientRect();
     const sx = clamp(e.clientX - rect.left, 0, W);
     const sy = clamp(e.clientY - rect.top, 0, H);
-    const dx = sx - W / 2;
-    const dy = sy - H / 2;
-    const len = Math.hypot(dx, dy);
-    touchMove.x = len > 8 ? dx / len : 0;
-    touchMove.y = len > 8 ? dy / len : 0;
-    touchMove.active = len > 8;
+    if (start || !touchMove.pressed) {
+      touchMove.sx = sx;
+      touchMove.sy = sy;
+    }
+    touchMove.cx = sx;
+    touchMove.cy = sy;
+    touchMove.pressed = true;
+    const dx = sx - touchMove.sx;
+    const dy = sy - touchMove.sy;
+    const deadZone = 18;
+    if (Math.hypot(dx, dy) <= deadZone) {
+      touchMove.x = 0;
+      touchMove.y = 0;
+      touchMove.active = false;
+    } else if (Math.abs(dx) >= Math.abs(dy)) {
+      touchMove.x = Math.sign(dx);
+      touchMove.y = 0;
+      touchMove.active = true;
+    } else {
+      touchMove.x = 0;
+      touchMove.y = Math.sign(dy);
+      touchMove.active = true;
+    }
     mouse.x = sx;
     mouse.y = sy;
     mouse.down = true;
@@ -1197,6 +1261,7 @@
     touchMove.x = 0;
     touchMove.y = 0;
     touchMove.active = false;
+    touchMove.pressed = false;
     mouse.down = false;
   }
 
@@ -1205,13 +1270,13 @@
       if (controlMode !== 'touch') return;
       if (ui.overlay.classList.contains('visible')) return;
       e.preventDefault();
-      setTouchDirectionFromClient(e);
+      setTouchDirectionFromClient(e, true);
     };
     const touchMoveHandler = e => {
       if (controlMode !== 'touch') return;
-      if (!touchMove.active) return;
+      if (!touchMove.pressed) return;
       e.preventDefault();
-      setTouchDirectionFromClient(e);
+      setTouchDirectionFromClient(e, false);
     };
     const touchEnd = e => {
       if (controlMode !== 'touch') return;
