@@ -109,7 +109,9 @@
     orbitals: 0,
     homingRounds: 0,
     weakScan: 0,
-    harvestDrive: 0
+    harvestDrive: 0,
+    lanceRounds: 0,
+    plasmaBurst: 0
   };
 
   const upgradeDefs = [
@@ -127,7 +129,9 @@
     { id: 'shardMultiplier', name: '碎晶精煉', desc: '敵人掉落碎晶增加。' },
     { id: 'slowField', name: '重力干擾', desc: '敵人靠近時會被減速。' },
     { id: 'orbitals', name: '環繞刃翼', desc: '生成環繞玩家的近距離傷害刃翼。' },
-    { id: 'homingRounds', name: '追蹤子彈', desc: '原本的脈衝主砲子彈會微幅追蹤敵人。' },
+    { id: 'homingRounds', name: '追蹤子彈', desc: '保留原本主砲，額外追加會追蹤敵人的微型彈。' },
+    { id: 'lanceRounds', name: '穿甲光矛', desc: '主砲改良成高速穿透光矛，可連續貫穿敵人。' },
+    { id: 'plasmaBurst', name: '電漿爆裂', desc: '子彈命中時產生小範圍爆炸，適合清密集敵群。' },
     { id: 'weakScan', name: '弱點掃描', desc: '對精英與 Boss 造成額外傷害。' },
     { id: 'harvestDrive', name: '收割引擎', desc: '連續擊殺會短暫提高射速。' }
   ];
@@ -323,7 +327,7 @@
   }
 
   function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15; }
-  function playerScale() { return controlMode === 'touch' ? .78 : 1; }
+  function playerScale() { return controlMode === 'touch' ? .62 : .86; }
   function playerRadius() { return 17 * playerScale(); }
   function speed() { return (282 + (meta.upgrades.engine || 0) * 18) * (controlMode === 'touch' ? .88 : 1); }
   function fireRate() { return Math.max(.075, .215 - (meta.upgrades.cannon || 0) * .011); }
@@ -337,7 +341,7 @@
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
   function hardResetRun() {
-    player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0 };
+    player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = makeBeacon(); zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0;
@@ -366,9 +370,9 @@
   function startWave(n) {
     wave = n;
     bossActive = n % 5 === 0;
-    const mobileEase = controlMode === 'touch' ? .84 : 1;
-    spawnLeft = bossActive ? 0 : Math.floor((5 + n * 1.55 + Math.pow(n, 1.08)) * mobileEase);
-    spawnTimer = bossActive ? .55 : n === 1 ? .95 : controlMode === 'touch' ? .58 : .45;
+    const mobileEase = controlMode === 'touch' ? .94 : 1;
+    spawnLeft = bossActive ? 0 : Math.floor((15 + n * 3.25 + Math.pow(n, 1.22)) * mobileEase);
+    spawnTimer = bossActive ? .35 : 0;
     if (wave >= 9 && !bossActive && (wave % 3 === 0 || Math.random() < .28)) startEvent();
     if (!beacon || wave % 3 === 1) beacon = makeBeacon();
     if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
@@ -468,6 +472,19 @@
     return Math.atan2(mouse.y - H / 2, mouse.x - W / 2);
   }
 
+  function approachAngle(current, target, amount) {
+    const diff = ((target - current + Math.PI * 3) % TWO_PI) - Math.PI;
+    return current + diff * clamp(amount, 0, 1);
+  }
+
+  function updatePlayerPose(dt, ax, ay) {
+    if (!player) return;
+    const moving = Math.hypot(ax, ay) > .05;
+    const desired = moving ? Math.atan2(ay, ax) : shotTarget();
+    player.angle = approachAngle(player.angle ?? desired, desired, dt * 10.5);
+    player.bank += (0 - player.bank) * clamp(dt * 10, 0, 1);
+  }
+
   function isMouseAiming() {
     if (controlMode === 'touch') return false;
     return mouse.down || performance.now() - mouse.lastMove < 1500;
@@ -514,20 +531,39 @@
     const angle = shotTarget();
     const split = Math.min(2, upgradesRuntime.splitShot);
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
-    const homing = upgradesRuntime.homingRounds > 0;
-    const target = homing ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 860) : null;
+    const lance = upgradesRuntime.lanceRounds > 0;
     for (const s of spread) {
       bullets.push({
-        type: 'pulse', homing, target, turn: 3.8 + upgradesRuntime.homingRounds * 1.3,
+        type: lance ? 'lance' : 'pulse', homing: false, target: null, turn: 0,
         x: player.x + Math.cos(angle + s) * 23,
         y: player.y + Math.sin(angle + s) * 23,
-        vx: Math.cos(angle + s) * 690,
-        vy: Math.sin(angle + s) * 690,
-        life: homing ? 1.24 : 1.05,
-        r: homing ? 5.4 : 4.5,
-        dmg: damage() * (spread.length > 1 ? .76 : 1),
-        pierce: upgradesRuntime.chain > 1 ? 1 : 0
+        vx: Math.cos(angle + s) * (lance ? 820 : 690),
+        vy: Math.sin(angle + s) * (lance ? 820 : 690),
+        life: lance ? 1.18 : 1.05,
+        r: lance ? 5.8 : 4.5,
+        dmg: damage() * (spread.length > 1 ? .76 : 1) * (lance ? .88 + upgradesRuntime.lanceRounds * .08 : 1),
+        pierce: (upgradesRuntime.chain > 1 ? 1 : 0) + (lance ? Math.min(3, upgradesRuntime.lanceRounds) : 0),
+        blast: upgradesRuntime.plasmaBurst > 0 ? 42 + upgradesRuntime.plasmaBurst * 18 : 0
       });
+    }
+    if (upgradesRuntime.homingRounds > 0) {
+      const target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 860);
+      const count = Math.min(3, upgradesRuntime.homingRounds);
+      for (let i = 0; i < count; i++) {
+        const off = count === 1 ? 0 : (i - (count - 1) / 2) * .18;
+        bullets.push({
+          type: 'seeker', homing: true, target, turn: 4.2 + upgradesRuntime.homingRounds * 1.1,
+          x: player.x + Math.cos(angle + off) * 18,
+          y: player.y + Math.sin(angle + off) * 18,
+          vx: Math.cos(angle + off) * 610,
+          vy: Math.sin(angle + off) * 610,
+          life: 1.35,
+          r: 4.2,
+          dmg: damage() * (.34 + upgradesRuntime.homingRounds * .06),
+          pierce: 0,
+          blast: 0
+        });
+      }
     }
   }
 
@@ -726,6 +762,7 @@
     player.vy = (ay / len) * speed() * touchForce * dashMult;
     player.x += player.vx * dt;
     player.y += player.vy * dt;
+    updatePlayerPose(dt, ax, ay);
     updateWorldFeatures(dt);
 
     if (upgradesRuntime.shieldRegen > 0 && player.hp < player.maxHp) {
@@ -737,7 +774,14 @@
     }
 
     if (shotTimer <= 0) { shoot(); shotTimer = weaponFireRate(); }
-    if (spawnLeft > 0 && spawnTimer <= 0) { spawnEnemy(); spawnLeft--; spawnTimer = Math.max(controlMode === 'touch' ? .28 : .20, (wave === 1 ? 1.05 : .9) - wave * .016 + (controlMode === 'touch' ? .12 : 0)); }
+    if (spawnLeft > 0 && spawnTimer <= 0) {
+      const activeCap = controlMode === 'touch' ? 16 + Math.floor(wave * 1.15) : 20 + Math.floor(wave * 1.35);
+      const openSlots = Math.max(1, activeCap - enemies.length);
+      const burstCount = Math.min(spawnLeft, openSlots, wave === 1 ? 5 : 6 + Math.floor(wave / 3));
+      for (let i = 0; i < burstCount; i++) spawnEnemy();
+      spawnLeft -= burstCount;
+      spawnTimer = Math.max(controlMode === 'touch' ? .10 : .08, (wave === 1 ? .26 : .22) - wave * .01 + (controlMode === 'touch' ? .025 : 0));
+    }
 
     updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updatePickups(dt); updateParticles(dt);
 
@@ -773,6 +817,19 @@
         const rr = b.r + e.r;
         if (dist2(b, e) < rr * rr) {
           e.hp -= b.dmg * ((upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1); e.hit = .08; burst(b.x, b.y, b.homing ? '#ffd166' : '#37f6ff', b.homing ? 6 : 4, .55);
+          if (b.blast > 0) {
+            const blastDamage = b.dmg * (.35 + upgradesRuntime.plasmaBurst * .08);
+            particles.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: .22, max: .22, r: b.blast * .32, color: '#ff7a3d', ring: true });
+            for (const other of enemies) {
+              if (other.dead || other === e) continue;
+              const d = Math.hypot(other.x - b.x, other.y - b.y);
+              if (d < b.blast + other.r) {
+                other.hp -= blastDamage * (1 - Math.min(.65, d / (b.blast + other.r) * .45));
+                other.hit = .08;
+                if (other.hp <= 0) killEnemy(other);
+              }
+            }
+          }
           if (e.hp <= 0) killEnemy(e);
           if (b.pierce > 0) b.pierce--; else b.dead = true;
           break;
@@ -974,10 +1031,6 @@
       g.addColorStop(0, `rgba(${n.color},.105)`); g.addColorStop(1, `rgba(${n.color},0)`);
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
     }
-    ctx.translate(W * .5, H * .52);
-    ctx.rotate(-.25);
-    ctx.strokeStyle = 'rgba(55,246,255,.14)'; ctx.lineWidth = 2;
-    for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.ellipse(0, 0, W * (.28 + i * .035), H * (.055 + i * .012), 0, 0, TWO_PI); ctx.stroke(); }
     ctx.restore();
 
     ctx.save();
@@ -1023,17 +1076,17 @@
         ctx.closePath(); ctx.fill(); ctx.stroke();
       } else {
         const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' ? '#4dff88' : '#ffd166';
-        ctx.globalAlpha = .18 + Math.sin(performance.now() * .004 + f.seed) * .04;
+        ctx.globalAlpha = .82 + Math.sin(performance.now() * .004 + f.seed) * .12;
         ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(0, 0, f.r, 0, TWO_PI); ctx.fill(); ctx.globalAlpha = .72; ctx.stroke();
-        ctx.globalAlpha = 1; ctx.fillStyle = color; ctx.font = '900 18px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(13, 0); ctx.lineTo(0, 13); ctx.lineTo(-13, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.globalAlpha = 1; ctx.fillStyle = '#050712'; ctx.font = '900 15px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText(f.type === 'hazard' ? '危' : f.type === 'repair' ? '+' : '◇', 0, 0);
       }
       ctx.restore();
     }
     if (beacon) {
       beacon.pulse = (beacon.pulse || 0) + .02;
-      ctx.save(); ctx.translate(beacon.x, beacon.y); ctx.globalAlpha = .35 + Math.sin(beacon.pulse) * .12; ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 3; ctx.shadowColor = '#bdfcff'; ctx.shadowBlur = 22; ctx.beginPath(); ctx.arc(0, 0, beacon.r, 0, TWO_PI); ctx.stroke(); ctx.fillStyle = '#bdfcff'; ctx.font = '900 16px system-ui'; ctx.textAlign = 'center'; ctx.fillText('目標', 0, 5); ctx.restore();
+      ctx.save(); ctx.translate(beacon.x, beacon.y); ctx.globalAlpha = .78 + Math.sin(beacon.pulse) * .16; ctx.strokeStyle = '#bdfcff'; ctx.fillStyle = '#bdfcff'; ctx.lineWidth = 3; ctx.shadowColor = '#bdfcff'; ctx.shadowBlur = 22; ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(16, 0); ctx.lineTo(0, 16); ctx.lineTo(-16, 0); ctx.closePath(); ctx.stroke(); ctx.font = '900 13px system-ui'; ctx.textAlign = 'center'; ctx.fillText('目標', 0, 30); ctx.restore();
     }
     ctx.restore();
   }
@@ -1042,29 +1095,20 @@
     if (!player) return;
     ctx.save();
     ctx.translate(player.x, player.y);
-    const a = mouseAimAngle();
+    const a = player.angle ?? mouseAimAngle();
     ctx.rotate(a);
     ctx.scale(playerScale(), playerScale());
     const flicker = isPlayerProtected() && Math.sin(performance.now() * .05) > 0;
     ctx.globalAlpha = flicker ? .45 : 1;
-    ctx.shadowColor = dashTime > 0 ? '#ffd166' : '#37f6ff'; ctx.shadowBlur = 24;
+    ctx.shadowColor = dashTime > 0 ? '#ffd166' : '#37f6ff'; ctx.shadowBlur = 10;
     const grad = ctx.createLinearGradient(-18, 0, 28, 0); grad.addColorStop(0, '#13213f'); grad.addColorStop(.45, '#37f6ff'); grad.addColorStop(1, '#ffffff');
     ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.moveTo(29, 0); ctx.lineTo(-18, -17); ctx.lineTo(-8, -4); ctx.lineTo(-20, 0); ctx.lineTo(-8, 4); ctx.lineTo(-18, 17); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(-22, -15); ctx.lineTo(-11, -4); ctx.lineTo(-24, 0); ctx.lineTo(-11, 4); ctx.lineTo(-22, 15); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = '#eef7ff'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#050712'; ctx.beginPath(); ctx.arc(4, 0, 5.5, 0, TWO_PI); ctx.fill();
-    ctx.fillStyle = '#ff3df2'; ctx.beginPath(); ctx.moveTo(-19, -8); ctx.lineTo(-33 - Math.random() * 10, 0); ctx.lineTo(-19, 8); ctx.fill();
+    ctx.fillStyle = '#050712'; ctx.beginPath(); ctx.arc(0, 0, 5.2, 0, TWO_PI); ctx.fill();
+    ctx.fillStyle = '#ff3df2'; ctx.globalAlpha *= .82; ctx.beginPath(); ctx.moveTo(-23, -5); ctx.lineTo(-29 - Math.random() * 4, 0); ctx.lineTo(-23, 5); ctx.fill();
     ctx.restore();
 
-    ctx.save(); ctx.globalAlpha = .22 + (Math.sin(performance.now() * .004) + 1) * .07; ctx.strokeStyle = dashCooldown <= 0 ? '#37f6ff' : '#ff3df2'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(player.x, player.y, magnetRange(), 0, TWO_PI); ctx.stroke(); ctx.restore();
-    if (isPlayerProtected()) {
-      const shieldLeft = Math.max(player.invuln, 3.5 - runTime);
-      ctx.save();
-      ctx.globalAlpha = clamp(shieldLeft / 3.5, .18, .58);
-      ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 18;
-      ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 18 + Math.sin(performance.now() * .01) * 3, 0, TWO_PI); ctx.stroke();
-      ctx.restore();
-    }
   }
 
   function drawOrbitals() {
@@ -1087,10 +1131,14 @@
       ctx.rotate(a);
       ctx.shadowColor = b.homing ? '#ffd166' : '#37f6ff';
       ctx.shadowBlur = b.homing ? 20 : 15;
-      if (b.homing) {
+      if (b.type === 'lance') {
+        ctx.fillStyle = '#ff7a3d';
+        ctx.beginPath(); ctx.roundRect(-b.r * 1.8, -b.r * .55, b.r * 3.9, b.r * 1.1, b.r * .5); ctx.fill();
+        ctx.fillStyle = '#fff6c7'; ctx.beginPath(); ctx.arc(b.r * 1.3, 0, b.r * .45, 0, TWO_PI); ctx.fill();
+      } else if (b.homing) {
         ctx.fillStyle = '#ffd166';
-        ctx.beginPath(); ctx.ellipse(0, 0, b.r + 3, b.r, 0, 0, TWO_PI); ctx.fill();
-        ctx.fillStyle = '#fff6c7'; ctx.beginPath(); ctx.arc(3, 0, b.r * .48, 0, TWO_PI); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(b.r + 3, 0); ctx.lineTo(0, b.r + 2); ctx.lineTo(-b.r - 3, 0); ctx.lineTo(0, -b.r - 2); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#fff6c7'; ctx.beginPath(); ctx.arc(2, 0, b.r * .42, 0, TWO_PI); ctx.fill();
       } else {
         ctx.fillStyle = '#bdfcff'; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TWO_PI); ctx.fill();
       }
