@@ -175,6 +175,14 @@
     gravityWell: { name: '重力井', desc: '戰場重力異常，敵我都會被拉向訊號核心。', color: '#b66dff' }
   };
 
+  const objectiveDefs = {
+    scan: { name: '掃描信標', color: '#bdfcff', event: ['droneSwarm', 'gravityWell', 'rich'], reward: 1, charge: 2.4 },
+    hold: { name: '守點核心', color: '#7aa7ff', event: ['droneSwarm', 'eliteStorm'], reward: 1.35, charge: 6.2 },
+    harvest: { name: '採集晶礦', color: '#ffd166', event: ['rich', 'droneSwarm'], reward: 1.2, charge: 4.2 },
+    rift: { name: '清除裂隙', color: '#ff4d6d', event: ['hazard', 'gravityWell'], reward: 1.45, charge: 4.8 },
+    hunt: { name: '獵殺菁英', color: '#ff3df2', event: ['eliteStorm', 'rich'], reward: 1.7, charge: 1 }
+  };
+
   const achievementDefs = [
     { id: 'wave5', name: '突破第 5 波', test: () => wave >= 5, reward: 20 },
     { id: 'kills50', name: '擊毀 50 架無人機', test: () => totalKills >= 50, reward: 35 },
@@ -392,14 +400,32 @@
     flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : `第 ${wave} 波來襲`);
   }
 
-  function startEvent(forcedId = null) {
+  function startEvent(forcedId = null, reward = null) {
     const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm', 'droneSwarm', 'gravityWell'];
     const id = forcedId || choose(ids);
-    activeEvent = { id, ...eventDefs[id] };
+    activeEvent = { id, ...eventDefs[id], reward };
     eventTimer = 18 + Math.min(12, wave * .8);
     meteorTimer = .8;
     eventBannerTimer = 2.2;
     if (player) burst(player.x, player.y, eventDefs[id].color, 18, .9);
+  }
+
+  function finishEvent() {
+    if (!activeEvent) return;
+    const reward = activeEvent.reward;
+    const name = activeEvent.name;
+    const color = activeEvent.color;
+    if (reward) {
+      meta.scrap += reward.scrap;
+      xp += reward.xp;
+      for (let i = 0; i < reward.shards; i++) dropShard(player.x + rand(-42, 42), player.y + rand(-42, 42), 1);
+      if (reward.heal > 0) player.hp = Math.min(player.maxHp, player.hp + reward.heal);
+      addText(player.x, player.y - 54, `事件獎勵 +${reward.scrap}`, color);
+      burst(player.x, player.y, color, 28, 1.2);
+      save(false);
+    }
+    flash(`${name} 結束${reward ? `｜獎勵 +${reward.scrap}` : ''}`);
+    activeEvent = null;
   }
 
   function spawnEnemy(typeId) {
@@ -699,37 +725,81 @@
   }
 
 
-  function makeBeacon() {
+  function makeBeacon(kind = null) {
     const a = Math.random() * TWO_PI;
     const d = rand(760, 1450);
-    return { x: player ? player.x + Math.cos(a) * d : W / 2 + 900, y: player ? player.y + Math.sin(a) * d : H / 2 - 700, r: 86, pulse: 0, charge: 0, armed: false };
+    const keys = Object.keys(objectiveDefs);
+    const objective = kind || choose(keys);
+    const def = objectiveDefs[objective];
+    return { x: player ? player.x + Math.cos(a) * d : W / 2 + 900, y: player ? player.y + Math.sin(a) * d : H / 2 - 700, r: objective === 'hold' ? 118 : objective === 'hunt' ? 96 : 86, pulse: 0, charge: 0, armed: false, kind: objective, name: def.name, color: def.color, huntTarget: null, spawnClock: 0, tick: 0 };
+  }
+
+  function objectiveReward(def) {
+    const mult = def.reward || 1;
+    return {
+      scrap: Math.floor((16 + wave * 2.8) * mult),
+      xp: Math.ceil(xpNeed * (.18 + mult * .06)),
+      shards: Math.ceil(3 + wave * .3 * mult),
+      heal: def === objectiveDefs.hold ? 10 : def === objectiveDefs.rift ? 6 : 0
+    };
+  }
+
+  function spawnObjectiveHunter() {
+    if (!beacon || beacon.huntTarget) return;
+    spawnEnemy(choose(['tank', 'leech', 'shooter']));
+    const e = enemies[enemies.length - 1];
+    e.elite = { id: 'objective', name: '目標', color: '#ff3df2' };
+    e.color = '#ff3df2';
+    e.hp *= 1.75;
+    e.maxHp = e.hp;
+    e.speed *= 1.08;
+    e.scrap += 5 + Math.floor(wave / 2);
+    e.objectiveTarget = true;
+    e.x = beacon.x + rand(-90, 90);
+    e.y = beacon.y + rand(-90, 90);
+    beacon.huntTarget = e;
+    flash('獵殺菁英出現');
   }
 
   function triggerBeacon() {
     if (!beacon || beacon.armed) return;
     beacon.armed = true;
-    const reward = 18 + Math.floor(wave * 2.4);
-    meta.scrap += reward;
-    xp += Math.ceil(xpNeed * .22);
-    addText(player.x, player.y - 50, `訊號獎勵 +${reward}`, '#bdfcff');
-    burst(beacon.x, beacon.y, '#bdfcff', 34, 1.35);
-    const eventId = choose(['droneSwarm', 'gravityWell', 'supply', 'rich']);
-    startEvent(eventId);
-    for (let i = 0; i < 6 + Math.floor(wave / 2); i++) spawnEnemy(eventId === 'droneSwarm' ? choose(['sprinter', 'bomber']) : undefined);
-    flash(`目標點啟動：${eventDefs[eventId].name}｜+${reward} 碎晶`);
+    const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
+    const instant = Math.floor((12 + wave * 1.8) * def.reward);
+    const reward = objectiveReward(def);
+    meta.scrap += instant;
+    xp += Math.ceil(xpNeed * .12);
+    if (beacon.kind === 'rift') worldFeatures = worldFeatures.filter(f => f.type !== 'hazard' || Math.hypot(f.x - beacon.x, f.y - beacon.y) > 620);
+    addText(player.x, player.y - 50, `${def.name} +${instant}`, def.color);
+    burst(beacon.x, beacon.y, def.color, 38, 1.35);
+    const eventId = choose(def.event);
+    startEvent(eventId, reward);
+    for (let i = 0; i < 5 + Math.floor(wave / 2); i++) spawnEnemy(eventId === 'droneSwarm' ? choose(['sprinter', 'bomber']) : undefined);
+    flash(`${def.name}完成：${eventDefs[eventId].name}｜+${instant} 碎晶`);
     beacon = makeBeacon();
     save(false);
   }
 
   function updateBeacon(dt) {
     if (!beacon || !player) return;
+    const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
     const d = Math.hypot(player.x - beacon.x, player.y - beacon.y);
-    if (d < beacon.r + player.r + 14) {
+    const inside = d < beacon.r + player.r + 14;
+    beacon.tick += dt;
+    if (beacon.kind === 'hunt') {
+      if (inside) spawnObjectiveHunter();
+      if (beacon.huntTarget?.dead) triggerBeacon();
+      return;
+    }
+    if (inside) {
       beacon.charge += dt;
-      particles.push({ x: beacon.x + rand(-18, 18), y: beacon.y + rand(-18, 18), vx: rand(-8, 8), vy: rand(-8, 8), life: .22, max: .22, r: rand(1.8, 3.6), color: '#bdfcff', ring: false });
-      if (beacon.charge >= 2.4) triggerBeacon();
+      particles.push({ x: beacon.x + rand(-18, 18), y: beacon.y + rand(-18, 18), vx: rand(-8, 8), vy: rand(-8, 8), life: .22, max: .22, r: rand(1.8, 3.6), color: def.color, ring: false });
+      if (beacon.kind === 'hold') { beacon.spawnClock -= dt; if (beacon.spawnClock <= 0) { spawnEnemy(choose(['chaser', 'sprinter', 'bomber'])); beacon.spawnClock = .9; } }
+      if (beacon.kind === 'harvest' && Math.random() < dt * 4.2) dropShard(beacon.x + rand(-58, 58), beacon.y + rand(-58, 58), 1);
+      if (beacon.kind === 'rift' && Math.random() < dt * .9) addWorldFeature('hazard');
+      if (beacon.charge >= def.charge) triggerBeacon();
     } else {
-      beacon.charge = Math.max(0, beacon.charge - dt * .65);
+      beacon.charge = Math.max(0, beacon.charge - dt * (beacon.kind === 'hold' ? .95 : .55));
     }
   }
 
@@ -807,7 +877,7 @@
       if (activeEvent.id === 'hazard' && Math.random() < dt * .55) addWorldFeature('hazard');
       if (activeEvent.id === 'supply' && Math.random() < dt * .38) addWorldFeature('repair');
       if (activeEvent.id === 'droneSwarm' && Math.random() < dt * 5.2) spawnEnemy(choose(['sprinter', 'chaser', 'bomber']));
-      if (eventTimer <= 0) { flash(`${activeEvent.name} 結束`); activeEvent = null; }
+      if (eventTimer <= 0) finishEvent();
     }
     featurePulse += dt; zoneTick -= dt; maintainWorldFeatures();
     shotTimer -= dt; spawnTimer -= dt; dashCooldown = Math.max(0, dashCooldown - dt); dashTime = Math.max(0, dashTime - dt); player.invuln = Math.max(0, player.invuln - dt); missionPulse += dt;
@@ -1180,7 +1250,15 @@
     }
     if (beacon) {
       beacon.pulse = (beacon.pulse || 0) + .02;
-      ctx.save(); ctx.translate(beacon.x, beacon.y); ctx.globalAlpha = .78 + Math.sin(beacon.pulse) * .16; ctx.strokeStyle = '#bdfcff'; ctx.fillStyle = '#bdfcff'; ctx.lineWidth = 3; ctx.shadowColor = '#bdfcff'; ctx.shadowBlur = 22; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(18, 0); ctx.lineTo(0, 18); ctx.lineTo(-18, 0); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 5, 0, TWO_PI); ctx.fill(); ctx.beginPath(); ctx.moveTo(-28, 0); ctx.lineTo(-21, 0); ctx.moveTo(21, 0); ctx.lineTo(28, 0); ctx.moveTo(0, -28); ctx.lineTo(0, -21); ctx.moveTo(0, 21); ctx.lineTo(0, 28); ctx.stroke(); if (beacon.charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 36, -Math.PI / 2, -Math.PI / 2 + TWO_PI * clamp(beacon.charge / 2.4, 0, 1)); ctx.stroke(); } ctx.restore();
+      const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
+      const charge = clamp((beacon.charge || 0) / def.charge, 0, 1);
+      ctx.save(); ctx.translate(beacon.x, beacon.y); ctx.globalAlpha = .78 + Math.sin(beacon.pulse) * .16; ctx.strokeStyle = def.color; ctx.fillStyle = def.color; ctx.lineWidth = 3; ctx.shadowColor = def.color; ctx.shadowBlur = 24;
+      if (beacon.kind === 'harvest') { ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(22, 0); ctx.lineTo(0, 24); ctx.lineTo(-22, 0); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#050712'; ctx.beginPath(); ctx.moveTo(0, -10); ctx.lineTo(10, 0); ctx.lineTo(0, 10); ctx.lineTo(-10, 0); ctx.closePath(); ctx.fill(); }
+      else if (beacon.kind === 'rift') { ctx.beginPath(); ctx.moveTo(-8, -30); ctx.lineTo(12, -8); ctx.lineTo(-2, 2); ctx.lineTo(14, 30); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 26, 0, TWO_PI); ctx.stroke(); }
+      else if (beacon.kind === 'hold') { ctx.beginPath(); ctx.roundRect(-24, -24, 48, 48, 10); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 9, 0, TWO_PI); ctx.fill(); }
+      else if (beacon.kind === 'hunt') { ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(21, 12); ctx.lineTo(-21, 12); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 7, 0, TWO_PI); ctx.fill(); }
+      else { ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(18, 0); ctx.lineTo(0, 18); ctx.lineTo(-18, 0); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 5, 0, TWO_PI); ctx.fill(); }
+      ctx.beginPath(); ctx.moveTo(-28, 0); ctx.lineTo(-21, 0); ctx.moveTo(21, 0); ctx.lineTo(28, 0); ctx.moveTo(0, -28); ctx.lineTo(0, -21); ctx.moveTo(0, 21); ctx.lineTo(0, 28); ctx.stroke(); if (charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 36, -Math.PI / 2, -Math.PI / 2 + TWO_PI * charge); ctx.stroke(); } ctx.restore();
     }
     ctx.restore();
   }
@@ -1303,7 +1381,7 @@
 
   function drawMission() {
     ctx.save();
-    const x = 18; const y = 118; const w = 318; const h = activeEvent ? 78 : 54;
+    const x = 18; const y = 118; const w = 318; const h = activeEvent ? 96 : 72;
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 13px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 14, y + 22);
@@ -1321,6 +1399,11 @@
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 14, y + 65, w - 28, 5);
       ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 14, y + 65, (w - 28) * clamp(eventTimer / 30, 0, 1), 5);
     }
+    if (beacon) {
+      const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
+      ctx.fillStyle = def.color; ctx.font = '900 12px system-ui';
+      ctx.fillText(`目標：${def.name}`, x + 14, y + (activeEvent ? 86 : 58));
+    }
     ctx.restore();
   }
 
@@ -1330,15 +1413,16 @@
     const sx = beacon.x - c.x;
     const sy = beacon.y - c.y;
     const d = Math.hypot(beacon.x - player.x, beacon.y - player.y);
+    const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
     const inside = sx > 46 && sx < W - 46 && sy > 92 && sy < H - 46;
     const pulse = .55 + Math.sin(performance.now() * .006) * .22;
-    const charge = clamp((beacon.charge || 0) / 2.4, 0, 1);
+    const charge = clamp((beacon.charge || 0) / def.charge, 0, 1);
     ctx.save();
-    ctx.shadowColor = '#bdfcff';
+    ctx.shadowColor = def.color;
     ctx.shadowBlur = 22;
     if (inside) {
       ctx.globalAlpha = .42 + pulse * .36;
-      ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 3;
+      ctx.strokeStyle = def.color; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(sx, sy, 48 + pulse * 10, 0, TWO_PI); ctx.stroke();
       if (charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(sx, sy, 62, -Math.PI / 2, -Math.PI / 2 + TWO_PI * charge); ctx.stroke(); }
     } else {
@@ -1348,9 +1432,9 @@
       const scale = clamp(1.25 - d / 1800, .68, 1.15);
       ctx.translate(x, y); ctx.rotate(a); ctx.scale(scale, scale);
       ctx.globalAlpha = .72 + pulse * .24;
-      ctx.fillStyle = '#bdfcff'; ctx.strokeStyle = '#050712'; ctx.lineWidth = 3;
+      ctx.fillStyle = def.color; ctx.strokeStyle = '#050712'; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.moveTo(24, 0); ctx.lineTo(-14, -15); ctx.lineTo(-7, 0); ctx.lineTo(-14, 15); ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 30, -0.6, 0.6); ctx.stroke();
+      ctx.strokeStyle = def.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 30, -0.6, 0.6); ctx.stroke();
     }
     ctx.restore();
   }
