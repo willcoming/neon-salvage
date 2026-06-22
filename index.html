@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=2.19" />
 </head>
 <body>
   <div id="app">
@@ -27,6 +27,7 @@
       <div class="combat-controls">
         <button id="controlModeBtn" type="button">操作：鍵鼠模式</button>
         <button id="autoAimBtn" type="button">自動鎖定：OFF</button>
+        <button id="pauseBtn" type="button">暫停</button>
         <span id="upgradePrompt" class="upgrade-prompt" hidden>可升級｜按 P</span>
         <button id="upgradeMenuBtn" type="button" hidden>艦載升級</button>
       </div>
@@ -55,7 +56,7 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v2.17 戰鬥畫面修正版</strong>
+          <strong>v2.19 目標事件與流派擴展版</strong>
           <ul>
             <li>介面優化：永久升級不再常駐右側/底部面板，改成暫停時開啟彈窗。</li>
             <li>戰鬥進行中不能購買永久升級；按 P 暫停後才可以升級。</li>
@@ -66,6 +67,11 @@
             <li>飛船幾何中心重畫，機身更貼近畫面中心。</li>
             <li>移除戰鬥背景橢圓星環、各種大型範圍圓圈、機身後方磁吸範圍圈、新手護盾圓圈與手機底部說明膠囊，減少畫面干擾。</li>
             <li>敵人密度再提高：每波總量、同場上限與批次出怪量都增加，出怪間隔更短。</li>
+            <li>手機 UI 再縮小並重排，新增明顯暫停鍵，移除手機版經驗 bar。</li>
+            <li>移除小地圖，完整地圖元件改成純圖像辨識，不再用文字標籤。</li>
+            <li>目標點功能化：靠近藍色準星充能，完成後給獎勵並觸發地圖事件。</li>
+            <li>新增地圖事件「蜂群入侵」與「重力井」，目標點也可能觸發補給或富礦事件。</li>
+            <li>新增敵人「吸能蟲」與「爆裂雷」，新增武器流派「霰彈彈幕」與「蓄能軌砲」。</li>
             <li>新增「穿甲光矛」與「電漿爆裂」兩種非追蹤攻擊升級，讓火力選擇不只靠追蹤子彈。</li>
             <li>追蹤子彈不再取代主砲；原本攻擊照常發射，追蹤彈改為額外追加。</li>
             <li>啟動移動時機身會順著推進方向轉；停止移動後攻擊時會順著射擊方向轉。</li>
@@ -96,6 +102,22 @@
 - 手機自動模式：自動瞄準 ON，沒有衝刺鍵
 - 操作模式：手機自動 / 鍵鼠模式切換
 
+完整地圖元件圖像：
+- 黃色發光晶體：資源，靠近會掉碎晶
+- 綠色十字方塊：補給，靠近可回血
+- 紅色警示三角：危險區，進入會受傷
+- 灰色隕石 / 藍色殘骸：障礙物，撞到會受傷或被阻擋
+- 藍色菱形準星：目標，靠近完成探索獎勵
+
+新玩法：
+- 靠近藍色準星會開始充能，充滿後獲得碎晶 / 經驗，並觸發一個短時間地圖事件。
+- 蜂群入侵：小型高速敵人持續湧入。
+- 重力井：敵我會被拉向訊號核心，走位壓力提高。
+- 吸能蟲：靠近時會持續吸護盾。
+- 爆裂雷：靠近後自爆造成範圍傷害。
+- 霰彈彈幕：近距離扇形清場。
+- 蓄能軌砲：每隔數發打出高傷害穿透重擊。
+
 技巧：
 - 開局有 3.5 秒新手護盾，可以先熟悉移動與瞄準。
 - 碎晶不用冒死撿，升級「磁吸場」會變輕鬆。
@@ -114,6 +136,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js"></script>
+  <script src="./game.js?v=2.19"></script>
 </body>
 </html>

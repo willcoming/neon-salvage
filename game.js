@@ -23,6 +23,7 @@
     toast: document.getElementById('toast'),
     controlModeBtn: document.getElementById('controlModeBtn'),
     autoAimBtn: document.getElementById('autoAimBtn'),
+    pauseBtn: document.getElementById('pauseBtn'),
     upgradePrompt: document.getElementById('upgradePrompt'),
     offlineNotice: document.getElementById('offlineNotice'),
     touchGuide: document.getElementById('touchGuide')
@@ -99,6 +100,7 @@
   let featurePulse = 0;
   let zoneTick = 0;
   let beacon = null;
+  let shotSeq = 0;
 
   const upgradesRuntime = {
     splitShot: 0,
@@ -111,7 +113,9 @@
     weakScan: 0,
     harvestDrive: 0,
     lanceRounds: 0,
-    plasmaBurst: 0
+    plasmaBurst: 0,
+    flakBurst: 0,
+    railCharge: 0
   };
 
   const upgradeDefs = [
@@ -132,6 +136,8 @@
     { id: 'homingRounds', name: '追蹤子彈', desc: '保留原本主砲，額外追加會追蹤敵人的微型彈。' },
     { id: 'lanceRounds', name: '穿甲光矛', desc: '主砲改良成高速穿透光矛，可連續貫穿敵人。' },
     { id: 'plasmaBurst', name: '電漿爆裂', desc: '子彈命中時產生小範圍爆炸，適合清密集敵群。' },
+    { id: 'flakBurst', name: '霰彈彈幕', desc: '額外噴出短距離扇形彈，適合近距離清場。' },
+    { id: 'railCharge', name: '蓄能軌砲', desc: '每隔數發打出高傷害穿透重擊。' },
     { id: 'weakScan', name: '弱點掃描', desc: '對精英與 Boss 造成額外傷害。' },
     { id: 'harvestDrive', name: '收割引擎', desc: '連續擊殺會短暫提高射速。' }
   ];
@@ -141,6 +147,8 @@
     sprinter: { label: '閃擊機', color: '#4dff88', hp: 13, speed: 128, r: 11, sides: 3, scrap: 1 },
     tank: { label: '重甲機', color: '#ffd166', hp: 58, speed: 42, r: 24, sides: 6, scrap: 3 },
     shooter: { label: '狙擊球', color: '#ff3df2', hp: 27, speed: 50, r: 17, sides: 8, scrap: 2 },
+    leech: { label: '吸能蟲', color: '#b66dff', hp: 34, speed: 76, r: 14, sides: 7, scrap: 2 },
+    bomber: { label: '爆裂雷', color: '#ff7a3d', hp: 22, speed: 62, r: 16, sides: 6, scrap: 2 },
     boss: { label: '星環吞噬者', color: '#ff4d6d', hp: 520, speed: 34, r: 48, sides: 10, scrap: 18 }
   };
 
@@ -160,7 +168,9 @@
     rich: { name: '碎晶富礦', desc: '敵人掉落增加，但精英出現率提高。', color: '#ffd166' },
     hazard: { name: '輻射裂隙', desc: '危險區域擴散，靠近會持續受損。', color: '#ff4d6d' },
     supply: { name: '補給航道', desc: '補給站出現率提高，適合喘息與回復。', color: '#4dff88' },
-    eliteStorm: { name: '菁英獵殺令', desc: '菁英敵人大量出現，但擊破獎勵提高。', color: '#bdfcff' }
+    eliteStorm: { name: '菁英獵殺令', desc: '菁英敵人大量出現，但擊破獎勵提高。', color: '#bdfcff' },
+    droneSwarm: { name: '蜂群入侵', desc: '高速小型敵人持續湧入。', color: '#4dff88' },
+    gravityWell: { name: '重力井', desc: '戰場重力異常，敵我都會被拉向訊號核心。', color: '#b66dff' }
   };
 
   const achievementDefs = [
@@ -327,7 +337,7 @@
   }
 
   function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15; }
-  function playerScale() { return controlMode === 'touch' ? .62 : .86; }
+  function playerScale() { return controlMode === 'touch' ? .54 : .82; }
   function playerRadius() { return 17 * playerScale(); }
   function speed() { return (282 + (meta.upgrades.engine || 0) * 18) * (controlMode === 'touch' ? .88 : 1); }
   function fireRate() { return Math.max(.075, .215 - (meta.upgrades.cannon || 0) * .011); }
@@ -344,7 +354,7 @@
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = makeBeacon(); zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0;
     mission = newMission();
     startWave(1);
     updateUi();
@@ -370,8 +380,8 @@
   function startWave(n) {
     wave = n;
     bossActive = n % 5 === 0;
-    const mobileEase = controlMode === 'touch' ? .94 : 1;
-    spawnLeft = bossActive ? 0 : Math.floor((15 + n * 3.25 + Math.pow(n, 1.22)) * mobileEase);
+    const mobileEase = controlMode === 'touch' ? .98 : 1;
+    spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase);
     spawnTimer = bossActive ? .35 : 0;
     if (wave >= 9 && !bossActive && (wave % 3 === 0 || Math.random() < .28)) startEvent();
     if (!beacon || wave % 3 === 1) beacon = makeBeacon();
@@ -380,9 +390,9 @@
     flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : `第 ${wave} 波來襲`);
   }
 
-  function startEvent() {
-    const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm'];
-    const id = choose(ids);
+  function startEvent(forcedId = null) {
+    const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm', 'droneSwarm', 'gravityWell'];
+    const id = forcedId || choose(ids);
     activeEvent = { id, ...eventDefs[id] };
     eventTimer = 18 + Math.min(12, wave * .8);
     meteorTimer = .8;
@@ -423,7 +433,10 @@
     if (wave >= 3 || activeEvent?.id === 'blackout') pool.push('shooter');
     if (wave >= 4) pool.push('tank');
     if (wave >= 8) pool.push('sprinter', 'shooter');
+    if (wave >= 6) pool.push('leech');
+    if (wave >= 7 || activeEvent?.id === 'droneSwarm') pool.push('bomber');
     if (activeEvent?.id === 'blackout') pool.push('shooter', 'shooter');
+    if (activeEvent?.id === 'droneSwarm') pool.push('sprinter', 'sprinter', 'bomber');
     return choose(pool);
   }
 
@@ -518,33 +531,47 @@
 
   function updateCombatControls() {
     if (ui.controlModeBtn) {
-      ui.controlModeBtn.textContent = `操作：${controlMode === 'touch' ? '手機自動' : '鍵鼠模式'}`;
+      ui.controlModeBtn.textContent = controlMode === 'touch' ? '手機' : '鍵鼠';
       ui.controlModeBtn.classList.toggle('active', controlMode === 'touch');
     }
     if (ui.autoAimBtn) {
-      ui.autoAimBtn.textContent = `自動鎖定：${autoAim ? 'ON' : 'OFF'}`;
+      ui.autoAimBtn.textContent = `鎖定 ${autoAim ? 'ON' : 'OFF'}`;
       ui.autoAimBtn.classList.toggle('active', autoAim);
+    }
+    if (ui.pauseBtn) {
+      ui.pauseBtn.hidden = !running || gameOver || skillChoosing;
+      ui.pauseBtn.textContent = paused ? '繼續' : '暫停';
+      ui.pauseBtn.classList.toggle('active', paused);
     }
   }
 
   function shoot() {
+    shotSeq++;
     const angle = shotTarget();
     const split = Math.min(2, upgradesRuntime.splitShot);
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
     const lance = upgradesRuntime.lanceRounds > 0;
+    const rail = upgradesRuntime.railCharge > 0 && shotSeq % Math.max(3, 7 - upgradesRuntime.railCharge) === 0;
     for (const s of spread) {
       bullets.push({
-        type: lance ? 'lance' : 'pulse', homing: false, target: null, turn: 0,
+        type: rail ? 'rail' : lance ? 'lance' : 'pulse', homing: false, target: null, turn: 0,
         x: player.x + Math.cos(angle + s) * 23,
         y: player.y + Math.sin(angle + s) * 23,
-        vx: Math.cos(angle + s) * (lance ? 820 : 690),
-        vy: Math.sin(angle + s) * (lance ? 820 : 690),
-        life: lance ? 1.18 : 1.05,
-        r: lance ? 5.8 : 4.5,
-        dmg: damage() * (spread.length > 1 ? .76 : 1) * (lance ? .88 + upgradesRuntime.lanceRounds * .08 : 1),
-        pierce: (upgradesRuntime.chain > 1 ? 1 : 0) + (lance ? Math.min(3, upgradesRuntime.lanceRounds) : 0),
+        vx: Math.cos(angle + s) * (rail ? 940 : lance ? 820 : 690),
+        vy: Math.sin(angle + s) * (rail ? 940 : lance ? 820 : 690),
+        life: rail ? .98 : lance ? 1.18 : 1.05,
+        r: rail ? 7.2 : lance ? 5.8 : 4.5,
+        dmg: damage() * (spread.length > 1 ? .76 : 1) * (rail ? 1.85 + upgradesRuntime.railCharge * .18 : lance ? .88 + upgradesRuntime.lanceRounds * .08 : 1),
+        pierce: (upgradesRuntime.chain > 1 ? 1 : 0) + (rail ? 5 : lance ? Math.min(3, upgradesRuntime.lanceRounds) : 0),
         blast: upgradesRuntime.plasmaBurst > 0 ? 42 + upgradesRuntime.plasmaBurst * 18 : 0
       });
+    }
+    if (upgradesRuntime.flakBurst > 0) {
+      const count = 2 + Math.min(5, upgradesRuntime.flakBurst * 2);
+      for (let i = 0; i < count; i++) {
+        const off = (i - (count - 1) / 2) * .18 + rand(-.035, .035);
+        bullets.push({ type: 'flak', homing: false, target: null, turn: 0, x: player.x + Math.cos(angle + off) * 17, y: player.y + Math.sin(angle + off) * 17, vx: Math.cos(angle + off) * rand(520, 650), vy: Math.sin(angle + off) * rand(520, 650), life: .55, r: 3.8, dmg: damage() * (.26 + upgradesRuntime.flakBurst * .035), pierce: 0, blast: 18 + upgradesRuntime.flakBurst * 4 });
+      }
     }
     if (upgradesRuntime.homingRounds > 0) {
       const target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 860);
@@ -671,7 +698,35 @@
   function makeBeacon() {
     const a = Math.random() * TWO_PI;
     const d = rand(760, 1450);
-    return { x: player ? player.x + Math.cos(a) * d : W / 2 + 900, y: player ? player.y + Math.sin(a) * d : H / 2 - 700, r: 86, pulse: 0 };
+    return { x: player ? player.x + Math.cos(a) * d : W / 2 + 900, y: player ? player.y + Math.sin(a) * d : H / 2 - 700, r: 86, pulse: 0, charge: 0, armed: false };
+  }
+
+  function triggerBeacon() {
+    if (!beacon || beacon.armed) return;
+    beacon.armed = true;
+    const reward = 18 + Math.floor(wave * 2.4);
+    meta.scrap += reward;
+    xp += Math.ceil(xpNeed * .22);
+    addText(player.x, player.y - 50, `訊號獎勵 +${reward}`, '#bdfcff');
+    burst(beacon.x, beacon.y, '#bdfcff', 34, 1.35);
+    const eventId = choose(['droneSwarm', 'gravityWell', 'supply', 'rich']);
+    startEvent(eventId);
+    for (let i = 0; i < 6 + Math.floor(wave / 2); i++) spawnEnemy(eventId === 'droneSwarm' ? choose(['sprinter', 'bomber']) : undefined);
+    flash(`目標點啟動：${eventDefs[eventId].name}｜+${reward} 碎晶`);
+    beacon = makeBeacon();
+    save(false);
+  }
+
+  function updateBeacon(dt) {
+    if (!beacon || !player) return;
+    const d = Math.hypot(player.x - beacon.x, player.y - beacon.y);
+    if (d < beacon.r + player.r + 14) {
+      beacon.charge += dt;
+      particles.push({ x: beacon.x + rand(-18, 18), y: beacon.y + rand(-18, 18), vx: rand(-8, 8), vy: rand(-8, 8), life: .22, max: .22, r: rand(1.8, 3.6), color: '#bdfcff', ring: false });
+      if (beacon.charge >= 2.4) triggerBeacon();
+    } else {
+      beacon.charge = Math.max(0, beacon.charge - dt * .65);
+    }
   }
 
   function addWorldFeature(kind = null) {
@@ -745,6 +800,7 @@
       if (activeEvent.id === 'meteor') { meteorTimer -= dt; if (meteorTimer <= 0) { spawnMeteor(); meteorTimer = rand(.75, 1.35); } }
       if (activeEvent.id === 'hazard' && Math.random() < dt * .55) addWorldFeature('hazard');
       if (activeEvent.id === 'supply' && Math.random() < dt * .38) addWorldFeature('repair');
+      if (activeEvent.id === 'droneSwarm' && Math.random() < dt * 5.2) spawnEnemy(choose(['sprinter', 'chaser', 'bomber']));
       if (eventTimer <= 0) { flash(`${activeEvent.name} 結束`); activeEvent = null; }
     }
     featurePulse += dt; zoneTick -= dt; maintainWorldFeatures();
@@ -762,8 +818,14 @@
     player.vy = (ay / len) * speed() * touchForce * dashMult;
     player.x += player.vx * dt;
     player.y += player.vy * dt;
+    if (activeEvent?.id === 'gravityWell' && beacon) {
+      const ga = Math.atan2(beacon.y - player.y, beacon.x - player.x);
+      player.x += Math.cos(ga) * 34 * dt;
+      player.y += Math.sin(ga) * 34 * dt;
+    }
     updatePlayerPose(dt, ax, ay);
     updateWorldFeatures(dt);
+    updateBeacon(dt);
 
     if (upgradesRuntime.shieldRegen > 0 && player.hp < player.maxHp) {
       player.regenClock += dt;
@@ -775,12 +837,12 @@
 
     if (shotTimer <= 0) { shoot(); shotTimer = weaponFireRate(); }
     if (spawnLeft > 0 && spawnTimer <= 0) {
-      const activeCap = controlMode === 'touch' ? 16 + Math.floor(wave * 1.15) : 20 + Math.floor(wave * 1.35);
+      const activeCap = controlMode === 'touch' ? 22 + Math.floor(wave * 1.45) : 27 + Math.floor(wave * 1.65);
       const openSlots = Math.max(1, activeCap - enemies.length);
-      const burstCount = Math.min(spawnLeft, openSlots, wave === 1 ? 5 : 6 + Math.floor(wave / 3));
+      const burstCount = Math.min(spawnLeft, openSlots, wave === 1 ? 7 : 8 + Math.floor(wave / 3));
       for (let i = 0; i < burstCount; i++) spawnEnemy();
       spawnLeft -= burstCount;
-      spawnTimer = Math.max(controlMode === 'touch' ? .10 : .08, (wave === 1 ? .26 : .22) - wave * .01 + (controlMode === 'touch' ? .025 : 0));
+      spawnTimer = Math.max(controlMode === 'touch' ? .07 : .055, (wave === 1 ? .18 : .15) - wave * .006 + (controlMode === 'touch' ? .015 : 0));
     }
 
     updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updatePickups(dt); updateParticles(dt);
@@ -848,7 +910,24 @@
       const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
       e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
       e.y += Math.sin(a) * e.speed * slow * bossStop * dt;
+      if (activeEvent?.id === 'gravityWell' && beacon && e.type !== 'boss') {
+        const ga = Math.atan2(beacon.y - e.y, beacon.x - e.x);
+        e.x += Math.cos(ga) * 22 * dt;
+        e.y += Math.sin(ga) * 22 * dt;
+      }
       if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash('Boss 進入二階段：星環暴走'); burst(e.x, e.y, '#ff4d6d', 48, 1.5); }
+      if (e.type === 'leech' && d < 185 && !isPlayerProtected()) {
+        player.hp -= dt * (1.8 + wave * .04);
+        if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
+        if (player.hp <= 0) endRun();
+      }
+      if (e.type === 'bomber' && d < 82 && !isPlayerProtected()) {
+        e.dead = true;
+        player.hp -= 14 + wave * .38;
+        player.invuln = .38;
+        burst(e.x, e.y, '#ff7a3d', 24, 1.2);
+        if (player.hp <= 0) endRun();
+      }
       if (e.elite?.id === 'medic') {
         e.healClock -= dt;
         if (e.healClock <= 0) {
@@ -1018,7 +1097,7 @@
     ctx.translate(-c.x, -c.y);
     drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
     ctx.restore();
-    drawMission(); drawMiniMap(); drawTouchDpad();
+    drawMission(); drawTouchDpad();
     if (paused && running && !ui.overlay.classList.contains('visible')) drawPause();
   }
 
@@ -1062,15 +1141,16 @@
       ctx.rotate(f.spin + f.seed);
       if (f.type === 'asteroid' || f.type === 'debris') {
         const color = f.type === 'asteroid' ? '#6f7d9c' : '#37f6ff';
-        ctx.shadowColor = color; ctx.shadowBlur = f.type === 'asteroid' ? 10 : 18;
-        ctx.fillStyle = f.type === 'asteroid' ? 'rgba(111,125,156,.72)' : 'rgba(55,246,255,.18)';
+        ctx.shadowColor = color; ctx.shadowBlur = f.type === 'asteroid' ? 8 : 14;
+        ctx.fillStyle = f.type === 'asteroid' ? 'rgba(111,125,156,.64)' : 'rgba(55,246,255,.16)';
         ctx.strokeStyle = f.type === 'asteroid' ? 'rgba(238,247,255,.34)' : 'rgba(55,246,255,.7)';
         ctx.lineWidth = 2;
         ctx.beginPath();
         const sides = f.type === 'asteroid' ? 9 : 4;
         for (let i = 0; i < sides; i++) {
           const a = i / sides * TWO_PI;
-          const rr = f.r * (f.type === 'asteroid' ? rand(.62, 1.0) : (i % 2 ? .55 : 1));
+          const wobble = .78 + Math.sin(f.seed + i * 2.17) * .16;
+          const rr = f.r * (f.type === 'asteroid' ? wobble : (i % 2 ? .55 : 1));
           ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr);
         }
         ctx.closePath(); ctx.fill(); ctx.stroke();
@@ -1078,15 +1158,23 @@
         const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' ? '#4dff88' : '#ffd166';
         ctx.globalAlpha = .82 + Math.sin(performance.now() * .004 + f.seed) * .12;
         ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(0, -13); ctx.lineTo(13, 0); ctx.lineTo(0, 13); ctx.lineTo(-13, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.globalAlpha = 1; ctx.fillStyle = '#050712'; ctx.font = '900 15px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(f.type === 'hazard' ? '危' : f.type === 'repair' ? '+' : '◇', 0, 0);
+        if (f.type === 'hazard') {
+          ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(18, 15); ctx.lineTo(-18, 15); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.strokeStyle = '#050712'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, 5); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 10, 1.8, 0, TWO_PI); ctx.fillStyle = '#050712'; ctx.fill();
+        } else if (f.type === 'repair') {
+          ctx.beginPath(); ctx.roundRect(-16, -16, 32, 32, 8); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#050712'; ctx.fillRect(-4, -11, 8, 22); ctx.fillRect(-11, -4, 22, 8);
+        } else {
+          ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(18, 0); ctx.lineTo(0, 18); ctx.lineTo(-18, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#050712'; ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(8, 0); ctx.lineTo(0, 8); ctx.lineTo(-8, 0); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#ffe9a8'; ctx.beginPath(); ctx.arc(-8, -7, 2.2, 0, TWO_PI); ctx.arc(9, 6, 1.8, 0, TWO_PI); ctx.fill();
+        }
       }
       ctx.restore();
     }
     if (beacon) {
       beacon.pulse = (beacon.pulse || 0) + .02;
-      ctx.save(); ctx.translate(beacon.x, beacon.y); ctx.globalAlpha = .78 + Math.sin(beacon.pulse) * .16; ctx.strokeStyle = '#bdfcff'; ctx.fillStyle = '#bdfcff'; ctx.lineWidth = 3; ctx.shadowColor = '#bdfcff'; ctx.shadowBlur = 22; ctx.beginPath(); ctx.moveTo(0, -16); ctx.lineTo(16, 0); ctx.lineTo(0, 16); ctx.lineTo(-16, 0); ctx.closePath(); ctx.stroke(); ctx.font = '900 13px system-ui'; ctx.textAlign = 'center'; ctx.fillText('目標', 0, 30); ctx.restore();
+      ctx.save(); ctx.translate(beacon.x, beacon.y); ctx.globalAlpha = .78 + Math.sin(beacon.pulse) * .16; ctx.strokeStyle = '#bdfcff'; ctx.fillStyle = '#bdfcff'; ctx.lineWidth = 3; ctx.shadowColor = '#bdfcff'; ctx.shadowBlur = 22; ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(18, 0); ctx.lineTo(0, 18); ctx.lineTo(-18, 0); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 5, 0, TWO_PI); ctx.fill(); ctx.beginPath(); ctx.moveTo(-28, 0); ctx.lineTo(-21, 0); ctx.moveTo(21, 0); ctx.lineTo(28, 0); ctx.moveTo(0, -28); ctx.lineTo(0, -21); ctx.moveTo(0, 21); ctx.lineTo(0, 28); ctx.stroke(); if (beacon.charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 36, -Math.PI / 2, -Math.PI / 2 + TWO_PI * clamp(beacon.charge / 2.4, 0, 1)); ctx.stroke(); } ctx.restore();
     }
     ctx.restore();
   }
@@ -1131,7 +1219,14 @@
       ctx.rotate(a);
       ctx.shadowColor = b.homing ? '#ffd166' : '#37f6ff';
       ctx.shadowBlur = b.homing ? 20 : 15;
-      if (b.type === 'lance') {
+      if (b.type === 'rail') {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.roundRect(-b.r * 2.4, -b.r * .42, b.r * 5.2, b.r * .84, b.r * .4); ctx.fill();
+        ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 2; ctx.stroke();
+      } else if (b.type === 'flak') {
+        ctx.fillStyle = '#ffb36b';
+        ctx.beginPath(); ctx.moveTo(b.r + 2, 0); ctx.lineTo(-b.r, b.r * .75); ctx.lineTo(-b.r * .45, 0); ctx.lineTo(-b.r, -b.r * .75); ctx.closePath(); ctx.fill();
+      } else if (b.type === 'lance') {
         ctx.fillStyle = '#ff7a3d';
         ctx.beginPath(); ctx.roundRect(-b.r * 1.8, -b.r * .55, b.r * 3.9, b.r * 1.1, b.r * .5); ctx.fill();
         ctx.fillStyle = '#fff6c7'; ctx.beginPath(); ctx.arc(b.r * 1.3, 0, b.r * .45, 0, TWO_PI); ctx.fill();
@@ -1202,49 +1297,9 @@
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 14, y + 65, w - 28, 5);
       ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 14, y + 65, (w - 28) * clamp(eventTimer / 30, 0, 1), 5);
     }
-    ctx.fillStyle = autoAim ? '#4dff88' : '#92a5c8';
-    ctx.font = '800 12px system-ui';
-    ctx.fillText(`機身：${controlMode === 'touch' ? '觸控' : '滑鼠'}｜主砲${upgradesRuntime.homingRounds > 0 ? '＋追蹤子彈' : ''}｜鎖定 ${autoAim ? (isMouseAiming() ? '手動優先' : 'ON') : 'OFF'}`, x + 14, y + h + (isPlayerProtected() && runTime < 5 ? 40 : 22));
     ctx.restore();
   }
 
-
-  function drawMiniMap() {
-    if (!player) return;
-    const size = Math.min(150, Math.max(110, W * .12));
-    const x = W - size - 18;
-    const y = H - size - 18;
-    const scale = size / 1800;
-    ctx.save();
-    ctx.globalAlpha = .9;
-    ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = 'rgba(55,246,255,.28)'; ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.roundRect(x, y, size, size, 16); ctx.fill(); ctx.stroke();
-    ctx.save(); ctx.beginPath(); ctx.rect(x, y, size, size); ctx.clip();
-    const cx = x + size / 2, cy = y + size / 2;
-    ctx.strokeStyle = 'rgba(255,255,255,.08)';
-    ctx.beginPath(); ctx.moveTo(cx, y + 10); ctx.lineTo(cx, y + size - 10); ctx.moveTo(x + 10, cy); ctx.lineTo(x + size - 10, cy); ctx.stroke();
-    for (const f of worldFeatures) {
-      const px = cx + (f.x - player.x) * scale; const py = cy + (f.y - player.y) * scale;
-      if (px < x + 5 || px > x + size - 5 || py < y + 5 || py > y + size - 5) continue;
-      ctx.fillStyle = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' ? '#4dff88' : f.type === 'resource' ? '#ffd166' : '#92a5c8';
-      ctx.beginPath(); ctx.arc(px, py, f.type === 'hazard' ? 3 : 2.2, 0, TWO_PI); ctx.fill();
-    }
-    for (const e of enemies) {
-      const px = cx + (e.x - player.x) * scale; const py = cy + (e.y - player.y) * scale;
-      if (px < x + 5 || px > x + size - 5 || py < y + 5 || py > y + size - 5) continue;
-      ctx.fillStyle = e.type === 'boss' ? '#ff4d6d' : '#ff9af8'; ctx.fillRect(px - 1.5, py - 1.5, 3, 3);
-    }
-    if (beacon) {
-      const px = cx + (beacon.x - player.x) * scale; const py = cy + (beacon.y - player.y) * scale;
-      ctx.strokeStyle = '#bdfcff'; ctx.beginPath(); ctx.arc(clamp(px, x + 8, x + size - 8), clamp(py, y + 8, y + size - 8), 5, 0, TWO_PI); ctx.stroke();
-    }
-    ctx.fillStyle = '#37f6ff'; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, TWO_PI); ctx.fill();
-    ctx.restore();
-    const nearestResource = worldFeatures.filter(f => ['resource', 'repair'].includes(f.type)).sort((a,b) => dist2(player,a)-dist2(player,b))[0];
-    const distLabel = nearestResource ? `${nearestResource.type === 'repair' ? '補給' : '資源'} ${Math.round(Math.sqrt(dist2(player, nearestResource)))}m` : '掃描中';
-    ctx.fillStyle = 'rgba(238,247,255,.76)'; ctx.font = '800 11px system-ui'; ctx.textAlign = 'center'; ctx.fillText(distLabel, x + size / 2, y + size - 10);
-    ctx.restore();
-  }
 
   function drawTouchDpad() {
     if (controlMode !== 'touch' || !touchMove.pressed) return;
@@ -1322,8 +1377,8 @@
       openUpgradeModal();
     } else {
       closeUpgradeModal();
-      updateUi();
     }
+    updateUi();
   }
   function doDash() { if (controlMode === 'touch' || !running || paused || gameOver || skillChoosing || dashCooldown > 0) return; dashTime = .16; dashCooldown = Math.max(.55, 1.32 - (meta.upgrades.engine || 0) * .065); player.invuln = .24; burst(player.x, player.y, '#ffd166', 11); }
 
@@ -1352,6 +1407,7 @@
   ui.howBtn.addEventListener('click', () => { ui.how.hidden = !ui.how.hidden; });
   ui.saveBtn.addEventListener('click', () => save(true));
   ui.resetBtn.addEventListener('click', resetSave);
+  ui.pauseBtn?.addEventListener('click', togglePause);
   ui.upgradeMenuBtn?.addEventListener('click', openUpgradeModal);
   ui.closeUpgradeBtn?.addEventListener('click', closeUpgradeModal);
   ui.resumeFromUpgradeBtn?.addEventListener('click', resumeFromUpgradeModal);
