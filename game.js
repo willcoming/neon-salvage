@@ -96,6 +96,8 @@
   let activeEvent = null;
   let eventTimer = 0;
   let meteorTimer = 0;
+  let eventBannerTimer = 0;
+  let damageFlash = 0;
   let worldFeatures = [];
   let featurePulse = 0;
   let zoneTick = 0;
@@ -354,7 +356,7 @@
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = makeBeacon(); zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
     mission = newMission();
     startWave(1);
     updateUi();
@@ -396,6 +398,8 @@
     activeEvent = { id, ...eventDefs[id] };
     eventTimer = 18 + Math.min(12, wave * .8);
     meteorTimer = .8;
+    eventBannerTimer = 2.2;
+    if (player) burst(player.x, player.y, eventDefs[id].color, 18, .9);
   }
 
   function spawnEnemy(typeId) {
@@ -766,10 +770,10 @@
         const push = (player.r + f.r * .76 - d) + 1;
         player.x += Math.cos(a) * push;
         player.y += Math.sin(a) * push;
-        if (f.cool <= 0 && !isPlayerProtected()) { player.hp -= f.type === 'asteroid' ? 8 : 4; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
+        if (f.cool <= 0 && !isPlayerProtected()) { player.hp -= f.type === 'asteroid' ? 8 : 4; damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'hazard' && d < f.r) {
-        if (zoneTick <= 0 && !isPlayerProtected()) { player.hp -= 3 + wave * .12; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); }
+        if (zoneTick <= 0 && !isPlayerProtected()) { player.hp -= 3 + wave * .12; damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); }
       }
       if (f.type === 'repair' && d < f.r && f.cool <= 0) {
         player.hp = Math.min(player.maxHp, player.hp + 14);
@@ -795,6 +799,8 @@
     if (!running || paused || gameOver || skillChoosing) return;
     dt = Math.min(dt, .033);
     runTime += dt;
+    eventBannerTimer = Math.max(0, eventBannerTimer - dt);
+    damageFlash = Math.max(0, damageFlash - dt);
     if (activeEvent) {
       eventTimer -= dt;
       if (activeEvent.id === 'meteor') { meteorTimer -= dt; if (meteorTimer <= 0) { spawnMeteor(); meteorTimer = rand(.75, 1.35); } }
@@ -917,13 +923,13 @@
       }
       if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash('Boss 進入二階段：星環暴走'); burst(e.x, e.y, '#ff4d6d', 48, 1.5); }
       if (e.type === 'leech' && d < 185 && !isPlayerProtected()) {
-        player.hp -= dt * (1.8 + wave * .04);
+        player.hp -= dt * (1.8 + wave * .04); damageFlash = Math.max(damageFlash, .12);
         if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
         if (player.hp <= 0) endRun();
       }
       if (e.type === 'bomber' && d < 82 && !isPlayerProtected()) {
         e.dead = true;
-        player.hp -= 14 + wave * .38;
+        player.hp -= 14 + wave * .38; damageFlash = .34;
         player.invuln = .38;
         burst(e.x, e.y, '#ff7a3d', 24, 1.2);
         if (player.hp <= 0) endRun();
@@ -943,7 +949,7 @@
       }
       const rr = e.r + player.r;
       if (dist2(e, player) < rr * rr && !isPlayerProtected()) {
-        player.hp -= Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55);
+        player.hp -= Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55); damageFlash = .32;
         player.invuln = dashTime > 0 ? .05 : .68;
         if (e.type !== 'boss') e.dead = true;
         burst(player.x, player.y, '#ff4d6d', 18);
@@ -961,7 +967,7 @@
         particles.push({ x: s.x, y: s.y, vx: rand(-10, 10), vy: rand(-10, 10), life: .2, max: .2, r: 3, color: s.color || '#ff7a3d', ring: false });
       }
       if (dist2(s, player) < Math.pow(s.r + player.r, 2) && !isPlayerProtected()) {
-        s.dead = true; player.hp -= s.dmg; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
+        s.dead = true; player.hp -= s.dmg; damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
         if (player.hp <= 0) endRun();
       }
     }
@@ -1097,7 +1103,7 @@
     ctx.translate(-c.x, -c.y);
     drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
     ctx.restore();
-    drawMission(); drawTouchDpad();
+    drawMission(); drawTargetGuide(); drawEventBanner(); drawScreenEffects(); drawTouchDpad();
     if (paused && running && !ui.overlay.classList.contains('visible')) drawPause();
   }
 
@@ -1189,6 +1195,13 @@
     const flicker = isPlayerProtected() && Math.sin(performance.now() * .05) > 0;
     ctx.globalAlpha = flicker ? .45 : 1;
     ctx.shadowColor = dashTime > 0 ? '#ffd166' : '#37f6ff'; ctx.shadowBlur = 10;
+    if (upgradesRuntime.railCharge > 0) {
+      const cadence = Math.max(3, 7 - upgradesRuntime.railCharge);
+      const railReady = (shotSeq + 1) % cadence === 0;
+      ctx.shadowColor = railReady ? '#ffffff' : ctx.shadowColor;
+      ctx.shadowBlur = railReady ? 26 : ctx.shadowBlur;
+      if (railReady) { ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(12, -9); ctx.lineTo(30, 0); ctx.lineTo(12, 9); ctx.stroke(); }
+    }
     const grad = ctx.createLinearGradient(-18, 0, 28, 0); grad.addColorStop(0, '#13213f'); grad.addColorStop(.45, '#37f6ff'); grad.addColorStop(1, '#ffffff');
     ctx.fillStyle = grad;
     ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(-22, -15); ctx.lineTo(-11, -4); ctx.lineTo(-24, 0); ctx.lineTo(-11, 4); ctx.lineTo(-22, 15); ctx.closePath(); ctx.fill();
@@ -1246,12 +1259,23 @@
   function drawEnemies() {
     ctx.save();
     for (const e of enemies) {
+      const ed = player ? Math.hypot(player.x - e.x, player.y - e.y) : Infinity;
+      if (e.type === 'leech' && ed < 210) {
+        ctx.save();
+        ctx.globalAlpha = clamp(1 - ed / 230, .12, .68);
+        ctx.strokeStyle = '#b66dff'; ctx.lineWidth = 2.5; ctx.shadowColor = '#b66dff'; ctx.shadowBlur = 18;
+        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(player.x, player.y); ctx.stroke();
+        ctx.restore();
+      }
       ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(performance.now() * .001 * e.spin);
       ctx.shadowColor = e.color; ctx.shadowBlur = e.hit > 0 ? 30 : 15; ctx.fillStyle = e.hit > 0 ? '#fff' : e.color;
+      if (e.type === 'bomber' && ed < 160) { ctx.shadowColor = '#ff7a3d'; ctx.shadowBlur = 34; ctx.globalAlpha = .62 + Math.sin(performance.now() * .024) * .28; }
       if (e.elite || e.phase2) { ctx.strokeStyle = e.elite?.color || '#ff4d6d'; ctx.lineWidth = 3; ctx.globalAlpha = .45 + Math.sin(performance.now() * .006) * .18; ctx.beginPath(); ctx.arc(0, 0, e.r + 8, 0, TWO_PI); ctx.stroke(); ctx.globalAlpha = 1; }
       ctx.beginPath();
       for (let i = 0; i < e.sides * 2; i++) { const a = i / (e.sides * 2) * TWO_PI; const r = i % 2 ? e.r * .66 : e.r; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-      ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke(); ctx.restore();
+      ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke();
+      if (e.type === 'bomber' && ed < 160) { ctx.strokeStyle = '#fff1c7'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-e.r * .55, 0); ctx.lineTo(e.r * .55, 0); ctx.moveTo(0, -e.r * .55); ctx.lineTo(0, e.r * .55); ctx.stroke(); }
+      ctx.restore();
       ctx.fillStyle = 'rgba(255,255,255,.16)'; ctx.fillRect(e.x - e.r, e.y - e.r - 12, e.r * 2, 3);
       ctx.fillStyle = e.type === 'boss' ? '#ff4d6d' : '#4dff88'; ctx.fillRect(e.x - e.r, e.y - e.r - 12, e.r * 2 * clamp(e.hp / e.maxHp, 0, 1), 3);
     }
@@ -1300,6 +1324,64 @@
     ctx.restore();
   }
 
+  function drawTargetGuide() {
+    if (!beacon || !player || !running || gameOver) return;
+    const c = camera();
+    const sx = beacon.x - c.x;
+    const sy = beacon.y - c.y;
+    const d = Math.hypot(beacon.x - player.x, beacon.y - player.y);
+    const inside = sx > 46 && sx < W - 46 && sy > 92 && sy < H - 46;
+    const pulse = .55 + Math.sin(performance.now() * .006) * .22;
+    const charge = clamp((beacon.charge || 0) / 2.4, 0, 1);
+    ctx.save();
+    ctx.shadowColor = '#bdfcff';
+    ctx.shadowBlur = 22;
+    if (inside) {
+      ctx.globalAlpha = .42 + pulse * .36;
+      ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(sx, sy, 48 + pulse * 10, 0, TWO_PI); ctx.stroke();
+      if (charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 5; ctx.beginPath(); ctx.arc(sx, sy, 62, -Math.PI / 2, -Math.PI / 2 + TWO_PI * charge); ctx.stroke(); }
+    } else {
+      const a = Math.atan2(sy - H / 2, sx - W / 2);
+      const x = clamp(W / 2 + Math.cos(a) * (Math.min(W, H) * .43), 36, W - 36);
+      const y = clamp(H / 2 + Math.sin(a) * (Math.min(W, H) * .43), 92, H - 36);
+      const scale = clamp(1.25 - d / 1800, .68, 1.15);
+      ctx.translate(x, y); ctx.rotate(a); ctx.scale(scale, scale);
+      ctx.globalAlpha = .72 + pulse * .24;
+      ctx.fillStyle = '#bdfcff'; ctx.strokeStyle = '#050712'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(24, 0); ctx.lineTo(-14, -15); ctx.lineTo(-7, 0); ctx.lineTo(-14, 15); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 30, -0.6, 0.6); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawEventBanner() {
+    if (!activeEvent || eventBannerTimer <= 0) return;
+    const a = clamp(eventBannerTimer / 2.2, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = Math.min(.95, a + .15);
+    const w = Math.min(520, W - 32), h = 74, x = (W - w) / 2, y = 92;
+    ctx.fillStyle = 'rgba(5,7,18,.78)'; ctx.strokeStyle = activeEvent.color; ctx.lineWidth = 2;
+    ctx.shadowColor = activeEvent.color; ctx.shadowBlur = 26;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 18); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = activeEvent.color; ctx.font = '900 18px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(activeEvent.name, W / 2, y + 30);
+    ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 12px system-ui';
+    ctx.fillText(activeEvent.desc, W / 2, y + 52);
+    ctx.restore();
+  }
+
+  function drawScreenEffects() {
+    if (damageFlash <= 0) return;
+    ctx.save();
+    const a = clamp(damageFlash / .34, 0, 1) * .18;
+    ctx.strokeStyle = `rgba(255,77,109,${a * 2.1})`;
+    ctx.lineWidth = 18;
+    ctx.strokeRect(8, 8, W - 16, H - 16);
+    ctx.fillStyle = `rgba(255,77,109,${a})`;
+    ctx.fillRect(0, 0, W, H);
+    ctx.restore();
+  }
 
   function drawTouchDpad() {
     if (controlMode !== 'touch' || !touchMove.pressed) return;
