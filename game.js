@@ -103,6 +103,9 @@
   let zoneTick = 0;
   let beacon = null;
   let shotSeq = 0;
+  let runObjectives = 0;
+  let runEvents = 0;
+  let runStartScrap = 0;
 
   const SECTOR_CLEAR_WAVE = 10;
 
@@ -364,9 +367,9 @@
 
   function hardResetRun() {
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
-    bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = makeBeacon(); zoneTick = 0;
+    bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
     mission = newMission();
     startWave(1);
     updateUi();
@@ -389,14 +392,22 @@
     save(false);
   }
 
+  function chooseObjectiveKind() {
+    if (wave <= 2) return choose(['scan', 'harvest']);
+    if (wave <= 5) return choose(['scan', 'harvest', 'hold', 'rift']);
+    if (wave === 9) return choose(['hunt', 'rift', 'hold']);
+    return choose(['scan', 'hold', 'harvest', 'rift', 'hunt']);
+  }
+
   function startWave(n) {
     wave = n;
     bossActive = n % 5 === 0;
     const mobileEase = controlMode === 'touch' ? .98 : 1;
     spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase);
     spawnTimer = bossActive ? .35 : 0;
-    if (wave >= 9 && !bossActive && (wave % 3 === 0 || Math.random() < .28)) startEvent();
-    if (!beacon || wave % 3 === 1) beacon = makeBeacon();
+    if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell']));
+    else if (wave >= 6 && !bossActive && (wave % 3 === 0 || Math.random() < .28)) startEvent();
+    if (!beacon || wave % 3 === 1 || wave === 9) beacon = makeBeacon(chooseObjectiveKind());
     if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
     if (bossActive) spawnBoss();
     flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : `第 ${wave} 波來襲`);
@@ -406,6 +417,7 @@
     const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm', 'droneSwarm', 'gravityWell'];
     const id = forcedId || choose(ids);
     activeEvent = { id, ...eventDefs[id], reward };
+    runEvents++;
     eventTimer = 18 + Math.min(12, wave * .8);
     meteorTimer = .8;
     eventBannerTimer = 2.2;
@@ -490,14 +502,16 @@
   function spawnBoss() {
     const t = enemyTypes.boss;
     const c = camera();
-    const variants = [
+    const variants = wave >= SECTOR_CLEAR_WAVE ? [
+      { id: 'core', label: '星環核心主宰', color: '#bdfcff', hp: 1.55, speed: 1.08, sides: 14, shot: 1.38, final: true }
+    ] : [
       { id: 'ring', label: '星環吞噬者', color: '#ff4d6d', hp: 1, speed: 1, sides: 10, shot: 1 },
       { id: 'forge', label: '熔核鍛造者', color: '#ff9f1c', hp: 1.18, speed: .86, sides: 8, shot: .88 },
       { id: 'void', label: '虛空指揮官', color: '#b66dff', hp: .92, speed: 1.22, sides: 12, shot: 1.18 }
     ];
     const v = variants[Math.floor((wave / 5 - 1) % variants.length)];
     const hp = (t.hp + wave * 75) * v.hp;
-    const e = { type: 'boss', bossVariant: v.id, label: v.label, x: player.x, y: c.y - 80, r: t.r + wave * 1.5, hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + 6, hit: 0, shootClock: 1.1, shotMult: v.shot, phase2: false, elite: null };
+    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: t.r + wave * (v.final ? 2.15 : 1.5), hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + (v.final ? 28 : 6), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : 0, shotMult: v.shot, phase2: false, elite: null };
     enemies.push(e);
   }
 
@@ -628,7 +642,7 @@
 
   function enemyShoot(e) {
     const a = Math.atan2(player.y - e.y, player.x - e.x);
-    const count = e.type === 'boss' ? (e.bossVariant === 'void' ? (e.phase2 ? 15 : 9) : e.phase2 ? 11 : 7) : 1;
+    const count = e.type === 'boss' ? (e.finalBoss ? (e.phase2 ? 17 : 11) : e.bossVariant === 'void' ? (e.phase2 ? 15 : 9) : e.phase2 ? 11 : 7) : 1;
     for (let i = 0; i < count; i++) {
       const off = count === 1 ? 0 : (i - (count - 1) / 2) * (e.phase2 ? .13 : .16);
       const bossSpeed = (e.type === 'boss' ? (e.phase2 ? 235 : 205) * (e.shotMult || 1) : 250);
@@ -769,6 +783,7 @@
     beacon.armed = true;
     const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
     const instant = Math.floor((12 + wave * 1.8) * def.reward);
+    runObjectives++;
     const reward = objectiveReward(def);
     meta.scrap += instant;
     xp += Math.ceil(xpNeed * .12);
@@ -989,12 +1004,20 @@
       const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
       e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
       e.y += Math.sin(a) * e.speed * slow * bossStop * dt;
+      if (e.finalBoss) {
+        e.summonClock -= dt;
+        if (e.summonClock <= 0) {
+          spawnEnemy(choose(e.phase2 ? ['sprinter', 'bomber', 'leech'] : ['chaser', 'sprinter']));
+          e.summonClock = e.phase2 ? 1.9 : 2.8;
+          particles.push({ x: e.x, y: e.y, vx: rand(-40, 40), vy: rand(-40, 40), life: .3, max: .3, r: 8, color: e.color, ring: true });
+        }
+      }
       if (activeEvent?.id === 'gravityWell' && beacon && e.type !== 'boss') {
         const ga = Math.atan2(beacon.y - e.y, beacon.x - e.x);
         e.x += Math.cos(ga) * 22 * dt;
         e.y += Math.sin(ga) * 22 * dt;
       }
-      if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash('Boss 進入二階段：星環暴走'); burst(e.x, e.y, '#ff4d6d', 48, 1.5); }
+      if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash(e.finalBoss ? '最終 Boss 二階段：核心失控' : 'Boss 進入二階段：星環暴走'); burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 70 : 48, e.finalBoss ? 1.8 : 1.5); }
       if (e.type === 'leech' && d < 185 && !isPlayerProtected()) {
         player.hp -= dt * (1.8 + wave * .04); damageFlash = Math.max(damageFlash, .12);
         if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
@@ -1018,7 +1041,7 @@
       e.hit = Math.max(0, e.hit - dt);
       if (e.type === 'shooter' || e.type === 'boss') {
         e.shootClock -= dt;
-        if (e.shootClock <= 0) { enemyShoot(e); e.shootClock = e.type === 'boss' ? (e.phase2 ? rand(.72, 1.12) : rand(1.0, 1.65)) : rand(1.7, 2.7); }
+        if (e.shootClock <= 0) { enemyShoot(e); e.shootClock = e.type === 'boss' ? (e.finalBoss ? (e.phase2 ? rand(.42, .72) : rand(.62, .96)) : e.phase2 ? rand(.72, 1.12) : rand(1.0, 1.65)) : rand(1.7, 2.7); }
       }
       const rr = e.r + player.r;
       if (dist2(e, player) < rr * rr && !isPlayerProtected()) {
@@ -1146,7 +1169,7 @@
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'SECTOR CLEAR // 撤離成功';
     card.querySelector('h2').textContent = '星環核心已回收。';
-    card.querySelector('p:not(.eyebrow)').textContent = `你擊破第 ${wave} 波 Boss，完成本區域目標，帶回 ${bonus} 額外碎晶。可以重新出擊挑戰更高波次與更多流派。`;
+    card.querySelector('p:not(.eyebrow)').textContent = `你擊破第 ${wave} 波 Boss，完成本區域目標，帶回 ${bonus} 額外碎晶。本局擊毀 ${runKills} 架、完成 ${runObjectives} 個目標、撐過 ${runEvents} 場事件，本局碎晶淨收益 ${Math.max(0, Math.floor(meta.scrap - runStartScrap))}。可以重新出擊挑戰更高波次與更多流派。`;
     card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '再次出擊';
     ui.startBtn.style.display = '';
