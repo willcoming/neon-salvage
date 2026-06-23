@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=2.23" />
+  <link rel="stylesheet" href="./styles.css?v=2.25" />
 </head>
 <body>
   <div id="app">
@@ -56,7 +56,7 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v2.23 完整局節奏與最終 Boss 版</strong>
+          <strong>v2.25 後期穩定化與視覺預算版</strong>
           <ul>
             <li>介面優化：永久升級不再常駐右側/底部面板，改成暫停時開啟彈窗。</li>
             <li>戰鬥進行中不能購買永久升級；按 P 暫停後才可以升級。</li>
@@ -76,6 +76,8 @@
             <li>第 10 波 Boss 強化為最終 Boss「星環核心主宰」，血量、彈幕與召喚壓力都更高。</li>
             <li>目標任務依波次逐步解鎖：早期掃描/採集，中期守點/裂隙，後期加入獵殺菁英與高壓事件。</li>
             <li>撤離成功結算會顯示擊殺、完成目標、事件數與本局碎晶淨收益。</li>
+            <li>執行中比例縮小：飛船、敵人、Boss、地圖物件、目標指引、任務框與事件提示都縮小，降低大型元素遮擋。</li>
+            <li>後期穩定化：第 7–10 波套用視覺縮放、敵人上限、地圖物件上限、粒子/ring 預算與小怪血條 LOD，避免後期 large 失控。</li>
             <li>新增地圖事件「蜂群入侵」與「重力井」，目標點也可能觸發補給或富礦事件。</li>
             <li>新增敵人「吸能蟲」與「爆裂雷」，新增武器流派「霰彈彈幕」與「蓄能軌砲」。</li>
             <li>新增目標方向箭頭、目標充能環、事件開始提示、受傷紅閃、吸能蟲紫色吸盾光束與爆裂雷自爆預警。</li>
@@ -151,6 +153,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=2.23"></script>
+  <script src="./game.js?v=2.25"></script>
 </body>
 </html>
