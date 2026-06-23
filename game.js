@@ -104,6 +104,8 @@
   let beacon = null;
   let shotSeq = 0;
 
+  const SECTOR_CLEAR_WAVE = 10;
+
   const upgradesRuntime = {
     splitShot: 0,
     chain: 0,
@@ -676,6 +678,7 @@
       meta.achievements.bossKilled = true;
       bossActive = false;
       flash('Boss 擊破！星環暫時安全');
+      if (wave >= SECTOR_CLEAR_WAVE) completeSector();
     }
     if (upgradesRuntime.chain > 0) chainArc(e.x, e.y, e.type === 'boss' ? 80 : 42);
     checkAchievements();
@@ -1126,6 +1129,29 @@
     addText(player.x, player.y - 44, `波次獎勵 +${reward}`, '#ffd166');
     startWave(wave + 1);
     save(false);
+  }
+
+  function completeSector() {
+    if (gameOver) return;
+    closeUpgradeModal();
+    gameOver = true;
+    paused = true;
+    const bonus = 120 + Math.floor(meta.bestWave * 3) + runKills;
+    meta.scrap += bonus;
+    meta.bestWave = Math.max(meta.bestWave, wave);
+    meta.achievements.sectorClear = true;
+    save(false);
+    burst(player.x, player.y, '#bdfcff', 70, 1.9);
+    ui.overlay.classList.add('visible');
+    const card = ui.overlay.querySelector('.card');
+    card.querySelector('.eyebrow').textContent = 'SECTOR CLEAR // 撤離成功';
+    card.querySelector('h2').textContent = '星環核心已回收。';
+    card.querySelector('p:not(.eyebrow)').textContent = `你擊破第 ${wave} 波 Boss，完成本區域目標，帶回 ${bonus} 額外碎晶。可以重新出擊挑戰更高波次與更多流派。`;
+    card.querySelector('.version-card')?.setAttribute('hidden', '');
+    ui.startBtn.textContent = '再次出擊';
+    ui.startBtn.style.display = '';
+    ui.howBtn.style.display = '';
+    flash(`撤離成功：額外 +${bonus} 碎晶`);
   }
 
   function endRun() {
