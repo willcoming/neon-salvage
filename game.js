@@ -106,6 +106,8 @@
   let runObjectives = 0;
   let runEvents = 0;
   let runStartScrap = 0;
+  let lastDamageCause = '';
+  let tutorialShown = new Set();
 
   const SECTOR_CLEAR_WAVE = 10;
   const MAX_PARTICLES = 180;
@@ -390,9 +392,10 @@
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
     mission = newMission();
     startWave(1);
+    for (let i = 0; i < 5; i++) dropShard(player.x + rand(-42, 42), player.y + rand(-42, 42), 1);
     updateUi();
   }
 
@@ -420,11 +423,30 @@
     return choose(['scan', 'hold', 'harvest', 'rift', 'hunt']);
   }
 
+  function guideForWave(n, isBoss = false) {
+    if (n === 1) return '引導：移動保持距離，主砲會自動開火；先撿旁邊碎晶。';
+    if (n === 2) return '引導：藍色箭頭指向目標點，順路靠近可拿獎勵。';
+    if (n === 3) return '引導：完成目標會觸發事件；撐過去會再給獎勵。';
+    if (n === 5 && isBoss) return 'Boss 檢查：火力不足就優先選穿甲、軌砲或升主砲。';
+    if (n === 9) return '終局前壓力波：不要貪撿，先保血量與走位。';
+    if (n === SECTOR_CLEAR_WAVE && isBoss) return '最終 Boss：擊破星環核心主宰後即可撤離成功。';
+    return '';
+  }
+
+  function showWaveGuide(n, isBoss = false) {
+    const msg = guideForWave(n, isBoss);
+    if (!msg || tutorialShown.has(n) || !running) return;
+    setTimeout(() => {
+      if (running && !gameOver && !skillChoosing && wave === n) { tutorialShown.add(n); flash(msg); }
+    }, 950);
+  }
+
   function startWave(n) {
     wave = n;
     bossActive = n % 5 === 0;
     const mobileEase = controlMode === 'touch' ? .98 : 1;
-    spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase);
+    const earlyEase = n === 1 ? .58 : n === 2 ? .74 : n === 3 ? .9 : 1;
+    spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase * earlyEase);
     spawnTimer = bossActive ? .35 : 0;
     if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell']));
     else if (wave >= 6 && !bossActive && (wave % 3 === 0 || Math.random() < .28)) startEvent();
@@ -432,6 +454,7 @@
     if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
     if (bossActive) spawnBoss();
     flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : `第 ${wave} 波來襲`);
+    showWaveGuide(wave, bossActive);
   }
 
   function startEvent(forcedId = null, reward = null) {
@@ -533,7 +556,7 @@
       { id: 'void', label: '虛空指揮官', color: '#b66dff', hp: .92, speed: 1.22, sides: 12, shot: 1.18 }
     ];
     const v = variants[Math.floor((wave / 5 - 1) % variants.length)];
-    const hp = (t.hp + wave * 75) * v.hp;
+    const hp = (t.hp + wave * 75) * v.hp * (wave === 5 ? .82 : 1);
     const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + (v.final ? 28 : 6), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : 0, shotMult: v.shot, phase2: false, elite: null };
     enemies.push(e);
   }
@@ -767,7 +790,7 @@
 
   function makeBeacon(kind = null) {
     const a = Math.random() * TWO_PI;
-    const d = rand(760, 1450);
+    const d = wave <= 2 ? rand(430, 760) : rand(760, 1450);
     const keys = Object.keys(objectiveDefs);
     const objective = kind || choose(keys);
     const def = objectiveDefs[objective];
@@ -882,10 +905,10 @@
         const push = (player.r + f.r * .76 - d) + 1;
         player.x += Math.cos(a) * push;
         player.y += Math.sin(a) * push;
-        if (f.cool <= 0 && !isPlayerProtected()) { player.hp -= f.type === 'asteroid' ? 8 : 4; damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
+        if (f.cool <= 0 && !isPlayerProtected()) { lastDamageCause = 'obstacle'; player.hp -= f.type === 'asteroid' ? 8 : 4; damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'hazard' && d < f.r) {
-        if (zoneTick <= 0 && !isPlayerProtected()) { player.hp -= 3 + wave * .12; damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); }
+        if (zoneTick <= 0 && !isPlayerProtected()) { lastDamageCause = 'hazard'; player.hp -= 3 + wave * .12; damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'repair' && d < f.r && f.cool <= 0) {
         player.hp = Math.min(player.maxHp, player.hp + 14);
@@ -1043,13 +1066,13 @@
       }
       if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash(e.finalBoss ? '最終 Boss 二階段：核心失控' : 'Boss 進入二階段：星環暴走'); burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 70 : 48, e.finalBoss ? 1.8 : 1.5); }
       if (e.type === 'leech' && d < 185 && !isPlayerProtected()) {
-        player.hp -= dt * (1.8 + wave * .04); damageFlash = Math.max(damageFlash, .12);
+        lastDamageCause = 'leech'; player.hp -= dt * (1.8 + wave * .04); damageFlash = Math.max(damageFlash, .12);
         if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
         if (player.hp <= 0) endRun();
       }
       if (e.type === 'bomber' && d < 82 && !isPlayerProtected()) {
         e.dead = true;
-        player.hp -= 14 + wave * .38; damageFlash = .34;
+        lastDamageCause = 'bomber'; player.hp -= 14 + wave * .38; damageFlash = .34;
         player.invuln = .38;
         burst(e.x, e.y, '#ff7a3d', 24, 1.2);
         if (player.hp <= 0) endRun();
@@ -1069,7 +1092,7 @@
       }
       const rr = e.r + player.r;
       if (dist2(e, player) < rr * rr && !isPlayerProtected()) {
-        player.hp -= Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55); damageFlash = .32;
+        lastDamageCause = e.type === 'boss' ? 'boss' : 'collision'; player.hp -= Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55); damageFlash = .32;
         player.invuln = dashTime > 0 ? .05 : .68;
         if (e.type !== 'boss') e.dead = true;
         burst(player.x, player.y, '#ff4d6d', 18);
@@ -1087,7 +1110,7 @@
         particles.push({ x: s.x, y: s.y, vx: rand(-10, 10), vy: rand(-10, 10), life: .2, max: .2, r: 3, color: s.color || '#ff7a3d', ring: false });
       }
       if (dist2(s, player) < Math.pow(s.r + player.r, 2) && !isPlayerProtected()) {
-        s.dead = true; player.hp -= s.dmg; damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
+        lastDamageCause = s.type === 'meteor' ? 'meteor' : 'projectile'; s.dead = true; player.hp -= s.dmg; damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
         if (player.hp <= 0) endRun();
       }
     }
@@ -1185,6 +1208,42 @@
     save(false);
   }
 
+  function runScrapGain() {
+    return Math.max(0, Math.floor(meta.scrap - runStartScrap));
+  }
+
+  function runGrade() {
+    let points = 0;
+    points += runObjectives * 16;
+    points += runEvents * 12;
+    points += Math.min(40, Math.floor(runKills / 8));
+    points += Math.min(25, Math.floor(runScrapGain() / 35));
+    if (player?.hp > player?.maxHp * .55) points += 10;
+    if (points >= 105) return 'S';
+    if (points >= 78) return 'A';
+    if (points >= 52) return 'B';
+    return 'C';
+  }
+
+  function nextChallengeForGrade(grade) {
+    if (grade === 'S') return '下一局挑戰：嘗試更少受傷或更高波次。';
+    if (grade === 'A') return '下一局挑戰：多完成目標與事件，衝 S 評級。';
+    if (grade === 'B') return '下一局挑戰：多跑目標點，事件獎勵會推高評級。';
+    return '下一局挑戰：先完成 2 個目標，累積技能再打 Boss。';
+  }
+
+  function deathAdvice() {
+    if (wave <= 3) return '建議：前 3 波先保持距離、撿碎晶，看到藍色箭頭就順路靠近目標。';
+    if (lastDamageCause === 'hazard') return '建議：紅色裂隙是持續傷害區，不要硬穿；先升引擎或繞路完成其他目標。';
+    if (lastDamageCause === 'leech') return '建議：紫色吸能蟲要優先拉開距離擊殺；可選霰彈、電漿或升主砲。';
+    if (lastDamageCause === 'bomber') return '建議：爆裂雷閃爍時代表快自爆，先後退再用範圍火力清掉。';
+    if (lastDamageCause === 'boss') return '建議：Boss 戰前優先主砲、穿甲光矛或蓄能軌砲，護盾不足就先升護盾矩陣。';
+    if (lastDamageCause === 'projectile' || lastDamageCause === 'meteor') return '建議：彈幕多時不要貪撿碎晶，優先橫向移動並保留安全距離。';
+    if (runObjectives <= 1 && wave >= 4) return '建議：多完成目標點，事件獎勵會讓技能與碎晶成長更快。';
+    if ((meta.upgrades.magnet || 0) < 2 && runScrapGain() < 60) return '建議：永久升級可先補磁吸場，碎晶不用冒險貼臉撿。';
+    return '建議：下一局先補護盾矩陣與主砲，並用目標事件累積局內技能。';
+  }
+
   function completeSector() {
     if (gameOver) return;
     closeUpgradeModal();
@@ -1192,6 +1251,7 @@
     paused = true;
     const bonus = 120 + Math.floor(meta.bestWave * 3) + runKills;
     meta.scrap += bonus;
+    const grade = runGrade();
     meta.bestWave = Math.max(meta.bestWave, wave);
     meta.achievements.sectorClear = true;
     save(false);
@@ -1199,8 +1259,8 @@
     ui.overlay.classList.add('visible');
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'SECTOR CLEAR // 撤離成功';
-    card.querySelector('h2').textContent = '星環核心已回收。';
-    card.querySelector('p:not(.eyebrow)').textContent = `你擊破第 ${wave} 波 Boss，完成本區域目標，帶回 ${bonus} 額外碎晶。本局擊毀 ${runKills} 架、完成 ${runObjectives} 個目標、撐過 ${runEvents} 場事件，本局碎晶淨收益 ${Math.max(0, Math.floor(meta.scrap - runStartScrap))}。可以重新出擊挑戰更高波次與更多流派。`;
+    card.querySelector('h2').textContent = `星環核心已回收｜評級 ${grade}`;
+    card.querySelector('p:not(.eyebrow)').textContent = `你擊破第 ${wave} 波 Boss，完成本區域目標，帶回 ${bonus} 額外碎晶。本局擊毀 ${runKills} 架、完成 ${runObjectives} 個目標、撐過 ${runEvents} 場事件，碎晶淨收益 ${runScrapGain()}。${nextChallengeForGrade(grade)}`;
     card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '再次出擊';
     ui.startBtn.style.display = '';
@@ -1217,7 +1277,8 @@
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'RUN TERMINATED';
     card.querySelector('h2').textContent = '飛船解體，但資料已保存。';
-    card.querySelector('p:not(.eyebrow)').textContent = `你撐到第 ${wave} 波，擊毀 ${runKills} 架無人機，累積分數 ${Math.floor(meta.score)}。升級後再回星環復仇。`;
+    card.querySelector('p:not(.eyebrow)').textContent = `你撐到第 ${wave} 波，擊毀 ${runKills} 架無人機，完成 ${runObjectives} 個目標，累積分數 ${Math.floor(meta.score)}。${deathAdvice()}`;
+    card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '重新出擊';
     ui.startBtn.style.display = '';
     ui.howBtn.style.display = '';
@@ -1621,6 +1682,7 @@
     ui.overlay.classList.remove('visible'); ui.startBtn.textContent = '開始 / 繼續'; ui.startBtn.style.display = ''; ui.howBtn.style.display = '';
     save(false);
     updateUi();
+    showWaveGuide(wave, bossActive);
   }
 
   function togglePause() {
