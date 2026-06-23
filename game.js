@@ -64,6 +64,7 @@
     score: 0,
     bestWave: 1,
     achievements: {},
+    recentRuns: [],
     lastSaved: Date.now(),
     upgrades: { cannon: 0, shield: 0, engine: 0, magnet: 0, drone: 0 }
   });
@@ -109,6 +110,7 @@
   let lastDamageCause = '';
   let tutorialShown = new Set();
   let runStats = null;
+  let upgradeFromRun = false;
 
   const SECTOR_CLEAR_WAVE = 10;
   const MAX_PARTICLES = 180;
@@ -185,6 +187,138 @@
   function combatReport() {
     const boss = runStats?.bossKillTime ? `｜Boss ${formatTime(runStats.bossKillTime)}` : '';
     return `戰鬥報告｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+  }
+
+  function longestWaveSummary() {
+    const entries = Object.entries(runStats?.waveTimes || {});
+    if (!entries.length) return { wave: '-', time: 0, label: '-' };
+    entries.sort((a, b) => b[1] - a[1]);
+    return { wave: entries[0][0], time: entries[0][1], label: `第${entries[0][0]}波 ${formatTime(entries[0][1])}` };
+  }
+
+  function pressureLabel(record) {
+    if ((record.maxRings || 0) >= 8 || (record.maxParticles || 0) >= 150) return '高壓';
+    if ((record.maxEnemies || 0) >= 28) return '密集';
+    return '穩定';
+  }
+
+  function challengeList(record) {
+    const list = [];
+    if (record.status === 'clear') {
+      if (record.grade !== 'S') list.push('衝到 S 評級');
+      if ((record.bossTime || 0) > 60) list.push('Boss 擊殺壓到 60 秒內');
+      if ((record.objectives || 0) < 4) list.push('完成至少 4 個目標');
+      if (!list.length) list.push('保持 S 評級並嘗試更高擊殺數');
+    } else {
+      list.push(`突破第 ${Math.min(SECTOR_CLEAR_WAVE, record.wave + 1)} 波`);
+      if ((record.objectives || 0) < 3) list.push('完成至少 3 個目標');
+      if ((record.skills || []).length < 3) list.push('拿到 3 個局內技能');
+    }
+    if ((record.maxEnemies || 0) >= enemyCap() - 1) list.push('帶一個範圍技能進後期');
+    return [...new Set(list)].slice(0, 3);
+  }
+
+  function makeRunRecord(status, grade = '-', bonus = 0) {
+    const longest = longestWaveSummary();
+    const record = {
+      id: Date.now(),
+      status,
+      grade,
+      wave,
+      time: Math.floor(runTime),
+      kills: runKills,
+      objectives: runObjectives,
+      events: runEvents,
+      scrap: runScrapGain(),
+      bonus,
+      score: Math.floor(meta.score),
+      longestWave: longest.label,
+      longestWaveTime: Math.floor(longest.time || 0),
+      maxEnemies: runStats?.maxEnemies || 0,
+      maxWorldFeatures: runStats?.maxWorldFeatures || 0,
+      maxParticles: runStats?.maxParticles || 0,
+      maxRings: runStats?.maxRings || 0,
+      bossTime: runStats?.bossKillTime ? Math.floor(runStats.bossKillTime) : 0,
+      skills: [...(runStats?.skills || [])].slice(-6),
+      deathCause: runStats?.deathCause || lastDamageCause || '',
+      diagnosis: balanceHint()
+    };
+    record.pressure = pressureLabel(record);
+    record.challenges = challengeList(record);
+    return record;
+  }
+
+  function saveRunRecord(record) {
+    meta.recentRuns = [record, ...((Array.isArray(meta.recentRuns) && meta.recentRuns) || [])].slice(0, 5);
+    save(false);
+  }
+
+  function clearRunOverlayExtras(card = ui.overlay.querySelector('.card')) {
+    if (!card) return;
+    card.classList.remove('run-card', 'success-run', 'failed-run');
+    card.querySelector('#runReport')?.remove();
+    card.querySelector('#postRunActions')?.remove();
+    card.querySelector('#recentRunsPanel')?.remove();
+  }
+
+  function renderRecentRuns(card) {
+    const runs = (Array.isArray(meta.recentRuns) && meta.recentRuns) || [];
+    let panel = card.querySelector('#recentRunsPanel');
+    if (!panel) {
+      panel = document.createElement('div');
+      panel.id = 'recentRunsPanel';
+      panel.className = 'recent-runs';
+      panel.hidden = true;
+      (card.querySelector('#postRunActions') || card.querySelector('.actions'))?.after(panel);
+    }
+    panel.innerHTML = `<strong>最近 5 場戰績</strong>${runs.length ? runs.map(r => `<div class="recent-row"><b class="${r.status === 'clear' ? 'win' : 'fail'}">${escapeHtml(r.status === 'clear' ? r.grade : 'X')}</b><span>${escapeHtml(r.status === 'clear' ? '撤離' : '失敗')}｜第 ${escapeHtml(r.wave)} 波｜${escapeHtml(formatTime(r.time))}｜Boss ${escapeHtml(r.bossTime ? formatTime(r.bossTime) : '-')}｜${escapeHtml(r.diagnosis || '')}</span></div>`).join('') : '<p>還沒有戰績。</p>'}`;
+    return panel;
+  }
+
+  function renderPostRunActions(card) {
+    let box = card.querySelector('#postRunActions');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'postRunActions';
+      box.className = 'post-run-actions';
+      card.querySelector('.actions')?.after(box);
+    }
+    box.innerHTML = '<button id="postUpgradeBtn" class="secondary" type="button">打開艦載升級</button><button id="historyBtn" class="secondary" type="button">查看最近戰績</button>';
+    box.querySelector('#postUpgradeBtn').addEventListener('click', openPostRunUpgradeModal);
+    box.querySelector('#historyBtn').addEventListener('click', () => {
+      const panel = renderRecentRuns(card);
+      panel.hidden = !panel.hidden;
+    });
+  }
+
+  function renderRunReport(card, record, leadText) {
+    clearRunOverlayExtras(card);
+    card.classList.add('run-card', record.status === 'clear' ? 'success-run' : 'failed-run');
+    const lead = card.querySelector('p:not(.eyebrow)');
+    lead.textContent = leadText;
+    const actions = card.querySelector('.actions');
+    if (actions) lead.after(actions);
+    const report = document.createElement('div');
+    report.id = 'runReport';
+    report.className = 'run-report';
+    const skillHtml = record.skills.length ? record.skills.map(s => `<span>${escapeHtml(s)}</span>`).join('') : '<span>尚未選擇技能</span>';
+    report.innerHTML = `
+      <div class="grade-badge ${record.status === 'clear' ? 'win' : 'fail'}"><span>${escapeHtml(record.status === 'clear' ? record.grade : '失敗')}</span><small>${escapeHtml(record.status === 'clear' ? '撤離成功' : '資料已保存')}</small></div>
+      <div class="report-grid">
+        <section><h3>本局成果</h3><dl><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
+        <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossTime ? formatTime(record.bossTime) : '-')}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+      </div>
+      <div class="skill-chips"><b>技能流派</b>${skillHtml}</div>
+      <div class="diagnosis"><b>診斷</b><p>${escapeHtml(record.diagnosis)}</p></div>
+      <div class="next-challenges"><b>下一局挑戰</b><ul>${record.challenges.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul></div>`;
+    renderPostRunActions(card);
+    renderRecentRuns(card);
+    (card.querySelector('#recentRunsPanel') || card.querySelector('#postRunActions') || actions || card.querySelector('.version-card'))?.after(report);
   }
 
   const upgradesRuntime = {
@@ -353,7 +487,7 @@
   }
 
   function canUsePermanentUpgrades() {
-    return running && paused && !gameOver && !skillChoosing;
+    return running && paused && !skillChoosing && (!gameOver || upgradeFromRun);
   }
 
   function isUpgradeModalOpen() {
@@ -385,8 +519,19 @@
     resetTouchDirection();
   }
 
+  function openPostRunUpgradeModal() {
+    upgradeFromRun = true;
+    running = true;
+    paused = true;
+    renderUpgrades();
+    ui.upgradeModal.hidden = false;
+    resetTouchDirection();
+    flash('可用本局碎晶升級艦載系統');
+  }
+
   function closeUpgradeModal() {
     if (ui.upgradeModal) ui.upgradeModal.hidden = true;
+    if (gameOver) upgradeFromRun = false;
     if (ui.upgradeMenuBtn) ui.upgradeMenuBtn.hidden = !canUsePermanentUpgrades();
   }
 
@@ -448,7 +593,7 @@
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); runStats = newRunStats(); bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); runStats = newRunStats(); upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
     mission = newMission();
     startWave(1);
     for (let i = 0; i < 5; i++) dropShard(player.x + rand(-42, 42), player.y + rand(-42, 42), 1);
@@ -1228,6 +1373,7 @@
     const choices = [...skillPool].sort(() => Math.random() - .5).slice(0, 3);
     ui.overlay.classList.add('visible');
     const card = ui.overlay.querySelector('.card');
+    clearRunOverlayExtras(card);
     card.querySelector('.eyebrow').textContent = 'LEVEL UP // 選擇一項本局技能';
     card.querySelector('h2').textContent = '飛船核心升級';
     card.querySelector('p:not(.eyebrow)').textContent = '這些技能只在本局有效。選一個強化方向，繼續撐過下一波。';
@@ -1315,19 +1461,20 @@
     const bonus = 120 + Math.floor(meta.bestWave * 3) + runKills;
     meta.scrap += bonus;
     const grade = runGrade();
+    const record = makeRunRecord('clear', grade, bonus);
     meta.bestWave = Math.max(meta.bestWave, wave);
     meta.achievements.sectorClear = true;
-    save(false);
+    saveRunRecord(record);
     burst(player.x, player.y, '#bdfcff', 70, 1.9);
     ui.overlay.classList.add('visible');
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'SECTOR CLEAR // 撤離成功';
     card.querySelector('h2').textContent = `星環核心已回收｜評級 ${grade}`;
-    card.querySelector('p:not(.eyebrow)').textContent = `你擊破第 ${wave} 波 Boss，完成本區域目標，帶回 ${bonus} 額外碎晶。本局擊毀 ${runKills} 架、完成 ${runObjectives} 個目標、撐過 ${runEvents} 場事件，碎晶淨收益 ${runScrapGain()}。${nextChallengeForGrade(grade)} ${combatReport()}`;
     card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '再次出擊';
     ui.startBtn.style.display = '';
     ui.howBtn.style.display = '';
+    renderRunReport(card, record, `你帶回 ${bonus} 額外碎晶，碎晶淨收益 ${runScrapGain()}。${nextChallengeForGrade(grade)}`);
     flash(`撤離成功：額外 +${bonus} 碎晶`);
   }
 
@@ -1338,16 +1485,17 @@
     closeUpgradeModal();
     gameOver = true;
     meta.bestWave = Math.max(meta.bestWave, wave);
-    save(false);
+    const record = makeRunRecord('fail', '-', 0);
+    saveRunRecord(record);
     ui.overlay.classList.add('visible');
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'RUN TERMINATED';
     card.querySelector('h2').textContent = '飛船解體，但資料已保存。';
-    card.querySelector('p:not(.eyebrow)').textContent = `你撐到第 ${wave} 波，擊毀 ${runKills} 架無人機，完成 ${runObjectives} 個目標，累積分數 ${Math.floor(meta.score)}。${deathAdvice()} ${combatReport()}`;
     card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '重新出擊';
     ui.startBtn.style.display = '';
     ui.howBtn.style.display = '';
+    renderRunReport(card, record, `你撐到第 ${wave} 波，擊毀 ${runKills} 架無人機。${deathAdvice()}`);
     flash('本局結束，永久資源已保存');
   }
 
@@ -1745,6 +1893,7 @@
     closeUpgradeModal();
     if (gameOver || !player) hardResetRun();
     running = true; paused = false; gameOver = false; skillChoosing = false;
+    clearRunOverlayExtras();
     ui.overlay.classList.remove('visible'); ui.startBtn.textContent = '開始 / 繼續'; ui.startBtn.style.display = ''; ui.howBtn.style.display = '';
     save(false);
     updateUi();

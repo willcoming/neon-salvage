@@ -267,9 +267,54 @@ h1, h2, p { margin: 0; }
   border: 1px solid rgba(55, 246, 255, .24);
   background: rgba(7, 12, 30, .78);
 }
+.card.run-card {
+  width: min(820px, 94vw);
+  max-height: min(88vh, 820px);
+  overflow-y: auto;
+}
+.card.success-run { border-color: rgba(77,255,136,.42); }
+.card.failed-run { border-color: rgba(255,77,109,.38); }
 .eyebrow { color: var(--gold); text-transform: uppercase; letter-spacing: .12em; font-size: 11px; margin-bottom: 8px; }
 .card h2 { font-size: clamp(21px, 3.1vw, 34px); line-height: 1.06; margin-bottom: 8px; }
 .card p:not(.eyebrow) { color: rgba(238,247,255,.82); line-height: 1.55; font-size: 14px; }
+.run-report { display: grid; gap: 12px; margin: 14px 0; }
+.grade-badge {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 13px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.12);
+  background: rgba(255,255,255,.045);
+}
+.grade-badge span { font-size: clamp(28px, 5vw, 52px); font-weight: 950; line-height: 1; }
+.grade-badge small { color: rgba(238,247,255,.72); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
+.grade-badge.win span, .recent-row .win { color: var(--green); }
+.grade-badge.fail span, .recent-row .fail { color: var(--red); }
+.report-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.report-grid section, .diagnosis, .next-challenges, .skill-chips, .recent-runs {
+  padding: 11px;
+  border-radius: 15px;
+  border: 1px solid rgba(55,246,255,.16);
+  background: rgba(5,7,18,.42);
+}
+.report-grid h3 { margin: 0 0 8px; font-size: 12px; color: var(--cyan); letter-spacing: .08em; text-transform: uppercase; }
+.report-grid dl { margin: 0; display: grid; gap: 6px; }
+.report-grid dl div { display: flex; justify-content: space-between; gap: 10px; font-size: 12px; }
+.report-grid dt { color: rgba(238,247,255,.60); }
+.report-grid dd { margin: 0; color: var(--text); font-weight: 900; text-align: right; }
+.skill-chips, .diagnosis, .next-challenges { font-size: 13px; color: rgba(238,247,255,.84); }
+.skill-chips b, .diagnosis b, .next-challenges b, .recent-runs > strong { display: block; color: var(--gold); margin-bottom: 8px; }
+.skill-chips span { display: inline-block; margin: 0 6px 6px 0; padding: 5px 8px; border-radius: 999px; background: rgba(55,246,255,.10); border: 1px solid rgba(55,246,255,.18); font-weight: 800; }
+.diagnosis p { margin: 0; line-height: 1.45; }
+.next-challenges ul { margin: 0; padding-left: 18px; line-height: 1.55; }
+.post-run-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+.post-run-actions button { flex: 1 1 180px; }
+.recent-runs { margin-top: 10px; }
+.recent-row { display: grid; grid-template-columns: 42px 1fr; gap: 8px; align-items: start; padding: 7px 0; border-top: 1px solid rgba(255,255,255,.08); font-size: 12px; }
+.recent-row b { font-size: 16px; font-weight: 950; text-align: center; }
+.recent-row span { color: rgba(238,247,255,.78); line-height: 1.35; }
 .version-card {
   margin-top: 14px;
   padding: 11px 13px;
@@ -366,6 +411,12 @@ body[data-control-mode="touch"] .hint { display: none; }
   .upgrade strong { font-size: 12px; }
   .upgrade button { padding: 7px; font-size: 11px; }
   #panel > button { width: calc(50% - 5px); margin: 4px 2px 0; padding: 8px; font-size: 11px; }
+  .card.run-card { width: min(94vw, 620px); max-height: 86vh; padding: 14px; }
+  .report-grid { grid-template-columns: 1fr; gap: 7px; }
+  .report-grid section, .diagnosis, .next-challenges, .skill-chips, .recent-runs { padding: 9px; border-radius: 12px; }
+  .post-run-actions { gap: 6px; }
+  .post-run-actions button { flex-basis: calc(50% - 4px); padding: 8px; font-size: 11px; }
+  .recent-row { grid-template-columns: 34px 1fr; font-size: 11px; }
   #game { height: 100vh; }
   .hint { display: none; }
 }
