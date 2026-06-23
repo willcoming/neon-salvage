@@ -23,6 +23,7 @@
     toast: document.getElementById('toast'),
     controlModeBtn: document.getElementById('controlModeBtn'),
     autoAimBtn: document.getElementById('autoAimBtn'),
+    soundBtn: document.getElementById('soundBtn'),
     pauseBtn: document.getElementById('pauseBtn'),
     upgradePrompt: document.getElementById('upgradePrompt'),
     offlineNotice: document.getElementById('offlineNotice'),
@@ -56,6 +57,7 @@
   const keys = new Set();
   const mouse = { x: W / 2, y: H / 2, down: false, lastMove: performance.now() };
   const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth <= 860;
+  const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false;
   let controlMode = coarsePointer ? 'touch' : 'keyboard';
   const touchMove = { x: 0, y: 0, active: false, pressed: false, sx: W / 2, sy: H / 2, cx: W / 2, cy: H / 2, dir: '', force: 0 };
 
@@ -65,6 +67,7 @@
     bestWave: 1,
     achievements: {},
     recentRuns: [],
+    soundEnabled: true,
     lastSaved: Date.now(),
     upgrades: { cannon: 0, shield: 0, engine: 0, magnet: 0, drone: 0 }
   });
@@ -111,6 +114,12 @@
   let tutorialShown = new Set();
   let runStats = null;
   let upgradeFromRun = false;
+  let audioCtx = null;
+  let sfxUnlocked = false;
+  let shakePower = 0;
+  let shakeTime = 0;
+  let shakeDuration = .1;
+  const sfxGate = {};
 
   const SECTOR_CLEAR_WAVE = 10;
   const MAX_PARTICLES = 180;
@@ -132,6 +141,115 @@
   }
   function compactWorldFeatureTarget() {
     return Math.max(14, Math.round((22 + Math.min(10, Math.floor(wave / 2))) * lateGameScale()));
+  }
+
+  function ensureAudio() {
+    if (!meta.soundEnabled) return null;
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return null;
+      if (!audioCtx) audioCtx = new AudioContext();
+      if (audioCtx.state === 'suspended') audioCtx.resume();
+      sfxUnlocked = true;
+      return audioCtx;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function tone(freq, duration = .07, type = 'sine', gain = .035, slide = 1) {
+    const ac = ensureAudio();
+    if (!ac) return;
+    const now = ac.currentTime;
+    const osc = ac.createOscillator();
+    const amp = ac.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, now);
+    if (slide !== 1) osc.frequency.exponentialRampToValueAtTime(Math.max(24, freq * slide), now + duration);
+    amp.gain.setValueAtTime(0.0001, now);
+    amp.gain.exponentialRampToValueAtTime(gain, now + .008);
+    amp.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    osc.connect(amp).connect(ac.destination);
+    osc.start(now);
+    osc.stop(now + duration + .025);
+  }
+
+  function sfx(name) {
+    if (!meta.soundEnabled) return;
+    const now = performance.now();
+    const gap = name === 'shoot' ? 55 : name === 'hit' ? 38 : name === 'pickup' ? 75 : name === 'bossHit' ? 90 : name === 'hurt' ? 240 : 0;
+    if (gap && now - (sfxGate[name] || 0) < gap) return;
+    sfxGate[name] = now;
+    if (name === 'shoot') tone(720, .035, 'square', .014, 1.28);
+    else if (name === 'hit') tone(420, .032, 'triangle', .018, .7);
+    else if (name === 'kill') { tone(280, .055, 'triangle', .025, .58); tone(680, .035, 'sine', .014, .9); }
+    else if (name === 'elite') { tone(360, .07, 'sawtooth', .03, .62); tone(900, .05, 'triangle', .018, 1.2); }
+    else if (name === 'bossHit') tone(150, .06, 'sawtooth', .025, .82);
+    else if (name === 'boss') { tone(90, .2, 'sawtooth', .035, .72); tone(180, .14, 'triangle', .025, .55); }
+    else if (name === 'bossDie') { tone(120, .18, 'sawtooth', .04, .5); setTimeout(() => tone(520, .12, 'triangle', .03, 1.6), 70); }
+    else if (name === 'pickup') tone(960, .045, 'sine', .018, 1.35);
+    else if (name === 'upgrade') { tone(520, .06, 'triangle', .025, 1.35); setTimeout(() => tone(760, .07, 'triangle', .022, 1.25), 55); }
+    else if (name === 'hurt') tone(105, .1, 'sawtooth', .035, .72);
+    else if (name === 'dash') tone(430, .06, 'triangle', .02, 1.8);
+    else if (name === 'success') { tone(440, .08, 'triangle', .026, 1.2); setTimeout(() => tone(660, .1, 'triangle', .026, 1.25), 80); setTimeout(() => tone(990, .14, 'sine', .024, 1.05), 170); }
+  }
+
+  function haptic(ms = 18) {
+    if (!meta.soundEnabled || typeof navigator?.vibrate !== 'function') return;
+    try { navigator.vibrate(ms); } catch (err) {}
+  }
+
+  function addShake(power = 2, duration = .12) {
+    if (reduceMotion) return;
+    shakePower = Math.max(shakePower, Math.min(12, power));
+    shakeDuration = Math.max(shakeDuration, duration);
+    shakeTime = Math.max(shakeTime, duration);
+  }
+
+  function screenShakeOffset() {
+    if (shakeTime <= 0) return { x: 0, y: 0 };
+    const t = clamp(shakeTime / Math.max(.001, shakeDuration), 0, 1);
+    const amp = shakePower * t * t;
+    return { x: rand(-amp, amp), y: rand(-amp, amp) };
+  }
+
+  function updateFeedbackTimers(dt) {
+    if (shakeTime > 0) {
+      shakeTime = Math.max(0, shakeTime - dt);
+      if (shakeTime <= 0) shakePower = 0;
+    }
+  }
+
+  function updateSoundUi() {
+    if (!ui.soundBtn) return;
+    ui.soundBtn.textContent = `音效 ${meta.soundEnabled ? 'ON' : 'OFF'}`;
+    ui.soundBtn.classList.toggle('active', !!meta.soundEnabled);
+  }
+
+  function toggleSound() {
+    meta.soundEnabled = !meta.soundEnabled;
+    if (meta.soundEnabled) { ensureAudio(); sfx('upgrade'); }
+    save(false);
+    updateSoundUi();
+    flash(`音效 ${meta.soundEnabled ? '開啟' : '關閉'}`);
+  }
+
+  function impactFeedback(x, y, color = '#37f6ff', strength = 1, sound = 'hit') {
+    sfx(sound);
+    if (strength >= 2.2) addShake(strength, .12);
+    const count = Math.min(12, Math.ceil(3 + strength * 2));
+    for (let i = 0; i < count && particles.length < MAX_PARTICLES; i++) {
+      const a = Math.random() * TWO_PI;
+      particles.push({ x, y, vx: Math.cos(a) * rand(50, 180) * strength, vy: Math.sin(a) * rand(50, 180) * strength, life: rand(.12, .24), max: .24, r: rand(1.1, 2.8) * Math.min(1.7, strength), color, ring: false });
+    }
+  }
+
+  function playerImpact(cause, shake = 3.2, vibrateMs = 18) {
+    lastDamageCause = cause;
+    sfx('hurt');
+    addShake(shake, .13);
+    const now = performance.now();
+    if (now - (sfxGate.haptic || 0) > 220) { sfxGate.haptic = now; haptic(vibrateMs); }
   }
 
   function newRunStats() {
@@ -557,6 +675,7 @@
     }
     save(false);
     renderUpgrades();
+    sfx('upgrade');
     flash(`${def.name} 升到 Lv.${lvl + 1}`);
   }
 
@@ -682,6 +801,7 @@
       if (reward.heal > 0) player.hp = Math.min(player.maxHp, player.hp + reward.heal);
       addText(player.x, player.y - 54, `事件獎勵 +${reward.scrap}`, color);
       burst(player.x, player.y, color, 28, 1.2);
+      sfx('upgrade');
       save(false);
     }
     flash(`${name} 結束${reward ? `｜獎勵 +${reward.scrap}` : ''}`);
@@ -761,6 +881,8 @@
     const hp = (t.hp + wave * 75) * v.hp * (wave === 5 ? .78 : 1);
     const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + (v.final ? 28 : 6), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : 0, shotMult: v.shot, phase2: false, elite: null };
     enemies.push(e);
+    sfx('boss');
+    addShake(v.final ? 6 : 4, .22);
   }
 
   function nearestEnemy(maxRange = Infinity) {
@@ -832,6 +954,7 @@
       ui.autoAimBtn.textContent = `鎖定 ${autoAim ? 'ON' : 'OFF'}`;
       ui.autoAimBtn.classList.toggle('active', autoAim);
     }
+    updateSoundUi();
     if (ui.pauseBtn) {
       ui.pauseBtn.hidden = !running || gameOver || skillChoosing;
       ui.pauseBtn.textContent = paused ? '繼續' : '暫停';
@@ -841,6 +964,7 @@
 
   function shoot() {
     shotSeq++;
+    sfx('shoot');
     const angle = shotTarget();
     const split = Math.min(2, upgradesRuntime.splitShot);
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
@@ -936,10 +1060,12 @@
     maybeDropPowerup(e.x, e.y);
     burst(e.x, e.y, e.color, e.type === 'boss' ? 44 : 18, e.type === 'boss' ? 1.5 : 1);
     addText(e.x, e.y - e.r - 10, `+${scoreGain}`, e.color);
+    impactFeedback(e.x, e.y, e.color, e.type === 'boss' ? 4.8 : e.elite ? 2.4 : 1.2, e.type === 'boss' ? 'bossDie' : e.elite ? 'elite' : 'kill');
     if (e.type === 'boss') {
       if (runStats) runStats.bossKillTime = Math.max(0, runTime - (runStats.bossStart || runTime));
       meta.achievements.bossKilled = true;
       bossActive = false;
+      haptic(e.finalBoss ? 90 : 42);
       flash('Boss 擊破！星環暫時安全');
       if (wave >= SECTOR_CLEAR_WAVE) completeSector();
     }
@@ -985,6 +1111,7 @@
       if (a.test()) {
         meta.achievements[a.id] = true;
         meta.scrap += a.reward;
+        sfx('upgrade');
         flash(`成就解鎖：${a.name} +${a.reward} 碎晶`);
       }
     }
@@ -1039,6 +1166,8 @@
     if (beacon.kind === 'rift') worldFeatures = worldFeatures.filter(f => f.type !== 'hazard' || Math.hypot(f.x - beacon.x, f.y - beacon.y) > 620);
     addText(player.x, player.y - 50, `${def.name} +${instant}`, def.color);
     burst(beacon.x, beacon.y, def.color, 38, 1.35);
+    sfx('upgrade');
+    addShake(1.6, .1);
     const eventId = choose(def.event);
     startEvent(eventId, reward);
     const eventBurst = Math.max(3, Math.round((4 + Math.floor(wave / 3)) * lateGameScale()));
@@ -1108,15 +1237,16 @@
         const push = (player.r + f.r * .76 - d) + 1;
         player.x += Math.cos(a) * push;
         player.y += Math.sin(a) * push;
-        if (f.cool <= 0 && !isPlayerProtected()) { lastDamageCause = 'obstacle'; player.hp -= f.type === 'asteroid' ? 8 : 4; damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
+        if (f.cool <= 0 && !isPlayerProtected()) { playerImpact('obstacle', 2.2, 16); player.hp -= f.type === 'asteroid' ? 8 : 4; damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'hazard' && d < f.r) {
-        if (zoneTick <= 0 && !isPlayerProtected()) { lastDamageCause = 'hazard'; player.hp -= 3 + wave * .12; damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); if (player.hp <= 0) endRun(); }
+        if (zoneTick <= 0 && !isPlayerProtected()) { playerImpact('hazard', 1.6, 10); player.hp -= 3 + wave * .12; damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'repair' && d < f.r && f.cool <= 0) {
         player.hp = Math.min(player.maxHp, player.hp + 14);
         f.cool = 3.2;
         addText(player.x, player.y - 34, '補給 +14', '#4dff88');
+        sfx('pickup');
       }
       if (f.type === 'resource' && d < f.r && f.cool <= 0) {
         dropShard(player.x + rand(-24, 24), player.y + rand(-24, 24), 1);
@@ -1223,7 +1353,10 @@
         if (e.dead) continue;
         const rr = b.r + e.r;
         if (dist2(b, e) < rr * rr) {
-          e.hp -= b.dmg * ((upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1); e.hit = .08; burst(b.x, b.y, b.homing ? '#ffd166' : '#37f6ff', b.homing ? 6 : 4, .55);
+          const weakMult = (upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1;
+          e.hp -= b.dmg * weakMult;
+          e.hit = e.type === 'boss' ? .12 : .08;
+          impactFeedback(b.x, b.y, e.type === 'boss' ? '#ffffff' : b.homing ? '#ffd166' : '#37f6ff', e.type === 'boss' ? .9 : .55, e.type === 'boss' ? 'bossHit' : 'hit');
           if (b.blast > 0) {
             const blastDamage = b.dmg * (.35 + upgradesRuntime.plasmaBurst * .08);
             particles.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: .22, max: .22, r: b.blast * .32, color: '#ff7a3d', ring: true });
@@ -1268,15 +1401,15 @@
         e.x += Math.cos(ga) * 22 * dt;
         e.y += Math.sin(ga) * 22 * dt;
       }
-      if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash(e.finalBoss ? '最終 Boss 二階段：核心失控' : 'Boss 進入二階段：星環暴走'); burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 70 : 48, e.finalBoss ? 1.8 : 1.5); }
+      if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash(e.finalBoss ? '最終 Boss 二階段：核心失控' : 'Boss 進入二階段：星環暴走'); burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 70 : 48, e.finalBoss ? 1.8 : 1.5); sfx('boss'); addShake(e.finalBoss ? 8 : 5, .24); haptic(e.finalBoss ? 55 : 28); }
       if (e.type === 'leech' && d < 185 && !isPlayerProtected()) {
-        lastDamageCause = 'leech'; player.hp -= dt * (1.8 + wave * .04); damageFlash = Math.max(damageFlash, .12);
+        playerImpact('leech', 1.2, 8); player.hp -= dt * (1.8 + wave * .04); damageFlash = Math.max(damageFlash, .12);
         if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
         if (player.hp <= 0) endRun();
       }
       if (e.type === 'bomber' && d < 82 && !isPlayerProtected()) {
         e.dead = true;
-        lastDamageCause = 'bomber'; player.hp -= 14 + wave * .38; damageFlash = .34;
+        playerImpact('bomber', 5.2, 40); player.hp -= 14 + wave * .38; damageFlash = .34;
         player.invuln = .38;
         burst(e.x, e.y, '#ff7a3d', 24, 1.2);
         if (player.hp <= 0) endRun();
@@ -1296,7 +1429,7 @@
       }
       const rr = e.r + player.r;
       if (dist2(e, player) < rr * rr && !isPlayerProtected()) {
-        lastDamageCause = e.type === 'boss' ? 'boss' : 'collision'; player.hp -= Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55); damageFlash = .32;
+        playerImpact(e.type === 'boss' ? 'boss' : 'collision', e.type === 'boss' ? 5.5 : 3.1, e.type === 'boss' ? 42 : 18); player.hp -= Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55); damageFlash = .32;
         player.invuln = dashTime > 0 ? .05 : .68;
         if (e.type !== 'boss') e.dead = true;
         burst(player.x, player.y, '#ff4d6d', 18);
@@ -1310,11 +1443,11 @@
     for (const s of enemyShots) {
       s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
       if (s.type === 'meteor') {
-        for (const e of enemies) if (!e.dead && dist2(s, e) < Math.pow(s.r + e.r, 2)) { e.hp -= s.dmg * 1.7; e.hit = .12; if (e.hp <= 0) killEnemy(e); }
+        for (const e of enemies) if (!e.dead && dist2(s, e) < Math.pow(s.r + e.r, 2)) { e.hp -= s.dmg * 1.7; e.hit = .12; impactFeedback(s.x, s.y, '#ff7a3d', .8, 'hit'); if (e.hp <= 0) killEnemy(e); }
         particles.push({ x: s.x, y: s.y, vx: rand(-10, 10), vy: rand(-10, 10), life: .2, max: .2, r: 3, color: s.color || '#ff7a3d', ring: false });
       }
       if (dist2(s, player) < Math.pow(s.r + player.r, 2) && !isPlayerProtected()) {
-        lastDamageCause = s.type === 'meteor' ? 'meteor' : 'projectile'; s.dead = true; player.hp -= s.dmg; damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
+        playerImpact(s.type === 'meteor' ? 'meteor' : 'projectile', s.type === 'meteor' ? 4.5 : 3.4, s.type === 'meteor' ? 38 : 20); s.dead = true; player.hp -= s.dmg; damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
         if (player.hp <= 0) endRun();
       }
     }
@@ -1328,7 +1461,7 @@
       const dx = player.x - s.x; const dy = player.y - s.y; const d = Math.hypot(dx, dy);
       if (d < mr) { const pull = clamp(1 - d / mr, 0, 1) * 900; s.vx += (dx / Math.max(1, d)) * pull * dt; s.vy += (dy / Math.max(1, d)) * pull * dt; }
       s.x += s.vx * dt; s.y += s.vy * dt;
-      if (d < player.r + s.r + 8) { s.dead = true; meta.scrap += s.value; meta.score += 2; }
+      if (d < player.r + s.r + 8) { s.dead = true; meta.scrap += s.value; meta.score += 2; sfx('pickup'); }
     }
     shards = shards.filter(s => !s.dead && s.life > 0);
 
@@ -1336,9 +1469,9 @@
       p.life -= dt; p.spin += dt * 3;
       if (Math.hypot(player.x - p.x, player.y - p.y) < player.r + p.r + 10) {
         p.dead = true;
-        if (p.kind === 'heal') { player.hp = Math.min(player.maxHp, player.hp + 35); flash('維修核心：護盾 +35'); }
-        if (p.kind === 'nova') { enemies.forEach(e => { e.hp -= 80; if (e.hp <= 0) killEnemy(e); }); burst(player.x, player.y, '#ffd166', 48, 1.7); flash('新星炸彈啟動'); }
-        if (p.kind === 'rapid') { shotTimer = -1; for (let i = 0; i < 5; i++) setTimeout(shoot, i * 55); flash('短暫超頻射擊'); }
+        if (p.kind === 'heal') { player.hp = Math.min(player.maxHp, player.hp + 35); sfx('pickup'); flash('維修核心：護盾 +35'); }
+        if (p.kind === 'nova') { enemies.forEach(e => { e.hp -= 80; if (e.hp <= 0) killEnemy(e); }); burst(player.x, player.y, '#ffd166', 48, 1.7); sfx('boss'); addShake(6, .22); flash('新星炸彈啟動'); }
+        if (p.kind === 'rapid') { shotTimer = -1; sfx('upgrade'); for (let i = 0; i < 5; i++) setTimeout(shoot, i * 55); flash('短暫超頻射擊'); }
       }
     }
     powerups = powerups.filter(p => !p.dead && p.life > 0);
@@ -1363,6 +1496,7 @@
     xpNeed = Math.floor(xpNeed * 1.2 + 5);
     meta.scrap += 8 + Math.floor(wave * 1.45);
     player.hp = Math.min(player.maxHp, player.hp + 20);
+    sfx('upgrade');
     openSkillChoices();
   }
 
@@ -1403,6 +1537,7 @@
     const box = document.getElementById('skillChoices');
     if (box) box.remove();
     flash(`${name} Lv.${upgradesRuntime[id]}`);
+    sfx('upgrade');
   }
 
   function finishWave() {
@@ -1466,6 +1601,9 @@
     meta.achievements.sectorClear = true;
     saveRunRecord(record);
     burst(player.x, player.y, '#bdfcff', 70, 1.9);
+    sfx('success');
+    addShake(7.5, .32);
+    haptic(110);
     ui.overlay.classList.add('visible');
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'SECTOR CLEAR // 撤離成功';
@@ -1484,6 +1622,8 @@
     if (runStats) runStats.deathCause = lastDamageCause || 'unknown';
     closeUpgradeModal();
     gameOver = true;
+    sfx('hurt');
+    addShake(3.2, .16);
     meta.bestWave = Math.max(meta.bestWave, wave);
     const record = makeRunRecord('fail', '-', 0);
     saveRunRecord(record);
@@ -1524,8 +1664,9 @@
     ctx.clearRect(0, 0, W, H);
     drawBackground();
     const c = camera();
+    const shake = screenShakeOffset();
     ctx.save();
-    ctx.translate(-c.x, -c.y);
+    ctx.translate(-c.x + shake.x, -c.y + shake.y);
     drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
     ctx.restore();
     drawMission(); drawTargetGuide(); drawEventBanner(); drawScreenEffects(); drawTouchDpad();
@@ -1891,6 +2032,7 @@
 
   function startOrResume() {
     closeUpgradeModal();
+    ensureAudio();
     if (gameOver || !player) hardResetRun();
     running = true; paused = false; gameOver = false; skillChoosing = false;
     clearRunOverlayExtras();
@@ -1911,9 +2053,9 @@
     }
     updateUi();
   }
-  function doDash() { if (controlMode === 'touch' || !running || paused || gameOver || skillChoosing || dashCooldown > 0) return; dashTime = .16; dashCooldown = Math.max(.55, 1.32 - (meta.upgrades.engine || 0) * .065); player.invuln = .24; burst(player.x, player.y, '#ffd166', 11); }
+  function doDash() { if (controlMode === 'touch' || !running || paused || gameOver || skillChoosing || dashCooldown > 0) return; dashTime = .16; dashCooldown = Math.max(.55, 1.32 - (meta.upgrades.engine || 0) * .065); player.invuln = .24; burst(player.x, player.y, '#ffd166', 11); sfx('dash'); addShake(1.2, .08); }
 
-  function loop(now) { const dt = (now - lastTime) / 1000; lastTime = now; update(dt); draw(); requestAnimationFrame(loop); }
+  function loop(now) { const dt = Math.min((now - lastTime) / 1000, .05); lastTime = now; updateFeedbackTimers(dt); update(dt); draw(); requestAnimationFrame(loop); }
 
   window.addEventListener('resize', resize);
   window.addEventListener('keydown', e => {
@@ -1944,6 +2086,7 @@
   ui.resumeFromUpgradeBtn?.addEventListener('click', resumeFromUpgradeModal);
   ui.controlModeBtn?.addEventListener('click', toggleControlMode);
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
+  ui.soundBtn?.addEventListener('click', toggleSound);
 
   function setTouchDirectionFromClient(e, start = false) {
     const rect = canvas.getBoundingClientRect();
@@ -2036,5 +2179,5 @@
     };
   }
 
-  resize(); applyOfflineRewards(); hardResetRun(); renderUpgrades(); updateUi(); requestAnimationFrame(loop);
+  resize(); applyOfflineRewards(); hardResetRun(); renderUpgrades(); updateSoundUi(); updateUi(); requestAnimationFrame(loop);
 })();

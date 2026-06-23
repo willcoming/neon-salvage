@@ -166,6 +166,7 @@ h1, h2, p { margin: 0; }
   border-color: rgba(255, 209, 102, .62);
   color: var(--gold);
 }
+#soundBtn.active { color: var(--green); border-color: rgba(77,255,136,.58); }
 .combat-controls button.ready,
 .upgrade-prompt {
   border-color: rgba(255, 209, 102, .85);
@@ -399,6 +400,7 @@ body[data-control-mode="touch"] .hint { display: none; }
   .combat-controls { gap: 5px; flex-wrap: nowrap; }
   .combat-controls button, .upgrade-prompt { padding: 4px 6px; min-height: 24px; font-size: 9px; border-radius: 8px; white-space: nowrap; }
   #pauseBtn { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; font-weight: 950; }
+  #soundBtn { max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
   #upgradeMenuBtn { max-width: 86px; overflow: hidden; text-overflow: ellipsis; }
   .modal-backdrop { padding: 10px; align-items: end; }
   #panel { width: 100%; max-height: 72vh; padding: 12px; border-radius: 18px; }

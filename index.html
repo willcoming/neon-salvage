@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=2.28" />
+  <link rel="stylesheet" href="./styles.css?v=2.29" />
 </head>
 <body>
   <div id="app">
@@ -27,6 +27,7 @@
       <div class="combat-controls">
         <button id="controlModeBtn" type="button">操作：鍵鼠模式</button>
         <button id="autoAimBtn" type="button">自動鎖定：OFF</button>
+        <button id="soundBtn" type="button">音效 ON</button>
         <button id="pauseBtn" type="button">暫停</button>
         <span id="upgradePrompt" class="upgrade-prompt" hidden>可升級｜按 P</span>
         <button id="upgradeMenuBtn" type="button" hidden>艦載升級</button>
@@ -56,7 +57,7 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v2.28 結算報告 UI 與重玩迴圈版</strong>
+          <strong>v2.29 打擊感、音效與手感回饋版</strong>
           <ul>
             <li>介面優化：永久升級不再常駐右側/底部面板，改成暫停時開啟彈窗。</li>
             <li>戰鬥進行中不能購買永久升級；按 P 暫停後才可以升級。</li>
@@ -86,6 +87,9 @@
             <li>結算報告 UI：把長文字改成評級、本局成果、戰鬥壓力、節奏、技能流派、診斷與下一局挑戰卡片。</li>
             <li>最近戰績：自動保存最近 5 場撤離/失敗紀錄，可在結算後快速查看。</li>
             <li>重玩迴圈：結算後可再次出擊、打開艦載升級、查看最近戰績或打開玩法說明。</li>
+            <li>打擊感：命中、擊殺、菁英、Boss、受傷與撤離成功加入火花、短震與受控螢幕震動。</li>
+            <li>音效回饋：用 WebAudio 生成主砲、命中、拾取、升級、受傷、Boss 與撤離成功音效，並可切換 ON/OFF。</li>
+            <li>手機回饋：支援瀏覽器震動時，受傷、Boss 擊破與撤離會有短促 haptic feedback。</li>
             <li>新增地圖事件「蜂群入侵」與「重力井」，目標點也可能觸發補給或富礦事件。</li>
             <li>新增敵人「吸能蟲」與「爆裂雷」，新增武器流派「霰彈彈幕」與「蓄能軌砲」。</li>
             <li>新增目標方向箭頭、目標充能環、事件開始提示、受傷紅閃、吸能蟲紫色吸盾光束與爆裂雷自爆預警。</li>
@@ -108,6 +112,7 @@
 - 滑鼠：控制機身朝向與手動瞄準
 - 移動中：機身會跟著移動方向自然轉向；停止移動攻擊時會順著射擊方向轉向
 - E：開關自動鎖定最近敵人；自動鎖定只輔助射擊，不會搶機身方向
+- 音效 ON/OFF：切換 WebAudio 音效與手機震動回饋，設定會保存
 - 空白：相位衝刺，短時間無敵
 - P：暫停並開啟艦載升級彈窗；暫停時才可購買永久升級
 
@@ -136,6 +141,7 @@
 - 如果失敗，結束畫面會根據死因與進度給下一局建議。
 - 結算會顯示戰鬥報告：本局時間、最久波、峰值敵量/粒子/ring、Boss 時間、技能與平衡診斷。
 - 結算後會保存最近 5 場戰績，並提供再次出擊、艦載升級、最近戰績與玩法說明入口。
+- 命中、擊殺、Boss、受傷與撤離成功會有音效、火花與短促螢幕震動；可用 HUD 的音效按鈕關閉。
 - 第 10 波 Boss 是最終 Boss「星環核心主宰」，會更頻繁開火並召喚小怪。
 - 擊破第 10 波 Boss 會完成本區域並撤離成功，結算擊殺、目標、事件與本局碎晶收益；仍可重新出擊挑戰更高分。
 - 蜂群入侵：小型高速敵人持續湧入。
@@ -165,6 +171,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=2.28"></script>
+  <script src="./game.js?v=2.29"></script>
 </body>
 </html>
