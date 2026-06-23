@@ -108,6 +108,7 @@
   let runStartScrap = 0;
   let lastDamageCause = '';
   let tutorialShown = new Set();
+  let runStats = null;
 
   const SECTOR_CLEAR_WAVE = 10;
   const MAX_PARTICLES = 180;
@@ -129,6 +130,61 @@
   }
   function compactWorldFeatureTarget() {
     return Math.max(14, Math.round((22 + Math.min(10, Math.floor(wave / 2))) * lateGameScale()));
+  }
+
+  function newRunStats() {
+    return { waveStart: 0, bossStart: 0, bossKillTime: null, waveTimes: {}, skills: [], maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+  }
+
+  function formatTime(seconds = 0) {
+    const total = Math.max(0, Math.floor(seconds));
+    const m = Math.floor(total / 60).toString().padStart(2, '0');
+    const s = (total % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  }
+
+  function recordWaveTime(n = wave) {
+    if (!runStats) return;
+    const spent = Math.max(0, runTime - (runStats.waveStart || 0));
+    if (spent > 0) runStats.waveTimes[n] = Math.max(runStats.waveTimes[n] || 0, spent);
+  }
+
+  function sampleRunStats() {
+    if (!runStats) return;
+    runStats.maxEnemies = Math.max(runStats.maxEnemies, enemies.length);
+    runStats.maxWorldFeatures = Math.max(runStats.maxWorldFeatures, worldFeatures.length);
+    runStats.maxParticles = Math.max(runStats.maxParticles, particles.length);
+    runStats.maxRings = Math.max(runStats.maxRings, particles.filter(p => p.ring).length);
+  }
+
+  function longestWaveText() {
+    if (!runStats) return '最久波 -';
+    const entries = Object.entries(runStats.waveTimes);
+    if (!entries.length) return '最久波 -';
+    entries.sort((a, b) => b[1] - a[1]);
+    return `最久波 第${entries[0][0]}波 ${formatTime(entries[0][1])}`;
+  }
+
+  function pickedSkillsText() {
+    const list = runStats?.skills || [];
+    if (!list.length) return '技能：尚未選擇';
+    const tail = list.slice(-4).join('、');
+    return `技能：${tail}${list.length > 4 ? ` 等 ${list.length} 個` : ''}`;
+  }
+
+  function balanceHint() {
+    if (!runStats) return '診斷：資料不足，先完成更多波次。';
+    if (runObjectives <= 1 && wave >= 5) return '診斷：目標參與偏低，建議多跑目標點換事件獎勵。';
+    if (runStats.maxEnemies >= enemyCap() - 1) return '診斷：敵量曾達上限，範圍技能與走位會是關鍵。';
+    if (runStats.maxRings >= Math.floor(MAX_RING_PARTICLES * .8)) return '診斷：特效接近預算上限，但已被系統壓住。';
+    if (runStats.bossKillTime && runStats.bossKillTime > 85) return '診斷：Boss 擊殺偏慢，下一局可優先主砲或穿甲/軌砲。';
+    if ((runStats.skills || []).length <= 1 && wave >= 4) return '診斷：局內技能偏少，建議利用目標與事件加速升級。';
+    return '診斷：節奏穩定，可挑戰更高評級。';
+  }
+
+  function combatReport() {
+    const boss = runStats?.bossKillTime ? `｜Boss ${formatTime(runStats.bossKillTime)}` : '';
+    return `戰鬥報告｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}`;
   }
 
   const upgradesRuntime = {
@@ -392,7 +448,7 @@
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); runStats = newRunStats(); bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
     mission = newMission();
     startWave(1);
     for (let i = 0; i < 5; i++) dropShard(player.x + rand(-42, 42), player.y + rand(-42, 42), 1);
@@ -445,14 +501,15 @@
     wave = n;
     bossActive = n % 5 === 0;
     const mobileEase = controlMode === 'touch' ? .98 : 1;
-    const earlyEase = n === 1 ? .58 : n === 2 ? .74 : n === 3 ? .9 : 1;
+    const earlyEase = n === 1 ? .58 : n === 2 ? .74 : n === 3 ? .9 : n === 4 ? .95 : 1;
     spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase * earlyEase);
     spawnTimer = bossActive ? .35 : 0;
     if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell']));
-    else if (wave >= 6 && !bossActive && (wave % 3 === 0 || Math.random() < .28)) startEvent();
+    else if (wave >= 6 && !bossActive && (wave % 3 === 0 || Math.random() < .32)) startEvent();
     if (!beacon || wave % 3 === 1 || wave === 9) beacon = makeBeacon(chooseObjectiveKind());
     if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
     if (bossActive) spawnBoss();
+    if (runStats) { runStats.waveStart = runTime; if (bossActive) runStats.bossStart = runTime; }
     flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : `第 ${wave} 波來襲`);
     showWaveGuide(wave, bossActive);
   }
@@ -549,14 +606,14 @@
     const t = enemyTypes.boss;
     const c = camera();
     const variants = wave >= SECTOR_CLEAR_WAVE ? [
-      { id: 'core', label: '星環核心主宰', color: '#bdfcff', hp: 1.55, speed: 1.08, sides: 14, shot: 1.38, final: true }
+      { id: 'core', label: '星環核心主宰', color: '#bdfcff', hp: 1.42, speed: 1.08, sides: 14, shot: 1.38, final: true }
     ] : [
       { id: 'ring', label: '星環吞噬者', color: '#ff4d6d', hp: 1, speed: 1, sides: 10, shot: 1 },
       { id: 'forge', label: '熔核鍛造者', color: '#ff9f1c', hp: 1.18, speed: .86, sides: 8, shot: .88 },
       { id: 'void', label: '虛空指揮官', color: '#b66dff', hp: .92, speed: 1.22, sides: 12, shot: 1.18 }
     ];
     const v = variants[Math.floor((wave / 5 - 1) % variants.length)];
-    const hp = (t.hp + wave * 75) * v.hp * (wave === 5 ? .82 : 1);
+    const hp = (t.hp + wave * 75) * v.hp * (wave === 5 ? .78 : 1);
     const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + (v.final ? 28 : 6), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : 0, shotMult: v.shot, phase2: false, elite: null };
     enemies.push(e);
   }
@@ -735,6 +792,7 @@
     burst(e.x, e.y, e.color, e.type === 'boss' ? 44 : 18, e.type === 'boss' ? 1.5 : 1);
     addText(e.x, e.y - e.r - 10, `+${scoreGain}`, e.color);
     if (e.type === 'boss') {
+      if (runStats) runStats.bossKillTime = Math.max(0, runTime - (runStats.bossStart || runTime));
       meta.achievements.bossKilled = true;
       bossActive = false;
       flash('Boss 擊破！星環暫時安全');
@@ -800,8 +858,8 @@
   function objectiveReward(def) {
     const mult = def.reward || 1;
     return {
-      scrap: Math.floor((16 + wave * 2.8) * mult),
-      xp: Math.ceil(xpNeed * (.18 + mult * .06)),
+      scrap: Math.floor((18 + wave * 3.1) * mult),
+      xp: Math.ceil(xpNeed * (.20 + mult * .065)),
       shards: Math.ceil(3 + wave * .3 * mult),
       heal: def === objectiveDefs.hold ? 10 : def === objectiveDefs.rift ? 6 : 0
     };
@@ -987,6 +1045,7 @@
     }
 
     updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updatePickups(dt); updateParticles(dt);
+    sampleRunStats();
 
     if (xp >= xpNeed) levelUp();
     if (spawnLeft <= 0 && enemies.length === 0) finishWave();
@@ -1189,6 +1248,7 @@
 
   function chooseSkill(id, name) {
     upgradesRuntime[id]++;
+    if (runStats) runStats.skills.push(name);
     skillChoosing = false;
     paused = false;
     ui.overlay.classList.remove('visible');
@@ -1200,6 +1260,7 @@
   }
 
   function finishWave() {
+    recordWaveTime(wave);
     meta.bestWave = Math.max(meta.bestWave, wave + 1);
     const reward = 5 + Math.floor(wave * 1.25) + (bossActive ? 20 : 0) + (beacon && Math.hypot(player.x - beacon.x, player.y - beacon.y) < 130 ? 10 : 0);
     meta.scrap += reward;
@@ -1246,6 +1307,8 @@
 
   function completeSector() {
     if (gameOver) return;
+    recordWaveTime(wave);
+    sampleRunStats();
     closeUpgradeModal();
     gameOver = true;
     paused = true;
@@ -1260,7 +1323,7 @@
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'SECTOR CLEAR // 撤離成功';
     card.querySelector('h2').textContent = `星環核心已回收｜評級 ${grade}`;
-    card.querySelector('p:not(.eyebrow)').textContent = `你擊破第 ${wave} 波 Boss，完成本區域目標，帶回 ${bonus} 額外碎晶。本局擊毀 ${runKills} 架、完成 ${runObjectives} 個目標、撐過 ${runEvents} 場事件，碎晶淨收益 ${runScrapGain()}。${nextChallengeForGrade(grade)}`;
+    card.querySelector('p:not(.eyebrow)').textContent = `你擊破第 ${wave} 波 Boss，完成本區域目標，帶回 ${bonus} 額外碎晶。本局擊毀 ${runKills} 架、完成 ${runObjectives} 個目標、撐過 ${runEvents} 場事件，碎晶淨收益 ${runScrapGain()}。${nextChallengeForGrade(grade)} ${combatReport()}`;
     card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '再次出擊';
     ui.startBtn.style.display = '';
@@ -1269,6 +1332,9 @@
   }
 
   function endRun() {
+    recordWaveTime(wave);
+    sampleRunStats();
+    if (runStats) runStats.deathCause = lastDamageCause || 'unknown';
     closeUpgradeModal();
     gameOver = true;
     meta.bestWave = Math.max(meta.bestWave, wave);
@@ -1277,7 +1343,7 @@
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'RUN TERMINATED';
     card.querySelector('h2').textContent = '飛船解體，但資料已保存。';
-    card.querySelector('p:not(.eyebrow)').textContent = `你撐到第 ${wave} 波，擊毀 ${runKills} 架無人機，完成 ${runObjectives} 個目標，累積分數 ${Math.floor(meta.score)}。${deathAdvice()}`;
+    card.querySelector('p:not(.eyebrow)').textContent = `你撐到第 ${wave} 波，擊毀 ${runKills} 架無人機，完成 ${runObjectives} 個目標，累積分數 ${Math.floor(meta.score)}。${deathAdvice()} ${combatReport()}`;
     card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '重新出擊';
     ui.startBtn.style.display = '';
