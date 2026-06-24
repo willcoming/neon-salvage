@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=2.34" />
+  <link rel="stylesheet" href="./styles.css?v=2.35" />
 </head>
 <body>
   <div id="app">
@@ -57,7 +57,7 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v2.34 艦載升級重整版</strong>
+          <strong>v2.35 成就與解鎖版</strong>
           <ul>
             <li>介面優化：永久升級不再常駐右側/底部面板，改成暫停時開啟彈窗。</li>
             <li>戰鬥進行中不能購買永久升級；按 P 暫停後才可以升級。</li>
@@ -101,6 +101,8 @@
             <li>終局壓力：脈衝體會環形彈幕，裂隙母巢會召喚護盾衛星與裂隙；戰鬥報告會記錄 Boss 名稱。</li>
             <li>艦載升級重整：永久升級分為火力系、生存系、拾荒系，新增過載反應爐、緊急裝甲與星圖掃描。</li>
             <li>模組解鎖：部分高階艦載模組需要成就解鎖，升級介面會顯示解鎖條件。</li>
+            <li>成就解鎖：新增更多成就目標，成就會給碎晶並解鎖艦載模組、挑戰入口或報告提示。</li>
+            <li>首頁與結算都會顯示下一個解鎖目標，讓每局結束後更清楚下一步要追什麼。</li>
             <li>新增地圖事件「蜂群入侵」與「重力井」，目標點也可能觸發補給或富礦事件。</li>
             <li>新增敵人「吸能蟲」與「爆裂雷」，新增武器流派「霰彈彈幕」與「蓄能軌砲」。</li>
             <li>新增目標方向箭頭、目標充能環、事件開始提示、受傷紅閃、吸能蟲紫色吸盾光束與爆裂雷自爆預警。</li>
@@ -112,6 +114,7 @@
           </ul>
         </div>
         <div id="offlineNotice" class="offline"></div>
+        <div id="achievementPanel" class="achievement-panel"></div>
         <div class="actions">
           <button id="startBtn">開始 / 繼續</button>
           <button id="howBtn" class="secondary">玩法說明</button>
@@ -163,6 +166,7 @@
 - 結算報告會記錄本局 Boss 名稱與擊殺時間。
 - 艦載升級分成火力系、生存系與拾荒系；高階模組需要完成指定成就後才可購買。
 - 過載反應爐提升武器傷害，緊急裝甲提高耐久並減傷，星圖掃描提高目標/事件收益。
+- 成就不只給碎晶，也會解鎖模組與挑戰方向；首頁和結算會顯示下一個解鎖目標。
 - 第 10 波 Boss 是最終 Boss「星環核心主宰」，會更頻繁開火並召喚小怪。
 - 擊破第 10 波 Boss 會完成本區域並撤離成功，結算擊殺、目標、事件與本局碎晶收益；仍可重新出擊挑戰更高分。
 - 蜂群入侵：小型高速敵人持續湧入。
@@ -192,6 +196,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=2.34"></script>
+  <script src="./game.js?v=2.35"></script>
 </body>
 </html>

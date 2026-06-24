@@ -27,6 +27,7 @@
     pauseBtn: document.getElementById('pauseBtn'),
     upgradePrompt: document.getElementById('upgradePrompt'),
     offlineNotice: document.getElementById('offlineNotice'),
+    achievementPanel: document.getElementById('achievementPanel'),
     touchGuide: document.getElementById('touchGuide')
   };
 
@@ -451,6 +452,8 @@
     report.className = 'run-report';
     const skillHtml = record.skills.length ? record.skills.map(s => `<span>${escapeHtml(s)}</span>`).join('') : '<span>尚未選擇技能</span>';
     const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
+    const unlock = nextAchievement();
+    const unlockHtml = unlock ? `${escapeHtml(unlock.name)}｜${escapeHtml(unlock.progress?.() || '')}｜${escapeHtml(unlock.unlock || '')}` : '所有成就已解鎖';
     report.innerHTML = `
       <div class="grade-badge ${record.status === 'clear' ? 'win' : 'fail'}"><span>${escapeHtml(record.status === 'clear' ? record.grade : '失敗')}</span><small>${escapeHtml(record.status === 'clear' ? '撤離成功' : '資料已保存')}</small></div>
       <div class="report-grid">
@@ -462,6 +465,7 @@
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
       <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
       <div class="skill-chips"><b>技能流派</b>${skillHtml}</div>
+      <div class="diagnosis"><b>解鎖目標</b><p>${unlockHtml}</p></div>
       <div class="diagnosis"><b>診斷</b><p>${escapeHtml(record.diagnosis)}</p></div>
       <div class="next-challenges"><b>下一局挑戰</b><ul>${record.challenges.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul></div>`;
     renderPostRunActions(card);
@@ -578,11 +582,28 @@
   };
 
   const achievementDefs = [
-    { id: 'wave5', name: '突破第 5 波', test: () => wave >= 5, reward: 20 },
-    { id: 'kills50', name: '擊毀 50 架無人機', test: () => totalKills >= 50, reward: 35 },
-    { id: 'boss1', name: '擊破第一台 Boss', test: () => meta.achievements.bossKilled, reward: 60 },
-    { id: 'scrap200', name: '累積 200 碎晶', test: () => meta.scrap >= 200, reward: 45 }
+    { id: 'wave5', name: '突破第 5 波', unlock: '解鎖過載反應爐', test: () => wave >= 5 || meta.bestWave >= 5, progress: () => `${Math.min(Math.max(wave, meta.bestWave), 5)}/5 波`, reward: 20 },
+    { id: 'kills50', name: '擊毀 50 架無人機', unlock: '解鎖緊急裝甲', test: () => totalKills >= 50, progress: () => `${Math.min(totalKills, 50)}/50 擊殺`, reward: 35 },
+    { id: 'boss1', name: '擊破第一台 Boss', unlock: 'Boss 變體資料寫入戰鬥報告', test: () => meta.achievements.bossKilled, progress: () => meta.achievements.bossKilled ? '已擊破' : '未擊破', reward: 60 },
+    { id: 'scrap200', name: '累積 200 碎晶', unlock: '解鎖星圖掃描', test: () => meta.scrap >= 200, progress: () => `${Math.min(Math.floor(meta.scrap), 200)}/200 碎晶`, reward: 45 },
+    { id: 'objectives5', name: '一局完成 5 個目標', unlock: '事件獎勵提高', test: () => runObjectives >= 5, progress: () => `${Math.min(runObjectives, 5)}/5 目標`, reward: 50 },
+    { id: 'rushWin', name: '完成拾荒競速', unlock: '拾荒系挑戰加入結算建議', test: () => (runStats?.salvageRushWins || 0) > 0, progress: () => (runStats?.salvageRushWins || 0) > 0 ? '已完成' : '等待事件', reward: 55 },
+    { id: 'gradeS', name: 'S 評級撤離', unlock: '高難挑戰入口準備完成', test: () => (meta.recentRuns || []).some(r => r.grade === 'S'), progress: () => (meta.recentRuns || []).some(r => r.grade === 'S') ? '已達成' : '尚未 S 評級', reward: 90 },
+    { id: 'clear1', name: '第一次撤離成功', unlock: '解鎖 v3 Beta 進度標記', test: () => meta.achievements.sectorClear, progress: () => meta.achievements.sectorClear ? '已撤離' : '未撤離', reward: 100 }
   ];
+
+  function nextAchievement() {
+    return achievementDefs.find(a => !meta.achievements[a.id]);
+  }
+
+  function renderAchievementPanel() {
+    if (!ui.achievementPanel) return;
+    const done = achievementDefs.filter(a => meta.achievements[a.id]).length;
+    const next = nextAchievement();
+    ui.achievementPanel.innerHTML = next
+      ? `<b>解鎖進度 ${done}/${achievementDefs.length}</b><span>下一個：${escapeHtml(next.name)}｜${escapeHtml(next.progress?.() || '')}</span><small>${escapeHtml(next.unlock || '')}，獎勵 +${escapeHtml(next.reward)} 碎晶</small>`
+      : `<b>解鎖進度 ${done}/${achievementDefs.length}</b><span>所有成就已解鎖</span><small>可以挑戰高難與更高評級。</small>`;
+  }
 
   function resize() {
     dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -626,6 +647,7 @@
     localStorage.setItem(SAVE_KEY, JSON.stringify(meta));
     if (show) flash('已保存到本機瀏覽器');
     renderUpgrades();
+    renderAchievementPanel();
   }
 
   function resetSave() {
@@ -635,6 +657,7 @@
     meta = baseState();
     hardResetRun();
     save(true);
+    renderAchievementPanel();
     flash('宇宙已重置');
   }
 
@@ -1270,7 +1293,9 @@
         meta.achievements[a.id] = true;
         meta.scrap += a.reward;
         sfx('upgrade');
-        flash(`成就解鎖：${a.name} +${a.reward} 碎晶`);
+        renderAchievementPanel();
+        save(false);
+        flash(`成就解鎖：${a.name}｜${a.unlock || '新目標'} +${a.reward} 碎晶`);
       }
     }
   }
@@ -1797,6 +1822,7 @@
     meta.bestWave = Math.max(meta.bestWave, wave);
     meta.achievements.sectorClear = true;
     saveRunRecord(record);
+    checkAchievements();
     burst(player.x, player.y, '#bdfcff', 70, 1.9);
     sfx('success');
     addShake(7.5, .32);
@@ -2406,5 +2432,5 @@
     };
   }
 
-  resize(); applyOfflineRewards(); hardResetRun(); renderUpgrades(); updateSoundUi(); updateUi(); requestAnimationFrame(loop);
+  resize(); applyOfflineRewards(); hardResetRun(); renderUpgrades(); renderAchievementPanel(); updateSoundUi(); updateUi(); requestAnimationFrame(loop);
 })();
