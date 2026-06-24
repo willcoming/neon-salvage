@@ -293,6 +293,19 @@
     return `技能：${tail}${list.length > 4 ? ` 等 ${list.length} 個` : ''}`;
   }
 
+  function detectBuildName() {
+    const r = upgradesRuntime || {};
+    const builds = [
+      ['軌砲穿透流', (r.railCharge || 0) * 3 + (r.railOverload || 0) * 4 + (r.lanceRounds || 0)],
+      ['霰彈近戰流', (r.flakBurst || 0) * 3 + (r.flakRecoil || 0) * 4],
+      ['電漿清場流', (r.plasmaBurst || 0) * 3 + (r.chainBurst || 0) * 3 + (r.chain || 0)],
+      ['追蹤輔助流', (r.homingRounds || 0) * 3 + (r.droneWing || 0) * 3],
+      ['暴擊灼燒流', (r.critCore || 0) * 3 + (r.burnRounds || 0) * 3],
+      ['主砲速射流', (r.harvestDrive || 0) * 2 + (r.weakScan || 0) + (r.splitShot || 0)]
+    ].sort((a, b) => b[1] - a[1]);
+    return builds[0][1] > 0 ? builds[0][0] : '未成形';
+  }
+
   function balanceHint() {
     if (!runStats) return '診斷：資料不足，先完成更多波次。';
     if ((runStats.shieldSatelliteTime || 0) > 8 && (runStats.shieldSatelliteKills || 0) <= 1) return '診斷：護盾衛星拖慢清場，下一局看到藍色衛星要優先擊破。';
@@ -367,6 +380,7 @@
       maxRings: runStats?.maxRings || 0,
       bossTime: runStats?.bossKillTime ? Math.floor(runStats.bossKillTime) : 0,
       skills: [...(runStats?.skills || [])].slice(-6),
+      build: detectBuildName(),
       zone: runStats?.zone || currentZone().name,
       eventsSeen: [...(runStats?.eventsSeen || [])].slice(-5),
       shieldSatelliteKills: runStats?.shieldSatelliteKills || 0,
@@ -445,6 +459,7 @@
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
+      <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
       <div class="skill-chips"><b>技能流派</b>${skillHtml}</div>
       <div class="diagnosis"><b>診斷</b><p>${escapeHtml(record.diagnosis)}</p></div>
       <div class="next-challenges"><b>下一局挑戰</b><ul>${record.challenges.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul></div>`;
@@ -466,7 +481,13 @@
     lanceRounds: 0,
     plasmaBurst: 0,
     flakBurst: 0,
-    railCharge: 0
+    railCharge: 0,
+    critCore: 0,
+    burnRounds: 0,
+    chainBurst: 0,
+    railOverload: 0,
+    flakRecoil: 0,
+    droneWing: 0
   };
 
   const upgradeDefs = [
@@ -489,6 +510,12 @@
     { id: 'plasmaBurst', name: '電漿爆裂', desc: '子彈命中時產生小範圍爆炸，適合清密集敵群。' },
     { id: 'flakBurst', name: '霰彈彈幕', desc: '額外噴出短距離扇形彈，適合近距離清場。' },
     { id: 'railCharge', name: '蓄能軌砲', desc: '每隔數發打出高傷害穿透重擊。' },
+    { id: 'critCore', name: '暴擊核心', desc: '主砲有機率造成暴擊，對 Boss 更有效。' },
+    { id: 'burnRounds', name: '燃燒彈頭', desc: '命中後附加短時間灼燒，適合壓厚血敵人。' },
+    { id: 'chainBurst', name: '連鎖爆裂', desc: '擊殺會觸發小爆裂，清群怪更穩。' },
+    { id: 'railOverload', name: '軌砲過載', desc: '蓄能軌砲傷害與貫穿提高，但節奏更重。' },
+    { id: 'flakRecoil', name: '霰彈反沖', desc: '霰彈發射時短暫反推飛船，方便拉開距離。' },
+    { id: 'droneWing', name: '無人機增殖', desc: '額外釋放微型無人機光彈，形成被動輸出。' },
     { id: 'weakScan', name: '弱點掃描', desc: '對精英與 Boss 造成額外傷害。' },
     { id: 'harvestDrive', name: '收割引擎', desc: '連續擊殺會短暫提高射速。' }
   ];
@@ -1024,6 +1051,8 @@
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
     const lance = upgradesRuntime.lanceRounds > 0;
     const rail = upgradesRuntime.railCharge > 0 && shotSeq % Math.max(3, 7 - upgradesRuntime.railCharge) === 0;
+    const crit = upgradesRuntime.critCore > 0 && Math.random() < Math.min(.34, .08 + upgradesRuntime.critCore * .055);
+    const railBoost = rail ? 1 + upgradesRuntime.railOverload * .22 : 1;
     for (const s of spread) {
       bullets.push({
         type: rail ? 'rail' : lance ? 'lance' : 'pulse', homing: false, target: null, turn: 0,
@@ -1033,16 +1062,22 @@
         vy: Math.sin(angle + s) * (rail ? 940 : lance ? 820 : 690),
         life: rail ? .98 : lance ? 1.18 : 1.05,
         r: rail ? 7.2 : lance ? 5.8 : 4.5,
-        dmg: damage() * (spread.length > 1 ? .76 : 1) * (rail ? 1.85 + upgradesRuntime.railCharge * .18 : lance ? .88 + upgradesRuntime.lanceRounds * .08 : 1),
-        pierce: (upgradesRuntime.chain > 1 ? 1 : 0) + (rail ? 5 : lance ? Math.min(3, upgradesRuntime.lanceRounds) : 0),
-        blast: upgradesRuntime.plasmaBurst > 0 ? 42 + upgradesRuntime.plasmaBurst * 18 : 0
+        dmg: damage() * (spread.length > 1 ? .76 : 1) * (crit ? 1.75 : 1) * (rail ? (1.85 + upgradesRuntime.railCharge * .18) * railBoost : lance ? .88 + upgradesRuntime.lanceRounds * .08 : 1),
+        pierce: (upgradesRuntime.chain > 1 ? 1 : 0) + (rail ? 5 + upgradesRuntime.railOverload : lance ? Math.min(3, upgradesRuntime.lanceRounds) : 0),
+        blast: upgradesRuntime.plasmaBurst > 0 ? 42 + upgradesRuntime.plasmaBurst * 18 : rail && upgradesRuntime.railOverload > 0 ? 22 + upgradesRuntime.railOverload * 9 : 0,
+        crit,
+        burn: upgradesRuntime.burnRounds
       });
     }
     if (upgradesRuntime.flakBurst > 0) {
       const count = 2 + Math.min(5, upgradesRuntime.flakBurst * 2);
       for (let i = 0; i < count; i++) {
         const off = (i - (count - 1) / 2) * .18 + rand(-.035, .035);
-        bullets.push({ type: 'flak', homing: false, target: null, turn: 0, x: player.x + Math.cos(angle + off) * 17, y: player.y + Math.sin(angle + off) * 17, vx: Math.cos(angle + off) * rand(520, 650), vy: Math.sin(angle + off) * rand(520, 650), life: .55, r: 3.8, dmg: damage() * (.26 + upgradesRuntime.flakBurst * .035), pierce: 0, blast: 18 + upgradesRuntime.flakBurst * 4 });
+        bullets.push({ type: 'flak', homing: false, target: null, turn: 0, x: player.x + Math.cos(angle + off) * 17, y: player.y + Math.sin(angle + off) * 17, vx: Math.cos(angle + off) * rand(520, 650), vy: Math.sin(angle + off) * rand(520, 650), life: .55, r: 3.8, dmg: damage() * (.26 + upgradesRuntime.flakBurst * .035), pierce: 0, blast: 18 + upgradesRuntime.flakBurst * 4, crit: false, burn: upgradesRuntime.burnRounds });
+      }
+      if (upgradesRuntime.flakRecoil > 0) {
+        player.x -= Math.cos(angle) * (5 + upgradesRuntime.flakRecoil * 3);
+        player.y -= Math.sin(angle) * (5 + upgradesRuntime.flakRecoil * 3);
       }
     }
     if (upgradesRuntime.homingRounds > 0) {
@@ -1060,8 +1095,18 @@
           r: 4.2,
           dmg: damage() * (.34 + upgradesRuntime.homingRounds * .06),
           pierce: 0,
-          blast: 0
+          blast: 0,
+          crit: false,
+          burn: 0
         });
+      }
+    }
+    if (upgradesRuntime.droneWing > 0) {
+      const target = nearestEnemy(760);
+      const count = Math.min(3, upgradesRuntime.droneWing);
+      for (let i = 0; i < count; i++) {
+        const off = (i - (count - 1) / 2) * .42;
+        bullets.push({ type: 'drone', homing: true, target, turn: 6.2, x: player.x + Math.cos(angle + off) * 20, y: player.y + Math.sin(angle + off) * 20, vx: Math.cos(angle + off) * 560, vy: Math.sin(angle + off) * 560, life: 1.1, r: 3.5, dmg: damage() * (.18 + upgradesRuntime.droneWing * .035), pierce: 0, blast: 0, crit: false, burn: 0 });
       }
     }
   }
@@ -1125,6 +1170,19 @@
       if (wave >= SECTOR_CLEAR_WAVE) completeSector();
     }
     if (upgradesRuntime.chain > 0) chainArc(e.x, e.y, e.type === 'boss' ? 80 : 42);
+    if (upgradesRuntime.chainBurst > 0 && e.type !== 'boss') {
+      const radius = 70 + upgradesRuntime.chainBurst * 18;
+      particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: .22, max: .22, r: radius * .28, color: '#ff7a3d', ring: true });
+      for (const other of enemies) {
+        if (other.dead || other === e) continue;
+        const d = Math.hypot(other.x - e.x, other.y - e.y);
+        if (d < radius + other.r) {
+          other.hp -= (18 + upgradesRuntime.chainBurst * 9) * (1 - Math.min(.55, d / radius * .4));
+          other.hit = .08;
+          if (other.hp <= 0) killEnemy(other);
+        }
+      }
+    }
     checkAchievements();
   }
 
@@ -1421,6 +1479,8 @@
           }
           e.hp -= hitDamage;
           e.hit = e.type === 'boss' ? .12 : .08;
+          if (b.crit) addText(e.x, e.y - e.r - 14, 'CRIT', '#fff6c7');
+          if (b.burn > 0) e.burn = Math.max(e.burn || 0, 1.6 + b.burn * .35);
           impactFeedback(b.x, b.y, e.type === 'boss' ? '#ffffff' : b.homing ? '#ffd166' : '#37f6ff', e.type === 'boss' ? .9 : .55, e.type === 'boss' ? 'bossHit' : 'hit');
           if (b.blast > 0) {
             const blastDamage = b.dmg * (.35 + upgradesRuntime.plasmaBurst * .08);
@@ -1449,6 +1509,12 @@
     for (const e of enemies) {
       const a = Math.atan2(player.y - e.y, player.x - e.x);
       const d = Math.hypot(player.x - e.x, player.y - e.y);
+      if (e.burn > 0) {
+        e.burn = Math.max(0, e.burn - dt);
+        e.hp -= dt * (5 + upgradesRuntime.burnRounds * 2.6);
+        if (Math.random() < dt * 4 && particles.length < MAX_PARTICLES) particles.push({ x: e.x + rand(-e.r, e.r), y: e.y + rand(-e.r, e.r), vx: rand(-15, 15), vy: rand(-20, 5), life: .22, max: .22, r: 2.2, color: '#ff7a3d', ring: false });
+        if (e.hp <= 0) { killEnemy(e); continue; }
+      }
       const slow = (upgradesRuntime.slowField > 0 && d < slowRadius ? .55 : 1) * (activeEvent?.id === 'empStorm' ? .82 : 1);
       const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
       e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
@@ -1946,6 +2012,7 @@
       ctx.shadowColor = e.color; ctx.shadowBlur = e.hit > 0 ? 20 : 9; ctx.fillStyle = e.hit > 0 ? '#fff' : e.color;
       if (e.type === 'bomber' && ed < 150) { ctx.shadowColor = '#ff7a3d'; ctx.shadowBlur = 22; ctx.globalAlpha = .62 + Math.sin(performance.now() * .024) * .28; }
       if (e.type === 'shieldSat') { ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, er + 7 + Math.sin(performance.now() * .006) * 2, 0, TWO_PI); ctx.stroke(); }
+      if (e.burn > 0) { ctx.shadowColor = '#ff7a3d'; ctx.shadowBlur = 20; }
       if (e.elite || e.phase2) { ctx.strokeStyle = e.elite?.color || '#ff4d6d'; ctx.lineWidth = 2; ctx.globalAlpha = .32 + Math.sin(performance.now() * .006) * .12; ctx.beginPath(); ctx.arc(0, 0, er + 3, 0, TWO_PI); ctx.stroke(); ctx.globalAlpha = 1; }
       ctx.beginPath();
       for (let i = 0; i < e.sides * 2; i++) { const a = i / (e.sides * 2) * TWO_PI; const r = i % 2 ? er * .66 : er; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
