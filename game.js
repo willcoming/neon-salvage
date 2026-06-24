@@ -64,9 +64,8 @@
 
   const keys = new Set();
   const mouse = { x: W / 2, y: H / 2, down: false, lastMove: performance.now() };
-  const coarsePointer = window.matchMedia?.('(pointer: coarse)')?.matches || window.innerWidth <= 860;
   const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false;
-  let controlMode = coarsePointer ? 'touch' : 'keyboard';
+  let controlMode = 'keyboard';
   const touchMove = { x: 0, y: 0, active: false, pressed: false, sx: W / 2, sy: H / 2, cx: W / 2, cy: H / 2, dir: '', force: 0 };
 
   const baseState = () => ({
@@ -76,12 +75,15 @@
     achievements: {},
     recentRuns: [],
     soundEnabled: true,
+    controlMode: 'keyboard',
+    autoAim: true,
     difficulty: 'standard',
     lastSaved: Date.now(),
     upgrades: { cannon: 0, reactor: 0, shield: 0, armor: 0, engine: 0, magnet: 0, survey: 0, drone: 0 }
   });
 
   let meta = loadSave();
+  controlMode = meta.controlMode === 'touch' ? 'touch' : 'keyboard';
   let player;
   let bullets = [];
   let enemies = [];
@@ -105,7 +107,7 @@
   let gameOver = false;
   let bossActive = false;
   let mission = null;
-  let autoAim = false;
+  let autoAim = meta.autoAim !== false;
   let activeEvent = null;
   let activeZone = null;
   let eventTimer = 0;
@@ -737,8 +739,12 @@
     localStorage.removeItem(SAVE_KEY);
     localStorage.removeItem('neon-salvage-save-v1');
     meta = baseState();
+    controlMode = meta.controlMode;
+    autoAim = meta.autoAim;
+    document.body.dataset.controlMode = controlMode;
     hardResetRun();
     save(true);
+    updateCombatControls();
     renderAchievementPanel();
     flash('宇宙已重置');
   }
@@ -1164,6 +1170,8 @@
 
   function toggleAutoAim() {
     autoAim = !autoAim;
+    meta.autoAim = autoAim;
+    save(false);
     flash(autoAim ? '自動鎖定最近敵人：ON' : '自動鎖定最近敵人：OFF');
     updateCombatControls();
   }
@@ -1171,10 +1179,13 @@
   function setControlMode(mode, announce = true) {
     controlMode = mode === 'touch' ? 'touch' : 'keyboard';
     document.body.dataset.controlMode = controlMode;
-    autoAim = controlMode === 'touch';
+    if (controlMode === 'touch') autoAim = true;
+    meta.controlMode = controlMode;
+    meta.autoAim = autoAim;
     if (player) player.r = playerRadius();
     touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pressed = false; touchMove.dir = ''; touchMove.force = 0;
-    if (announce) flash(controlMode === 'touch' ? '手機自動模式：自動瞄準 ON' : '鍵鼠模式：鍵盤移動 / 滑鼠瞄準');
+    if (announce) flash(controlMode === 'touch' ? '手機模式：自動瞄準 ON' : `滑鼠模式：自動瞄準 ${autoAim ? 'ON' : 'OFF'}`);
+    save(false);
     updateCombatControls();
   }
 
@@ -1185,7 +1196,7 @@
   function updateCombatControls() {
     if (ui.settingsBtn) ui.settingsBtn.classList.toggle('active', isSettingsModalOpen());
     if (ui.controlModeBtn) {
-      ui.controlModeBtn.textContent = controlMode === 'touch' ? '手機' : '鍵鼠';
+      ui.controlModeBtn.textContent = controlMode === 'touch' ? '手機' : '滑鼠';
       ui.controlModeBtn.classList.toggle('active', controlMode === 'touch');
     }
     if (ui.autoAimBtn) {

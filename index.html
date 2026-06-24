@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=3.0.3" />
+  <link rel="stylesheet" href="./styles.css?v=3.0.4" />
 </head>
 <body>
   <div id="app">
@@ -60,12 +60,12 @@
         </header>
         <div class="settings-list">
           <section class="setting-row">
-            <div><strong>操作模式</strong><small>手機會自動鎖定；鍵鼠可手動瞄準與衝刺。</small></div>
-            <button id="controlModeBtn" type="button">鍵鼠</button>
+            <div><strong>操作模式</strong><small>預設滑鼠/鍵盤操作；手機模式可手動切換。</small></div>
+            <button id="controlModeBtn" type="button">滑鼠</button>
           </section>
           <section class="setting-row">
             <div><strong>自動鎖定</strong><small>只輔助射擊，不會搶機身方向。</small></div>
-            <button id="autoAimBtn" type="button">鎖定 OFF</button>
+            <button id="autoAimBtn" type="button">鎖定 ON</button>
           </section>
           <section class="setting-row">
             <div><strong>音效 / 震動</strong><small id="audioStatus">尚未測試音效</small></div>
@@ -89,10 +89,10 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v3.0.3 設定選單修正版</strong>
+          <strong>v3.0.4 預設滑鼠自瞄版</strong>
           <ul>
-            <li>新增設定選單：操作模式、自動鎖定、音效、測試音效與難度集中管理。</li>
-            <li>HUD 改成只保留戰鬥必要入口，避免手機上方按鈕太擠。</li>
+            <li>預設操作改成滑鼠/鍵盤模式，並且自動鎖定預設 ON。</li>
+            <li>切回滑鼠模式時不再自動關閉自動鎖定；操作模式與自動鎖定會保存。</li>
             <li>保留 v3.0 Demo/Beta 完整內容：10 波撤離、多星域、多事件、多 Boss、build 流派、成就、難度、音效與手機 UI。</li>
           </ul>
         </div>
@@ -110,7 +110,7 @@
 - 滑鼠：控制機身朝向與手動瞄準
 - 移動中：機身會跟著移動方向自然轉向；停止移動攻擊時會順著射擊方向轉向
 - E：開關自動鎖定最近敵人；自動鎖定只輔助射擊，不會搶機身方向
-- 設定：操作模式、自動鎖定、音效、測試音效與難度都集中在設定選單內
+- 設定：操作模式、自動鎖定、音效、測試音效與難度都集中在設定選單內；預設是滑鼠/鍵盤 + 自動鎖定 ON
 - 音效：使用 WebAudio 即時生成，若手機沒聲音，請先在設定內點「測試音效」喚醒
 - 空白：相位衝刺，短時間無敵
 - P：暫停並開啟艦載升級彈窗；暫停時才可購買永久升級
@@ -121,8 +121,8 @@
 - 手機版飛船會同比例縮小，碰撞半徑也同步縮小
 - 放開螢幕會立刻停止，方向鍵盤也會消失
 - 按住時會出現半透明方向鍵盤、拇指點與目前方向高亮
-- 手機自動模式：自動瞄準 ON，沒有衝刺鍵
-- 操作模式：手機自動 / 鍵鼠模式切換
+- 手機模式：觸控移動會自動開啟自動瞄準，沒有衝刺鍵
+- 操作模式：預設滑鼠/鍵盤，可在設定切換手機模式
 
 完整地圖元件圖像：
 - 黃色發光晶體：資源，靠近會掉碎晶
@@ -186,6 +186,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=3.0.3"></script>
+  <script src="./game.js?v=3.0.4"></script>
 </body>
 </html>
