@@ -89,6 +89,7 @@
     controlMode: 'keyboard',
     autoAim: true,
     aimAssist: 'assist',
+    tutorialDone: false,
     difficulty: 'standard',
     lastSaved: Date.now(),
     upgrades: { cannon: 0, reactor: 0, shield: 0, armor: 0, engine: 0, magnet: 0, survey: 0, drone: 0 }
@@ -102,6 +103,7 @@
   meta.shakeStrength = clamp(Number(meta.shakeStrength ?? .7), 0, 1);
   meta.touchSensitivity = clamp(Number(meta.touchSensitivity ?? 1), .55, 1.6);
   meta.hapticsEnabled = meta.hapticsEnabled !== false;
+  meta.tutorialDone = meta.tutorialDone === true || (meta.bestWave || 1) >= 3 || !!meta.achievements?.sectorClear;
   let player;
   let bullets = [];
   let enemies = [];
@@ -142,6 +144,7 @@
   let runStartScrap = 0;
   let lastDamageCause = '';
   let tutorialShown = new Set();
+  let tutorialRun = null;
   let runStats = null;
   let upgradeFromRun = false;
   let audioCtx = null;
@@ -696,6 +699,14 @@
     hunt: { name: '獵殺菁英', color: '#ff3df2', event: ['eliteStorm', 'rich', 'salvageRush'], reward: 1.7, charge: 1 }
   };
 
+  const tutorialDefs = [
+    { id: 'move', label: '推進', text: 'WASD/方向鍵移動；滑鼠只負責朝向與手動瞄準。', target: 120, progress: () => tutorialRun?.moved || 0 },
+    { id: 'kill', label: '擊殺', text: '保持距離，主砲會自動射擊；先擊毀 3 架無人機。', target: 3, progress: () => runKills },
+    { id: 'scrap', label: '拾取', text: '靠近黃色碎晶會自動拾取；先收集 8 個碎晶。', target: 8, progress: () => Math.max(0, Math.floor(meta.scrap - (tutorialRun?.startScrap || 0))) },
+    { id: 'objective', label: '目標', text: '跟著藍色箭頭靠近目標點，站在光圈內充能。', target: 1, progress: () => runObjectives },
+    { id: 'skill', label: '技能', text: '經驗滿時會暫停三選一；選第一個本局技能。', target: 1, progress: () => runStats?.skills?.length || 0 }
+  ];
+
   const achievementDefs = [
     { id: 'wave5', name: '突破第 5 波', unlock: '解鎖過載反應爐', test: () => wave >= 5 || meta.bestWave >= 5, progress: () => `${Math.min(Math.max(wave, meta.bestWave), 5)}/5 波`, reward: 20 },
     { id: 'kills50', name: '擊毀 50 架無人機', unlock: '解鎖緊急裝甲', test: () => totalKills >= 50, progress: () => `${Math.min(totalKills, 50)}/50 擊殺`, reward: 35 },
@@ -958,6 +969,64 @@
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28; }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
+  function shouldStartTutorial() {
+    return !meta.tutorialDone && (meta.bestWave || 1) <= 2 && !(meta.recentRuns || []).length;
+  }
+
+  function makeTutorialRun() {
+    if (!shouldStartTutorial()) return null;
+    return { step: 0, moved: 0, startScrap: meta.scrap, lastX: player?.x || W / 2, lastY: player?.y || H / 2, announced: '' };
+  }
+
+  function currentTutorialStep() {
+    if (!tutorialRun || meta.tutorialDone) return null;
+    return tutorialDefs[tutorialRun.step] || null;
+  }
+
+  function tutorialProgress(step = currentTutorialStep()) {
+    if (!step) return { value: 0, target: 1, pct: 0 };
+    const value = Math.min(step.target, Math.floor(step.progress()));
+    return { value, target: step.target, pct: clamp(value / step.target, 0, 1) };
+  }
+
+  function tutorialMission() {
+    return { text: '新手任務：完成 5 個基礎動作', target: tutorialDefs.length, reward: 36, check: () => meta.tutorialDone ? tutorialDefs.length : tutorialRun?.step || 0 };
+  }
+
+  function announceTutorialStep() {
+    const step = currentTutorialStep();
+    if (!step || tutorialRun.announced === step.id) return;
+    tutorialRun.announced = step.id;
+    flash(`新手 ${tutorialRun.step + 1}/${tutorialDefs.length}：${step.text}`);
+  }
+
+  function updateTutorial() {
+    if (!tutorialRun || meta.tutorialDone || !player) return;
+    const moved = Math.hypot(player.x - tutorialRun.lastX, player.y - tutorialRun.lastY);
+    tutorialRun.moved += moved;
+    tutorialRun.lastX = player.x;
+    tutorialRun.lastY = player.y;
+    let step = currentTutorialStep();
+    while (step && tutorialProgress(step).pct >= 1) {
+      tutorialRun.step++;
+      addText(player.x, player.y - 58, `${step.label}完成`, '#4dff88');
+      sfx('pickup');
+      step = currentTutorialStep();
+      if (step) announceTutorialStep();
+    }
+    if (!step) {
+      meta.tutorialDone = true;
+      meta.scrap += 24;
+      addText(player.x, player.y - 70, '新手訓練完成 +24', '#ffd166');
+      sfx('success');
+      save(false);
+      flash('新手訓練完成：你已掌握移動、戰鬥、拾取、目標與技能');
+      tutorialRun = null;
+    } else {
+      announceTutorialStep();
+    }
+  }
+
   function chooseZone() {
     const ids = Object.keys(zoneDefs);
     const id = choose(ids);
@@ -977,9 +1046,10 @@
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); activeZone = chooseZone(); runStats = newRunStats(); runStats.zone = activeZone.name; upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
-    mission = newMission();
+    tutorialRun = makeTutorialRun();
+    mission = tutorialRun ? tutorialMission() : newMission();
     startWave(1);
-    for (let i = 0; i < 5; i++) dropShard(player.x + rand(-42, 42), player.y + rand(-42, 42), 1);
+    for (let i = 0; i < (tutorialRun ? 9 : 5); i++) dropShard(player.x + rand(-48, 48), player.y + rand(-48, 48), 1);
     updateUi();
   }
 
@@ -1019,7 +1089,7 @@
 
   function showWaveGuide(n, isBoss = false) {
     const msg = guideForWave(n, isBoss);
-    if (!msg || tutorialShown.has(n) || !running) return;
+    if ((tutorialRun && n <= 3) || !msg || tutorialShown.has(n) || !running) return;
     setTimeout(() => {
       if (running && !gameOver && !skillChoosing && wave === n) { tutorialShown.add(n); flash(msg); }
     }, 950);
@@ -1029,7 +1099,8 @@
     wave = n;
     bossActive = n % 5 === 0;
     const mobileEase = controlMode === 'touch' ? .98 : 1;
-    const earlyEase = n === 1 ? .58 : n === 2 ? .74 : n === 3 ? .9 : n === 4 ? .95 : 1;
+    const tutorialEase = tutorialRun && n <= 2 ? .72 : 1;
+    const earlyEase = (n === 1 ? .58 : n === 2 ? .74 : n === 3 ? .9 : n === 4 ? .95 : 1) * tutorialEase;
     spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase * earlyEase * currentDifficulty().enemy);
     spawnTimer = bossActive ? .35 : 0;
     if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell']));
@@ -1666,6 +1737,7 @@
 
     updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updatePickups(dt); updateParticles(dt);
     sampleRunStats();
+    updateTutorial();
 
     if (xp >= xpNeed) levelUp();
     if (spawnLeft <= 0 && enemies.length === 0) finishWave();
@@ -2297,7 +2369,9 @@
 
   function drawMission() {
     ctx.save();
-    const x = 12; const y = 112; const w = 268; const h = activeEvent ? 82 : 60;
+    const tutorialStep = currentTutorialStep();
+    const hasTutorial = !!tutorialStep;
+    const x = 12; const y = 112; const w = 286; const h = activeEvent ? (hasTutorial ? 124 : 82) : (hasTutorial ? 102 : 60);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19);
@@ -2319,6 +2393,22 @@
       const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
       ctx.fillStyle = def.color; ctx.font = '900 11px system-ui';
       ctx.fillText(`目標：${def.name}`, x + 10, y + (activeEvent ? 74 : 50));
+    }
+    if (hasTutorial) {
+      const tp = tutorialProgress(tutorialStep);
+      const ty = y + (activeEvent ? 88 : 64);
+      ctx.fillStyle = '#bdfcff';
+      ctx.font = '900 11px system-ui';
+      ctx.fillText(`新手 ${tutorialRun.step + 1}/${tutorialDefs.length}｜${tutorialStep.label}`, x + 10, ty);
+      ctx.fillStyle = 'rgba(238,247,255,.82)';
+      ctx.font = '800 10px system-ui';
+      ctx.fillText(tutorialStep.text, x + 10, ty + 15);
+      ctx.fillStyle = 'rgba(255,255,255,.12)';
+      ctx.fillRect(x + 10, ty + 23, w - 20, 4);
+      ctx.fillStyle = '#bdfcff';
+      ctx.fillRect(x + 10, ty + 23, (w - 20) * tp.pct, 4);
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText(`${tp.value}/${tp.target}`, x + w - 48, ty);
     }
     ctx.restore();
   }
