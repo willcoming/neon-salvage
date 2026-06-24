@@ -537,8 +537,13 @@
     berserk: { name: '狂暴', color: '#ff4d6d', hp: .9, speed: 1.42, scrap: 2 },
     medic: { name: '治療', color: '#4dff88', hp: 1.28, speed: .96, scrap: 3 },
     phantom: { name: '幻影', color: '#bdfcff', hp: .82, speed: 1.64, scrap: 3 },
-    juggernaut: { name: '巨像', color: '#ff9f1c', hp: 2.05, speed: .72, scrap: 4 }
+    juggernaut: { name: '巨像', color: '#ff9f1c', hp: 2.05, speed: .72, scrap: 4 },
+    accelerator: { name: '加速', color: '#4dff88', hp: 1.05, speed: 1.28, scrap: 3 },
+    refractor: { name: '折射', color: '#bdfcff', hp: 1.25, speed: 1.02, scrap: 3 }
   };
+
+  const eliteGlyphs = { shielded: '◆', splitter: '✦', berserk: '!', medic: '+', phantom: '◇', juggernaut: '⬢', accelerator: '»', refractor: '◌' };
+  const enemyGlyphs = { leech: '⌁', bomber: '!', shieldSat: '⊞', shooter: '•', tank: '■', sprinter: '▸', chaser: '◆' };
 
   const zoneDefs = {
     scrapyard: { name: '電磁殘骸帶', color: '#7aa7ff', desc: '殘骸密集、敵彈較慢，碎晶略多但戰場更擁擠。', featureBias: ['debris', 'debris', 'asteroid', 'resource', 'hazard'], scrapBonus: 1, enemyBias: ['shooter', 'shieldSat'] },
@@ -937,7 +942,7 @@
     if (pick === 'boss' || wave < 7) return;
     const chance = Math.min(.12 + wave * .012 + (activeEvent?.id === 'rich' ? .12 : 0) + (activeEvent?.id === 'eliteStorm' ? .20 : 0), .48);
     if (Math.random() > chance) return;
-    const id = choose(wave >= 12 ? ['shielded', 'splitter', 'berserk', 'medic', 'phantom', 'juggernaut'] : ['shielded', 'splitter', 'berserk', 'medic']);
+    const id = choose(wave >= 12 ? ['shielded', 'splitter', 'berserk', 'medic', 'phantom', 'juggernaut', 'accelerator', 'refractor'] : wave >= 8 ? ['shielded', 'splitter', 'berserk', 'medic', 'accelerator', 'refractor'] : ['shielded', 'splitter', 'berserk', 'medic']);
     const mod = eliteMods[id];
     e.elite = { id, name: mod.name, color: mod.color };
     e.label = `${mod.name}${e.label}`;
@@ -1471,6 +1476,7 @@
         if (dist2(b, e) < rr * rr) {
           const weakMult = (upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1;
           let hitDamage = b.dmg * weakMult;
+          if (e.elite?.id === 'refractor' && (Math.floor(runTime * 2) % 2 === 0)) hitDamage *= .62;
           if (e.shield > 0) {
             const blocked = Math.min(e.shield, hitDamage * .85);
             e.shield -= blocked;
@@ -1515,7 +1521,8 @@
         if (Math.random() < dt * 4 && particles.length < MAX_PARTICLES) particles.push({ x: e.x + rand(-e.r, e.r), y: e.y + rand(-e.r, e.r), vx: rand(-15, 15), vy: rand(-20, 5), life: .22, max: .22, r: 2.2, color: '#ff7a3d', ring: false });
         if (e.hp <= 0) { killEnemy(e); continue; }
       }
-      const slow = (upgradesRuntime.slowField > 0 && d < slowRadius ? .55 : 1) * (activeEvent?.id === 'empStorm' ? .82 : 1);
+      const auraSpeed = enemies.some(ae => !ae.dead && ae !== e && ae.elite?.id === 'accelerator' && Math.hypot(ae.x - e.x, ae.y - e.y) < 165) ? 1.16 : 1;
+      const slow = (upgradesRuntime.slowField > 0 && d < slowRadius ? .55 : 1) * (activeEvent?.id === 'empStorm' ? .82 : 1) * auraSpeed;
       const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
       e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
       e.y += Math.sin(a) * e.speed * slow * bossStop * dt;
@@ -2008,6 +2015,14 @@
         ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(player.x, player.y); ctx.stroke();
         ctx.restore();
       }
+      if (e.type === 'shieldSat') {
+        ctx.save(); ctx.globalAlpha = .24; ctx.strokeStyle = '#7aa7ff'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 6]);
+        for (const ally of enemies) if (!ally.dead && ally !== e && ally.shield > 0 && Math.hypot(ally.x - e.x, ally.y - e.y) < 190) { ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(ally.x, ally.y); ctx.stroke(); }
+        ctx.restore();
+      }
+      if (e.elite?.id === 'accelerator') {
+        ctx.save(); ctx.globalAlpha = .16; ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.x, e.y, 165 * visualScale(), 0, TWO_PI); ctx.stroke(); ctx.restore();
+      }
       ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(performance.now() * .001 * e.spin);
       ctx.shadowColor = e.color; ctx.shadowBlur = e.hit > 0 ? 20 : 9; ctx.fillStyle = e.hit > 0 ? '#fff' : e.color;
       if (e.type === 'bomber' && ed < 150) { ctx.shadowColor = '#ff7a3d'; ctx.shadowBlur = 22; ctx.globalAlpha = .62 + Math.sin(performance.now() * .024) * .28; }
@@ -2019,6 +2034,11 @@
       ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke();
       if (e.type === 'bomber' && ed < 160) { ctx.strokeStyle = '#fff1c7'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-er * .55, 0); ctx.lineTo(er * .55, 0); ctx.moveTo(0, -er * .55); ctx.lineTo(0, er * .55); ctx.stroke(); }
       if (e.shield > 0) { ctx.strokeStyle = '#7aa7ff'; ctx.globalAlpha = .75; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, er + 5, 0, TWO_PI); ctx.stroke(); ctx.globalAlpha = 1; }
+      const glyph = e.elite ? eliteGlyphs[e.elite.id] : enemyGlyphs[e.type];
+      if (glyph && (e.elite || e.type === 'leech' || e.type === 'bomber' || e.type === 'shieldSat' || e.type === 'tank')) {
+        ctx.fillStyle = '#050712'; ctx.strokeStyle = 'rgba(255,255,255,.72)'; ctx.lineWidth = 2; ctx.font = `900 ${Math.max(10, er * .9)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.strokeText(glyph, 0, 1); ctx.fillText(glyph, 0, 1);
+      }
       ctx.restore();
       const showHp = e.type === 'boss' || e.elite || e.hit > 0 || (!dense && ed < 420);
       if (showHp) {
