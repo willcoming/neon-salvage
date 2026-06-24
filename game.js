@@ -254,7 +254,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossKillTime: null, waveTimes: {}, skills: [], eventsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, waveTimes: {}, skills: [], eventsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   function formatTime(seconds = 0) {
@@ -378,6 +378,7 @@
       maxWorldFeatures: runStats?.maxWorldFeatures || 0,
       maxParticles: runStats?.maxParticles || 0,
       maxRings: runStats?.maxRings || 0,
+      bossName: runStats?.bossName || '',
       bossTime: runStats?.bossKillTime ? Math.floor(runStats.bossKillTime) : 0,
       skills: [...(runStats?.skills || [])].slice(-6),
       build: detectBuildName(),
@@ -455,7 +456,7 @@
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div></dl></section>
-        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossTime ? formatTime(record.bossTime) : '-')}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
@@ -961,11 +962,14 @@
     ] : [
       { id: 'ring', label: '星環吞噬者', color: '#ff4d6d', hp: 1, speed: 1, sides: 10, shot: 1 },
       { id: 'forge', label: '熔核鍛造者', color: '#ff9f1c', hp: 1.18, speed: .86, sides: 8, shot: .88 },
-      { id: 'void', label: '虛空指揮官', color: '#b66dff', hp: .92, speed: 1.22, sides: 12, shot: 1.18 }
+      { id: 'void', label: '虛空指揮官', color: '#b66dff', hp: .92, speed: 1.22, sides: 12, shot: 1.18 },
+      { id: 'pulse', label: '虛空脈衝體', color: '#bdfcff', hp: .96, speed: 1.05, sides: 13, shot: 1.05 },
+      { id: 'brood', label: '裂隙母巢', color: '#ff3df2', hp: 1.12, speed: .92, sides: 11, shot: .94 }
     ];
-    const v = variants[Math.floor((wave / 5 - 1) % variants.length)];
+    const v = wave >= SECTOR_CLEAR_WAVE ? variants[0] : choose(variants);
     const hp = (t.hp + wave * 75) * v.hp * (wave === 5 ? .78 : 1);
-    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + (v.final ? 28 : 6), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : 0, shotMult: v.shot, phase2: false, elite: null };
+    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + (v.final ? 28 : 6), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : v.id === 'brood' ? 2.2 : 0, pulseClock: v.id === 'pulse' ? 3.2 : 0, shotMult: v.shot, phase2: false, elite: null };
+    if (runStats) runStats.bossName = v.label;
     enemies.push(e);
     sfx('boss');
     addShake(v.final ? 6 : 4, .22);
@@ -1118,6 +1122,16 @@
 
   function enemyShoot(e) {
     const a = Math.atan2(player.y - e.y, player.x - e.x);
+    if (e.type === 'boss' && e.bossVariant === 'pulse') {
+      const count = e.phase2 ? 18 : 12;
+      const spin = runTime * (e.phase2 ? .9 : .55);
+      for (let i = 0; i < count; i++) {
+        const aa = spin + i / count * TWO_PI;
+        const spd = (e.phase2 ? 210 : 175) * (activeEvent?.id === 'empStorm' ? .68 : 1);
+        enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(aa) * spd, vy: Math.sin(aa) * spd, r: 4.8, life: 4.6, dmg: e.phase2 ? 13 : 10, color: '#bdfcff' });
+      }
+      return;
+    }
     const count = e.type === 'boss' ? (e.finalBoss ? (e.phase2 ? 17 : 11) : e.bossVariant === 'void' ? (e.phase2 ? 15 : 9) : e.phase2 ? 11 : 7) : 1;
     for (let i = 0; i < count; i++) {
       const off = count === 1 ? 0 : (i - (count - 1) / 2) * (e.phase2 ? .13 : .16);
@@ -1526,11 +1540,12 @@
       const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
       e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
       e.y += Math.sin(a) * e.speed * slow * bossStop * dt;
-      if (e.finalBoss) {
+      if (e.finalBoss || e.bossVariant === 'brood') {
         e.summonClock -= dt;
         if (e.summonClock <= 0) {
-          spawnEnemy(choose(e.phase2 ? ['sprinter', 'bomber', 'leech'] : ['chaser', 'sprinter']));
-          e.summonClock = e.phase2 ? 1.9 : 2.8;
+          spawnEnemy(e.bossVariant === 'brood' ? choose(['leech', 'shieldSat', 'bomber']) : choose(e.phase2 ? ['sprinter', 'bomber', 'leech'] : ['chaser', 'sprinter']));
+          if (e.bossVariant === 'brood' && Math.random() < .45) addWorldFeature('hazard');
+          e.summonClock = e.bossVariant === 'brood' ? (e.phase2 ? 1.35 : 1.9) : e.phase2 ? 1.9 : 2.8;
           particles.push({ x: e.x, y: e.y, vx: rand(-40, 40), vy: rand(-40, 40), life: .3, max: .3, r: 8, color: e.color, ring: true });
         }
       }
