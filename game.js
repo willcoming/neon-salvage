@@ -19,6 +19,7 @@
     overlay: document.getElementById('overlay'),
     startBtn: document.getElementById('startBtn'),
     howBtn: document.getElementById('howBtn'),
+    difficultyBtn: document.getElementById('difficultyBtn'),
     how: document.getElementById('how'),
     toast: document.getElementById('toast'),
     controlModeBtn: document.getElementById('controlModeBtn'),
@@ -69,6 +70,7 @@
     achievements: {},
     recentRuns: [],
     soundEnabled: true,
+    difficulty: 'standard',
     lastSaved: Date.now(),
     upgrades: { cannon: 0, reactor: 0, shield: 0, armor: 0, engine: 0, magnet: 0, survey: 0, drone: 0 }
   });
@@ -126,6 +128,16 @@
   const SECTOR_CLEAR_WAVE = 10;
   const MAX_PARTICLES = 180;
   const MAX_RING_PARTICLES = 10;
+  const difficultyOrder = ['standard', 'high', 'chaos'];
+  const difficultyDefs = {
+    standard: { name: '標準星環', desc: '預設體驗', enemy: 1, speed: 1, cap: 1, reward: 1, event: 1 },
+    high: { name: '高壓星環', desc: '敵人更多、獎勵更多', enemy: 1.12, speed: 1.06, cap: 1.12, reward: 1.18, event: 1.18 },
+    chaos: { name: '失控星環', desc: 'Boss 更強、事件更頻繁', enemy: 1.25, speed: 1.12, cap: 1.18, reward: 1.38, event: 1.35 }
+  };
+
+  function currentDifficulty() {
+    return difficultyDefs[meta?.difficulty] || difficultyDefs.standard;
+  }
 
   function lateGameScale() {
     if (wave >= SECTOR_CLEAR_WAVE) return .62;
@@ -139,7 +151,7 @@
   function enemyCap() {
     const base = controlMode === 'touch' ? 30 : 36;
     const lateCut = Math.max(0, wave - 6) * 2;
-    return Math.max(controlMode === 'touch' ? 22 : 26, base - lateCut);
+    return Math.round(Math.max(controlMode === 'touch' ? 22 : 26, base - lateCut) * currentDifficulty().cap);
   }
   function compactWorldFeatureTarget() {
     return Math.max(14, Math.round((22 + Math.min(10, Math.floor(wave / 2))) * lateGameScale()));
@@ -225,7 +237,22 @@
   function updateSoundUi() {
     if (!ui.soundBtn) return;
     ui.soundBtn.textContent = `音效 ${meta.soundEnabled ? 'ON' : 'OFF'}`;
-    ui.soundBtn.classList.toggle('active', !!meta.soundEnabled);
+    ui.soundBtn.classList.toggle('active', meta.soundEnabled);
+  }
+
+  function updateDifficultyUi() {
+    if (!ui.difficultyBtn) return;
+    const diff = currentDifficulty();
+    ui.difficultyBtn.textContent = `難度：${diff.name}`;
+    ui.difficultyBtn.title = diff.desc;
+  }
+
+  function toggleDifficulty() {
+    const idx = difficultyOrder.indexOf(meta.difficulty || 'standard');
+    meta.difficulty = difficultyOrder[(idx + 1) % difficultyOrder.length];
+    save(false);
+    updateDifficultyUi();
+    flash(`難度切換：${currentDifficulty().name}`);
   }
 
   function toggleSound() {
@@ -366,6 +393,7 @@
       status,
       grade,
       wave,
+      difficulty: currentDifficulty().name,
       time: Math.floor(runTime),
       kills: runKills,
       objectives: runObjectives,
@@ -457,7 +485,7 @@
     report.innerHTML = `
       <div class="grade-badge ${record.status === 'clear' ? 'win' : 'fail'}"><span>${escapeHtml(record.status === 'clear' ? record.grade : '失敗')}</span><small>${escapeHtml(record.status === 'clear' ? '撤離成功' : '資料已保存')}</small></div>
       <div class="report-grid">
-        <section><h3>本局成果</h3><dl><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
+        <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div></dl></section>
         <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
@@ -824,7 +852,7 @@
   }
 
   function objectiveRewardMult() {
-    return (currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035;
+    return ((currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035) * currentDifficulty().reward;
   }
 
   function hardResetRun() {
@@ -885,10 +913,10 @@
     bossActive = n % 5 === 0;
     const mobileEase = controlMode === 'touch' ? .98 : 1;
     const earlyEase = n === 1 ? .58 : n === 2 ? .74 : n === 3 ? .9 : n === 4 ? .95 : 1;
-    spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase * earlyEase);
+    spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase * earlyEase * currentDifficulty().enemy);
     spawnTimer = bossActive ? .35 : 0;
     if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell']));
-    else if (wave >= 6 && !bossActive && (wave % 3 === 0 || Math.random() < .32)) startEvent();
+    else if (wave >= 6 && !bossActive && (wave % 3 === 0 || Math.random() < .32 * currentDifficulty().event)) startEvent();
     if (!beacon || wave % 3 === 1 || wave === 9) beacon = makeBeacon(chooseObjectiveKind());
     if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
     if (bossActive) spawnBoss();
@@ -952,9 +980,9 @@
       x: (() => { const c = camera(); return side === 0 ? c.x - pad : side === 1 ? c.x + W + pad : rand(c.x, c.x + W); })(),
       y: (() => { const c = camera(); return side === 2 ? c.y - pad : side === 3 ? c.y + H + pad : rand(c.y, c.y + H); })(),
       r: (t.r + Math.min(6, wave * .12)) * enemyScale(),
-      hp: t.hp + wave * (pick === 'tank' ? 7.2 : pick === 'sprinter' ? 3.2 : 4.7),
+      hp: (t.hp + wave * (pick === 'tank' ? 7.2 : pick === 'sprinter' ? 3.2 : 4.7)) * currentDifficulty().enemy,
       maxHp: 1,
-      speed: (t.speed + wave * (pick === 'sprinter' ? 3.25 : 2.05)) * (wave === 1 ? .82 : 1) * (activeEvent?.id === 'overclock' ? 1.14 : 1),
+      speed: (t.speed + wave * (pick === 'sprinter' ? 3.25 : 2.05)) * currentDifficulty().speed * (wave === 1 ? .82 : 1) * (activeEvent?.id === 'overclock' ? 1.14 : 1),
       spin: rand(-3, 3),
       color: t.color,
       sides: t.sides,
@@ -1016,8 +1044,8 @@
       { id: 'brood', label: '裂隙母巢', color: '#ff3df2', hp: 1.12, speed: .92, sides: 11, shot: .94 }
     ];
     const v = wave >= SECTOR_CLEAR_WAVE ? variants[0] : choose(variants);
-    const hp = (t.hp + wave * 75) * v.hp * (wave === 5 ? .78 : 1);
-    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed, spin: .7, color: v.color, sides: v.sides, scrap: t.scrap + wave + (v.final ? 28 : 6), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : v.id === 'brood' ? 2.2 : 0, pulseClock: v.id === 'pulse' ? 3.2 : 0, shotMult: v.shot, phase2: false, elite: null };
+    const hp = (t.hp + wave * 75) * v.hp * currentDifficulty().enemy * (wave === 5 ? .78 : 1);
+    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed * currentDifficulty().speed, spin: .7, color: v.color, sides: v.sides, scrap: Math.floor((t.scrap + wave + (v.final ? 28 : 6)) * currentDifficulty().reward), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : v.id === 'brood' ? 2.2 : 0, pulseClock: v.id === 'pulse' ? 3.2 : 0, shotMult: v.shot, phase2: false, elite: null };
     if (runStats) runStats.bossName = v.label;
     enemies.push(e);
     sfx('boss');
@@ -1094,6 +1122,7 @@
       ui.autoAimBtn.classList.toggle('active', autoAim);
     }
     updateSoundUi();
+    updateDifficultyUi();
     if (ui.pauseBtn) {
       ui.pauseBtn.hidden = !running || gameOver || skillChoosing;
       ui.pauseBtn.textContent = paused ? '繼續' : '暫停';
@@ -1191,7 +1220,7 @@
 
   function dropShard(x, y, amount = 1) {
     const bonus = upgradesRuntime.shardMultiplier + (currentZone().scrapBonus || 0);
-    const total = amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0);
+    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward));
     for (let i = 0; i < total; i++) {
       const a = Math.random() * TWO_PI;
       shards.push({ x: x + rand(-12, 12), y: y + rand(-12, 12), vx: Math.cos(a) * rand(45, 145), vy: Math.sin(a) * rand(45, 145), r: rand(4, 7), value: 1, life: 20 });
@@ -1815,7 +1844,7 @@
     closeUpgradeModal();
     gameOver = true;
     paused = true;
-    const bonus = Math.floor((120 + Math.floor(meta.bestWave * 3) + runKills) * (1 + (meta.upgrades.survey || 0) * .035));
+    const bonus = Math.floor((120 + Math.floor(meta.bestWave * 3) + runKills) * (1 + (meta.upgrades.survey || 0) * .035) * currentDifficulty().reward);
     meta.scrap += bonus;
     const grade = runGrade();
     const record = makeRunRecord('clear', grade, bonus);
@@ -2340,6 +2369,7 @@
   ui.controlModeBtn?.addEventListener('click', toggleControlMode);
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
   ui.soundBtn?.addEventListener('click', toggleSound);
+  ui.difficultyBtn?.addEventListener('click', toggleDifficulty);
 
   function setTouchDirectionFromClient(e, start = false) {
     const rect = canvas.getBoundingClientRect();
@@ -2432,5 +2462,5 @@
     };
   }
 
-  resize(); applyOfflineRewards(); hardResetRun(); renderUpgrades(); renderAchievementPanel(); updateSoundUi(); updateUi(); requestAnimationFrame(loop);
+  resize(); applyOfflineRewards(); hardResetRun(); renderUpgrades(); renderAchievementPanel(); updateSoundUi(); updateDifficultyUi(); updateUi(); requestAnimationFrame(loop);
 })();
