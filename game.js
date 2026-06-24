@@ -135,6 +135,8 @@
   let eventTimer = 0;
   let meteorTimer = 0;
   let tacticPulse = 0;
+  let bossAlertTimer = 0;
+  let bossAlert = null;
   let eventBannerTimer = 0;
   let damageFlash = 0;
   let worldFeatures = [];
@@ -362,7 +364,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   function formatTime(seconds = 0) {
@@ -514,6 +516,8 @@
       maxRings: runStats?.maxRings || 0,
       bossName: runStats?.bossName || '',
       bossTime: runStats?.bossKillTime ? Math.floor(runStats.bossKillTime) : 0,
+      bossMechanics: [...(runStats?.bossMechanics || [])].slice(-6),
+      bossPhase2: !!runStats?.bossPhase2,
       skills: [...(runStats?.skills || [])].slice(-6),
       build: detectBuildName(),
       zone: runStats?.zone || currentZone().name,
@@ -590,6 +594,7 @@
     const skillHtml = record.skills.length ? record.skills.map(s => `<span>${escapeHtml(s)}</span>`).join('') : '<span>尚未選擇技能</span>';
     const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
+    const bossHtml = record.bossMechanics?.length ? record.bossMechanics.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未遭遇 Boss 機制</span>';
     const unlock = nextAchievement();
     const unlockHtml = unlock ? `${escapeHtml(unlock.name)}｜${escapeHtml(unlock.progress?.() || '')}｜${escapeHtml(unlock.unlock || '')}` : '所有成就已解鎖';
     report.innerHTML = `
@@ -597,10 +602,11 @@
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
-        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? '｜二階段' : ''}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
+      <div class="skill-chips"><b>Boss 機制</b>${bossHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
       <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
       <div class="skill-chips"><b>技能流派</b>${skillHtml}</div>
@@ -818,6 +824,34 @@
       bias: ['leech', 'leech', 'shooter'], elites: [{ type: 'leech', mod: 'refractor' }], events: ['gravityWell', 'empStorm'], zones: ['rift']
     }
   };
+
+  const bossMechanicDefs = {
+    ring: { title: '星環吞噬者', intro: '追擊 + 扇形彈幕；保持橫向移動。', phase: '二階段：彈幕密度提高，別貼臉硬吃。', mechanic: '追擊扇形彈幕' },
+    forge: { title: '熔核鍛造者', intro: '熔核流星 + 危險火圈；不要站紅區。', phase: '二階段：流星更頻繁，先保走位。', mechanic: '熔核流星' },
+    void: { title: '虛空指揮官', intro: '召喚壓迫 + 紫色彈線；先清召喚物。', phase: '二階段：召喚與彈線同步加速。', mechanic: '虛空召喚' },
+    pulse: { title: '虛空脈衝體', intro: '環形彈幕；找縫隙穿過，不要貼臉。', phase: '二階段：雙層脈衝環，橫向穿縫。', mechanic: '環形脈衝' },
+    brood: { title: '裂隙母巢', intro: '裂隙 + 小怪 + 護盾衛星；先拆衛星。', phase: '二階段：裂隙與召喚加速。', mechanic: '母巢裂隙' },
+    core: { title: '星環核心主宰', intro: '終局考驗：混合彈幕、召喚與裂隙。', phase: '二階段：核心失控，所有招式加速。', mechanic: '終局混合招式' }
+  };
+
+  function bossMechanic(id) {
+    return bossMechanicDefs[id] || bossMechanicDefs.ring;
+  }
+
+  function recordBossMechanic(label) {
+    if (!runStats || !label) return;
+    if (!runStats.bossMechanics.includes(label)) runStats.bossMechanics.push(label);
+  }
+
+  function announceBoss(e, phase = 'intro') {
+    if (!e || e.type !== 'boss') return;
+    const info = bossMechanic(e.bossVariant);
+    const desc = phase === 'phase2' ? info.phase : info.intro;
+    bossAlert = { title: phase === 'phase2' ? `${e.label}｜二階段` : `${e.finalBoss ? '終局 Boss' : 'Boss'}：${e.label}`, desc, color: e.color || '#ff4d6d' };
+    bossAlertTimer = phase === 'phase2' ? 2.8 : 3.4;
+    recordBossMechanic(phase === 'phase2' ? `${info.mechanic}｜二階段` : info.mechanic);
+    flash(`${bossAlert.title}｜${desc}`);
+  }
 
   const objectiveDefs = {
     scan: { name: '掃描信標', color: '#bdfcff', event: ['droneSwarm', 'gravityWell', 'rich', 'empStorm'], reward: 1, charge: 2.4 },
@@ -1215,7 +1249,7 @@
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); activeZone = chooseZone(); runStats = newRunStats(); runStats.zone = activeZone.name; upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; eventBannerTimer = 0; damageFlash = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); activeZone = chooseZone(); runStats = newRunStats(); runStats.zone = activeZone.name; upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; damageFlash = 0;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     startWave(1);
@@ -1283,7 +1317,7 @@
     }
     if (bossActive) spawnBoss();
     if (runStats) { runStats.waveStart = runTime; if (bossActive) runStats.bossStart = runTime; }
-    flash(bossActive ? `Boss 波：第 ${wave} 波` : activeTactic ? `戰術：${activeTactic.name}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
+    if (!bossActive) flash(activeTactic ? `戰術：${activeTactic.name}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
     showWaveGuide(wave, bossActive);
   }
 
@@ -1418,9 +1452,10 @@
     ];
     const v = wave >= SECTOR_CLEAR_WAVE ? variants[0] : choose(variants);
     const hp = (t.hp + wave * 75) * v.hp * currentDifficulty().enemy * (wave === 5 ? .78 : 1);
-    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed * currentDifficulty().speed, spin: .7, color: v.color, sides: v.sides, scrap: Math.floor((t.scrap + wave + (v.final ? 28 : 6)) * currentDifficulty().reward), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : v.id === 'brood' ? 2.2 : 0, pulseClock: v.id === 'pulse' ? 3.2 : 0, shotMult: v.shot, phase2: false, elite: null };
+    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed * currentDifficulty().speed, spin: .7, color: v.color, sides: v.sides, scrap: Math.floor((t.scrap + wave + (v.final ? 28 : 6)) * currentDifficulty().reward), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : v.id === 'brood' ? 2.2 : 0, pulseClock: v.id === 'pulse' ? 3.2 : 0, abilityClock: v.final ? 2.4 : v.id === 'forge' ? 2.1 : v.id === 'void' ? 2.8 : v.id === 'ring' ? 3.1 : v.id === 'brood' ? 2.9 : 3.4, shotMult: v.shot, phase2: false, elite: null };
     if (runStats) runStats.bossName = v.label;
     enemies.push(e);
+    announceBoss(e, 'intro');
     sfx('boss');
     addShake(v.final ? 6 : 4, .22);
   }
@@ -1602,6 +1637,61 @@
       const bossSpeed = (e.type === 'boss' ? (e.phase2 ? 235 : 205) * (e.shotMult || 1) : 250) * (activeEvent?.id === 'empStorm' ? .68 : 1);
       enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(a + off) * bossSpeed, vy: Math.sin(a + off) * bossSpeed, r: e.type === 'boss' ? 5 : 4, life: 4, dmg: e.type === 'boss' ? (e.phase2 ? 15 : 12) : 8 });
     }
+  }
+
+  function bossAbilityDelay(e) {
+    const mult = e.phase2 ? .72 : 1;
+    if (e.finalBoss) return rand(2.0, 3.2) * mult;
+    if (e.bossVariant === 'forge') return rand(2.2, 3.4) * mult;
+    if (e.bossVariant === 'void') return rand(2.8, 4.0) * mult;
+    if (e.bossVariant === 'brood') return rand(2.4, 3.6) * mult;
+    if (e.bossVariant === 'pulse') return rand(3.0, 4.2) * mult;
+    return rand(3.1, 4.6) * mult;
+  }
+
+  function triggerBossAbility(e) {
+    if (!e || e.type !== 'boss' || !player) return;
+    const phaseBoost = e.phase2 ? 1.2 : 1;
+    if (e.bossVariant === 'forge') {
+      spawnMeteor();
+      if (e.phase2 || Math.random() < .35) spawnMeteor();
+      if (Math.random() < (e.phase2 ? .55 : .28)) addWorldFeature('hazard');
+      recordBossMechanic('熔核流星');
+      addText(e.x, e.y - e.r - 14, '熔核流星', e.color);
+    } else if (e.bossVariant === 'void') {
+      const add = spawnEnemy(choose(e.phase2 ? ['shieldSat', 'leech', 'sprinter'] : ['sprinter', 'chaser']));
+      if (add) { add.x = e.x + rand(-80, 80); add.y = e.y + rand(-80, 80); }
+      recordBossMechanic('虛空召喚');
+      addText(e.x, e.y - e.r - 14, '虛空召喚', e.color);
+    } else if (e.bossVariant === 'brood') {
+      spawnEnemy(choose(e.phase2 ? ['leech', 'shieldSat', 'bomber'] : ['leech', 'chaser']));
+      addWorldFeature('hazard');
+      recordBossMechanic('母巢裂隙');
+      addText(e.x, e.y - e.r - 14, '裂隙孵化', e.color);
+    } else if (e.bossVariant === 'pulse') {
+      const count = e.phase2 ? 22 : 14;
+      const spin = runTime * (e.phase2 ? 1.2 : .75);
+      for (let i = 0; i < count; i++) {
+        const aa = spin + i / count * TWO_PI;
+        const spd = (e.phase2 ? 235 : 190) * phaseBoost * (activeEvent?.id === 'empStorm' ? .68 : 1);
+        enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(aa) * spd, vy: Math.sin(aa) * spd, r: 4.8, life: 4.4, dmg: e.phase2 ? 13 : 10, color: '#bdfcff' });
+      }
+      recordBossMechanic('環形脈衝');
+      addText(e.x, e.y - e.r - 14, '脈衝環', e.color);
+    } else if (e.finalBoss) {
+      const move = choose(['meteor', 'summon', 'rift', 'pulse']);
+      if (move === 'meteor') { spawnMeteor(); spawnMeteor(); }
+      if (move === 'summon') spawnEnemy(choose(e.phase2 ? ['shieldSat', 'bomber', 'leech'] : ['sprinter', 'chaser']));
+      if (move === 'rift') addWorldFeature('hazard');
+      if (move === 'pulse') enemyShoot(e);
+      recordBossMechanic('終局混合招式');
+      addText(e.x, e.y - e.r - 14, '核心指令', e.color);
+    } else {
+      enemyShoot(e);
+      recordBossMechanic('追擊扇形彈幕');
+      addText(e.x, e.y - e.r - 14, '吞噬彈幕', e.color);
+    }
+    burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 20 : 12, e.finalBoss ? 1.1 : .8);
   }
 
   function dropShard(x, y, amount = 1) {
@@ -1867,6 +1957,7 @@
     dt = Math.min(dt, .033);
     runTime += dt;
     eventBannerTimer = Math.max(0, eventBannerTimer - dt);
+    bossAlertTimer = Math.max(0, bossAlertTimer - dt);
     damageFlash = Math.max(0, damageFlash - dt);
     if (activeEvent) {
       eventTimer -= dt;
@@ -2014,6 +2105,13 @@
       const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
       e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
       e.y += Math.sin(a) * e.speed * slow * bossStop * dt;
+      if (e.type === 'boss') {
+        e.abilityClock = (e.abilityClock ?? bossAbilityDelay(e)) - dt;
+        if (e.abilityClock <= 0) {
+          triggerBossAbility(e);
+          e.abilityClock = bossAbilityDelay(e);
+        }
+      }
       if (e.finalBoss || e.bossVariant === 'brood') {
         e.summonClock -= dt;
         if (e.summonClock <= 0) {
@@ -2028,7 +2126,7 @@
         e.x += Math.cos(ga) * 22 * dt;
         e.y += Math.sin(ga) * 22 * dt;
       }
-      if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash(e.finalBoss ? '最終 Boss 二階段：核心失控' : 'Boss 進入二階段：星環暴走'); burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 70 : 48, e.finalBoss ? 1.8 : 1.5); sfx('boss'); addShake(e.finalBoss ? 8 : 5, .24); haptic(e.finalBoss ? 55 : 28); }
+      if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; e.abilityClock = Math.min(e.abilityClock || 1.4, 1.1); if (runStats) runStats.bossPhase2 = true; announceBoss(e, 'phase2'); burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 70 : 48, e.finalBoss ? 1.8 : 1.5); sfx('boss'); addShake(e.finalBoss ? 8 : 5, .24); haptic(e.finalBoss ? 55 : 28); }
       if (e.type === 'leech' && d < 185 && !isPlayerProtected()) {
         playerImpact('leech', 1.2, 8); player.hp -= incomingDamage(dt * (1.8 + wave * .04)); damageFlash = Math.max(damageFlash, .12);
         if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
@@ -2325,7 +2423,7 @@
     ctx.translate(-c.x + shake.x, -c.y + shake.y);
     drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
     ctx.restore();
-    drawMission(); drawTargetGuide(); drawEventBanner(); drawScreenEffects(); drawTouchDpad();
+    drawMission(); drawTargetGuide(); drawEventBanner(); drawBossAlert(); drawScreenEffects(); drawTouchDpad();
     if (paused && running && !ui.overlay.classList.contains('visible')) drawPause();
   }
 
@@ -2673,6 +2771,22 @@
     ctx.fillText(activeEvent.name, W / 2, y + 24);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(activeEvent.desc, W / 2, y + 41);
+    ctx.restore();
+  }
+
+  function drawBossAlert() {
+    if (!bossAlert || bossAlertTimer <= 0) return;
+    const a = clamp(bossAlertTimer / 3.4, 0, 1);
+    ctx.save();
+    ctx.globalAlpha = Math.min(.96, a + .18);
+    const w = Math.min(520, W - 28), h = 68, x = (W - w) / 2, y = activeEvent && eventBannerTimer > 0 ? 150 : 86;
+    ctx.fillStyle = 'rgba(5,7,18,.84)'; ctx.strokeStyle = bossAlert.color; ctx.lineWidth = 2.4;
+    ctx.shadowColor = bossAlert.color; ctx.shadowBlur = 20;
+    ctx.beginPath(); ctx.roundRect(x, y, w, h, 16); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = bossAlert.color; ctx.font = '950 16px system-ui'; ctx.textAlign = 'center';
+    ctx.fillText(bossAlert.title, W / 2, y + 27);
+    ctx.fillStyle = 'rgba(238,247,255,.86)'; ctx.font = '850 11px system-ui';
+    ctx.fillText(bossAlert.desc, W / 2, y + 47);
     ctx.restore();
   }
 

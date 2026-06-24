@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=3.5" />
+  <link rel="stylesheet" href="./styles.css?v=3.6" />
 </head>
 <body>
   <div id="app">
@@ -105,10 +105,10 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v3.5 敵群戰術組合版</strong>
+          <strong>v3.6 Boss 與終局重整版</strong>
           <ul>
-            <li>敵人會形成戰術組合：護盾重甲、加速爆雷、治療蜂群、狙擊裂隙、吸能折射。</li>
-            <li>左上任務面板會提示目前戰術與應對方向；結算會記錄本局遇到的戰術壓力。</li>
+            <li>Boss 現在有入場 telegraph、明確招式提示、專屬變體節奏與半血二階段。</li>
+            <li>第 10 波終局 Boss 會混合彈幕、召喚與裂隙；結算會記錄 Boss 機制與是否進入二階段。</li>
             <li>保留 v3.0 Demo/Beta 完整內容：10 波撤離、多星域、多事件、多 Boss、build 流派、成就、難度、音效與手機 UI。</li>
           </ul>
         </div>
@@ -167,8 +167,9 @@
 - 新技能會讓武器形成明確 build：主砲速射、軌砲穿透、霰彈近戰、電漿清場、追蹤輔助、無人機、暴擊灼燒等。
 - 三選一技能會顯示流派標籤、目前等級、核心候選與副流派展開；結算報告會顯示主要流派是否核心成形。
 - 敵人身上的符號代表功能：+ 治療、! 爆裂/狂暴、⊞ 護盾衛星、» 加速、◌ 折射減傷。
-- 第 5 波 Boss 現在有多種變體；虛空脈衝體會環形彈幕，裂隙母巢會召喚小怪與裂隙。
-- 結算報告會記錄本局 Boss 名稱與擊殺時間。
+- 第 5 波 Boss 現在有多種變體；入場會顯示招式 telegraph，半血會進入二階段並改變節奏。
+- Boss 變體包括追擊扇形、熔核流星、虛空召喚、環形脈衝、母巢裂隙；第 10 波是終局混合招式。
+- 結算報告會記錄本局 Boss 名稱、擊殺時間、Boss 機制與是否進入二階段。
 - 艦載升級分成火力系、生存系與拾荒系；高階模組需要完成指定成就後才可購買。
 - 過載反應爐提升武器傷害，緊急裝甲提高耐久並減傷，星圖掃描提高目標/事件收益。
 - 成就不只給碎晶，也會解鎖模組與挑戰方向；首頁和結算會顯示下一個解鎖目標。
@@ -206,6 +207,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=3.5"></script>
+  <script src="./game.js?v=3.6"></script>
 </body>
 </html>
