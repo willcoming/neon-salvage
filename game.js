@@ -399,17 +399,28 @@
     return `技能：${tail}${list.length > 4 ? ` 等 ${list.length} 個` : ''}`;
   }
 
+  function buildScoreMap(extraSkillId = null) {
+    const scores = {};
+    for (const skill of skillPool) {
+      const level = (upgradesRuntime?.[skill.id] || 0) + (skill.id === extraSkillId ? 1 : 0);
+      if (level <= 0 || !skill.build) continue;
+      scores[skill.build] = (scores[skill.build] || 0) + level * (skill.weight || 1);
+    }
+    return scores;
+  }
+
+  function topBuild(extraSkillId = null) {
+    const scores = buildScoreMap(extraSkillId);
+    const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) return { id: '', score: 0, def: null };
+    const [id, score] = entries[0];
+    return { id, score, def: buildDefs[id] || null };
+  }
+
   function detectBuildName() {
-    const r = upgradesRuntime || {};
-    const builds = [
-      ['軌砲穿透流', (r.railCharge || 0) * 3 + (r.railOverload || 0) * 4 + (r.lanceRounds || 0)],
-      ['霰彈近戰流', (r.flakBurst || 0) * 3 + (r.flakRecoil || 0) * 4],
-      ['電漿清場流', (r.plasmaBurst || 0) * 3 + (r.chainBurst || 0) * 3 + (r.chain || 0)],
-      ['追蹤輔助流', (r.homingRounds || 0) * 3 + (r.droneWing || 0) * 3],
-      ['暴擊灼燒流', (r.critCore || 0) * 3 + (r.burnRounds || 0) * 3],
-      ['主砲速射流', (r.harvestDrive || 0) * 2 + (r.weakScan || 0) + (r.splitShot || 0)]
-    ].sort((a, b) => b[1] - a[1]);
-    return builds[0][1] > 0 ? builds[0][0] : '未成形';
+    const top = topBuild();
+    if (!top.def || top.score <= 0) return '未成形';
+    return `${top.def.name}${top.score >= BUILD_CORE_SCORE ? '｜核心成形' : '｜成形中'}`;
   }
 
   function balanceHint() {
@@ -561,6 +572,7 @@
 
   function renderRunReport(card, record, leadText) {
     clearRunOverlayExtras(card);
+    if (ui.zonePanel) ui.zonePanel.hidden = true;
     card.classList.add('run-card', record.status === 'clear' ? 'success-run' : 'failed-run');
     const lead = card.querySelector('p:not(.eyebrow)');
     lead.textContent = leadText;
@@ -625,27 +637,69 @@
     { id: 'drone', lane: '拾荒系', name: '無人機合約', desc: '提高離線碎晶收益。', base: 28, scale: 1.62, max: 8 }
   ];
 
+  const BUILD_CORE_SCORE = 6;
+  const buildDefs = {
+    rapid: { name: '主砲速射流', color: '#37f6ff', core: '高頻主砲核心' },
+    rail: { name: '軌砲穿透流', color: '#bdfcff', core: '穿透過載核心' },
+    flak: { name: '霰彈近戰流', color: '#ff9f1c', core: '近距爆破核心' },
+    plasma: { name: '電漿清場流', color: '#ff7a3d', core: '連鎖清場核心' },
+    seeker: { name: '追蹤輔助流', color: '#ffd166', core: '自動索敵核心' },
+    drone: { name: '無人機流', color: '#7aa7ff', core: '蜂群翼隊核心' },
+    burn: { name: '暴擊灼燒流', color: '#ff4d6d', core: '熔毀弱點核心' },
+    survival: { name: '生存續航流', color: '#4dff88', core: '韌性護盾核心' },
+    economy: { name: '拾荒經濟流', color: '#ffd166', core: '碎晶滾雪球核心' }
+  };
+
   const skillPool = [
-    { id: 'splitShot', name: '三叉脈衝', desc: '主砲增加散射彈道。' },
-    { id: 'chain', name: '連鎖電弧', desc: '擊殺時對附近敵人造成電弧傷害。' },
-    { id: 'shieldRegen', name: '自修護盾', desc: '每秒緩慢回復護盾。' },
-    { id: 'shardMultiplier', name: '碎晶精煉', desc: '敵人掉落碎晶增加。' },
-    { id: 'slowField', name: '重力干擾', desc: '敵人靠近時會被減速。' },
-    { id: 'orbitals', name: '環繞刃翼', desc: '生成環繞玩家的近距離傷害刃翼。' },
-    { id: 'homingRounds', name: '追蹤子彈', desc: '保留原本主砲，額外追加會追蹤敵人的微型彈。' },
-    { id: 'lanceRounds', name: '穿甲光矛', desc: '主砲改良成高速穿透光矛，可連續貫穿敵人。' },
-    { id: 'plasmaBurst', name: '電漿爆裂', desc: '子彈命中時產生小範圍爆炸，適合清密集敵群。' },
-    { id: 'flakBurst', name: '霰彈彈幕', desc: '額外噴出短距離扇形彈，適合近距離清場。' },
-    { id: 'railCharge', name: '蓄能軌砲', desc: '每隔數發打出高傷害穿透重擊。' },
-    { id: 'critCore', name: '暴擊核心', desc: '主砲有機率造成暴擊，對 Boss 更有效。' },
-    { id: 'burnRounds', name: '燃燒彈頭', desc: '命中後附加短時間灼燒，適合壓厚血敵人。' },
-    { id: 'chainBurst', name: '連鎖爆裂', desc: '擊殺會觸發小爆裂，清群怪更穩。' },
-    { id: 'railOverload', name: '軌砲過載', desc: '蓄能軌砲傷害與貫穿提高，但節奏更重。' },
-    { id: 'flakRecoil', name: '霰彈反沖', desc: '霰彈發射時短暫反推飛船，方便拉開距離。' },
-    { id: 'droneWing', name: '無人機增殖', desc: '額外釋放微型無人機光彈，形成被動輸出。' },
-    { id: 'weakScan', name: '弱點掃描', desc: '對精英與 Boss 造成額外傷害。' },
-    { id: 'harvestDrive', name: '收割引擎', desc: '連續擊殺會短暫提高射速。' }
+    { id: 'splitShot', build: 'rapid', weight: 2, role: '多彈道', name: '三叉脈衝', desc: '主砲增加散射彈道。' },
+    { id: 'chain', build: 'plasma', weight: 2, role: '連鎖', name: '連鎖電弧', desc: '擊殺時對附近敵人造成電弧傷害。' },
+    { id: 'shieldRegen', build: 'survival', weight: 2, role: '續航', name: '自修護盾', desc: '每秒緩慢回復護盾。' },
+    { id: 'shardMultiplier', build: 'economy', weight: 2, role: '收益', name: '碎晶精煉', desc: '敵人掉落碎晶增加。' },
+    { id: 'slowField', build: 'seeker', weight: 1, role: '控場', name: '重力干擾', desc: '敵人靠近時會被減速。' },
+    { id: 'orbitals', build: 'flak', weight: 2, role: '近身圈', name: '環繞刃翼', desc: '生成環繞玩家的近距離傷害刃翼。' },
+    { id: 'homingRounds', build: 'seeker', weight: 3, role: '追蹤', name: '追蹤子彈', desc: '保留原本主砲，額外追加會追蹤敵人的微型彈。' },
+    { id: 'lanceRounds', build: 'rail', weight: 2, role: '穿透', name: '穿甲光矛', desc: '主砲改良成高速穿透光矛，可連續貫穿敵人。' },
+    { id: 'plasmaBurst', build: 'plasma', weight: 3, role: '範圍', name: '電漿爆裂', desc: '子彈命中時產生小範圍爆炸，適合清密集敵群。' },
+    { id: 'flakBurst', build: 'flak', weight: 3, role: '近爆', name: '霰彈彈幕', desc: '額外噴出短距離扇形彈，適合近距離清場。' },
+    { id: 'railCharge', build: 'rail', weight: 3, role: '重擊', name: '蓄能軌砲', desc: '每隔數發打出高傷害穿透重擊。' },
+    { id: 'critCore', build: 'burn', weight: 3, role: '暴擊', name: '暴擊核心', desc: '主砲有機率造成暴擊，對 Boss 更有效。' },
+    { id: 'burnRounds', build: 'burn', weight: 3, role: '持傷', name: '燃燒彈頭', desc: '命中後附加短時間灼燒，適合壓厚血敵人。' },
+    { id: 'chainBurst', build: 'plasma', weight: 3, role: '爆裂', name: '連鎖爆裂', desc: '擊殺會觸發小爆裂，清群怪更穩。' },
+    { id: 'railOverload', build: 'rail', weight: 4, role: '核心件', name: '軌砲過載', desc: '蓄能軌砲傷害與貫穿提高，但節奏更重。' },
+    { id: 'flakRecoil', build: 'flak', weight: 4, role: '核心件', name: '霰彈反沖', desc: '霰彈發射時短暫反推飛船，方便拉開距離。' },
+    { id: 'droneWing', build: 'drone', weight: 4, role: '無人機', name: '無人機增殖', desc: '額外釋放微型無人機光彈，形成被動輸出。' },
+    { id: 'weakScan', build: 'rail', weight: 1, role: 'Boss', name: '弱點掃描', desc: '對精英與 Boss 造成額外傷害。' },
+    { id: 'harvestDrive', build: 'rapid', weight: 3, role: '射速', name: '收割引擎', desc: '連續擊殺會短暫提高射速。' }
   ];
+
+  function skillDef(id) {
+    return skillPool.find(s => s.id === id);
+  }
+
+  function buildChoiceHint(skill) {
+    const before = topBuild();
+    const after = topBuild(skill.id);
+    const def = buildDefs[skill.build];
+    if (after.id === skill.build && after.score >= BUILD_CORE_SCORE && before.score < BUILD_CORE_SCORE) return `核心候選｜${def.core}`;
+    if (before.id === skill.build && before.score > 0) return '主流派強化';
+    if (before.score > 0) return '副流派展開';
+    return '流派起手';
+  }
+
+  function makeSkillChoices() {
+    const picks = [];
+    const add = skill => { if (skill && !picks.some(p => p.id === skill.id)) picks.push(skill); };
+    const current = topBuild();
+    if (current.id) add(choose(skillPool.filter(s => s.build === current.id)));
+    const baseScore = topBuild().score;
+    const coreCandidate = [...skillPool].sort(() => Math.random() - .5).find(s => topBuild(s.id).score >= BUILD_CORE_SCORE && baseScore < BUILD_CORE_SCORE);
+    add(coreCandidate);
+    for (const s of [...skillPool].sort(() => Math.random() - .5)) {
+      add(s);
+      if (picks.length >= 3) break;
+    }
+    return picks.slice(0, 3);
+  }
 
   const enemyTypes = {
     chaser: { label: '追獵機', color: '#ff4d6d', hp: 21, speed: 68, r: 15, sides: 5, scrap: 1 },
@@ -1996,23 +2050,29 @@
     closeUpgradeModal();
     skillChoosing = true;
     paused = true;
-    const choices = [...skillPool].sort(() => Math.random() - .5).slice(0, 3);
+    const choices = makeSkillChoices();
     ui.overlay.classList.add('visible');
     const card = ui.overlay.querySelector('.card');
     clearRunOverlayExtras(card);
     card.querySelector('.eyebrow').textContent = 'LEVEL UP // 選擇一項本局技能';
     card.querySelector('h2').textContent = '飛船核心升級';
-    card.querySelector('p:not(.eyebrow)').textContent = '這些技能只在本局有效。選一個強化方向，繼續撐過下一波。';
+    const current = topBuild();
+    card.querySelector('p:not(.eyebrow)').textContent = current.def ? `目前主流派：${current.def.name}（${current.score >= BUILD_CORE_SCORE ? '核心成形' : '成形中'}）。選同流派會加速核心成形，選副流派可補足弱點。` : '這些技能只在本局有效。先選一個起手流派，再沿同方向疊出核心。';
     card.querySelector('.version-card')?.setAttribute('hidden', '');
+    if (ui.zonePanel) ui.zonePanel.hidden = true;
     ui.startBtn.style.display = 'none';
     ui.howBtn.style.display = 'none';
     ui.how.hidden = true;
     let box = document.getElementById('skillChoices');
-    if (!box) { box = document.createElement('div'); box.id = 'skillChoices'; box.style.cssText = 'display:grid;gap:10px;margin-top:18px'; card.appendChild(box); }
+    if (!box) { box = document.createElement('div'); box.id = 'skillChoices'; box.className = 'skill-choices'; card.appendChild(box); }
     box.innerHTML = '';
     for (const c of choices) {
+      const def = buildDefs[c.build] || { name: '未分類', color: '#92a5c8', core: '核心' };
+      const hint = buildChoiceHint(c);
+      const next = topBuild(c.id);
       const btn = document.createElement('button');
-      btn.innerHTML = `${c.name}<br><small style="font-weight:600;color:#92a5c8">${c.desc} 目前 Lv.${upgradesRuntime[c.id]}</small>`;
+      btn.className = `skill-choice${hint.startsWith('核心候選') ? ' core' : ''}`;
+      btn.innerHTML = `<span class="skill-tag" style="color:${def.color}">${def.name}｜${c.role}</span><b>${c.name}</b><small>${c.desc}</small><em>目前 Lv.${upgradesRuntime[c.id]} → Lv.${upgradesRuntime[c.id] + 1}｜${hint}${next.score >= BUILD_CORE_SCORE && next.id === c.build ? '｜核心分數達標' : ''}</em>`;
       btn.addEventListener('click', () => chooseSkill(c.id, c.name));
       box.appendChild(btn);
     }
@@ -2028,7 +2088,8 @@
     ui.howBtn.style.display = '';
     const box = document.getElementById('skillChoices');
     if (box) box.remove();
-    flash(`${name} Lv.${upgradesRuntime[id]}`);
+    if (ui.zonePanel) ui.zonePanel.hidden = false;
+    flash(`${name} Lv.${upgradesRuntime[id]}｜${detectBuildName()}`);
     sfx('upgrade');
   }
 
