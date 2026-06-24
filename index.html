@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=3.0.2" />
+  <link rel="stylesheet" href="./styles.css?v=3.0.3" />
 </head>
 <body>
   <div id="app">
@@ -25,9 +25,7 @@
       </div>
       <div class="bar"><i id="xpBar"></i></div>
       <div class="combat-controls">
-        <button id="controlModeBtn" type="button">操作：鍵鼠模式</button>
-        <button id="autoAimBtn" type="button">自動鎖定：OFF</button>
-        <button id="soundBtn" type="button">音效 ON</button>
+        <button id="settingsBtn" type="button">設定</button>
         <button id="pauseBtn" type="button">暫停</button>
         <span id="upgradePrompt" class="upgrade-prompt" hidden>可升級｜按 P</span>
         <button id="upgradeMenuBtn" type="button" hidden>艦載升級</button>
@@ -51,16 +49,50 @@
       </aside>
     </div>
 
+    <div id="settingsModal" class="modal-backdrop" hidden>
+      <aside id="settingsPanel" class="glass" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+        <header class="modal-head">
+          <div>
+            <h2 id="settingsTitle">設定</h2>
+            <p class="muted">操作、鎖定、音效與難度都集中在這裡。音效是 WebAudio 即時生成，手機 Safari 若聽不到，先點「測試音效」喚醒。</p>
+          </div>
+          <button id="closeSettingsBtn" class="icon-btn" type="button" aria-label="關閉設定">×</button>
+        </header>
+        <div class="settings-list">
+          <section class="setting-row">
+            <div><strong>操作模式</strong><small>手機會自動鎖定；鍵鼠可手動瞄準與衝刺。</small></div>
+            <button id="controlModeBtn" type="button">鍵鼠</button>
+          </section>
+          <section class="setting-row">
+            <div><strong>自動鎖定</strong><small>只輔助射擊，不會搶機身方向。</small></div>
+            <button id="autoAimBtn" type="button">鎖定 OFF</button>
+          </section>
+          <section class="setting-row">
+            <div><strong>音效 / 震動</strong><small id="audioStatus">尚未測試音效</small></div>
+            <button id="soundBtn" type="button">音效 ON</button>
+          </section>
+          <section class="setting-row">
+            <div><strong>測試音效</strong><small>如果手機沒聲音，請點這個喚醒 WebAudio。</small></div>
+            <button id="testSoundBtn" type="button">播放測試</button>
+          </section>
+          <section class="setting-row">
+            <div><strong>難度</strong><small>影響敵量、敵速、事件頻率與獎勵。</small></div>
+            <button id="difficultyBtn" type="button">難度：標準星環</button>
+          </section>
+        </div>
+      </aside>
+    </div>
+
     <div id="overlay" class="glass visible">
       <div class="card">
         <p class="eyebrow">一局可以只玩 30 秒，也可以玩一整晚</p>
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v3.0.2 手機視窗修正版</strong>
+          <strong>v3.0.3 設定選單修正版</strong>
           <ul>
-            <li>修正手機 Safari 下方多餘黑色空間，遊戲高度改與實際可視區同步。</li>
-            <li>修正手機上方 HUD 被頁面捲動吃掉，護盾、碎晶、波次與分數會固定顯示在上方。</li>
+            <li>新增設定選單：操作模式、自動鎖定、音效、測試音效與難度集中管理。</li>
+            <li>HUD 改成只保留戰鬥必要入口，避免手機上方按鈕太擠。</li>
             <li>保留 v3.0 Demo/Beta 完整內容：10 波撤離、多星域、多事件、多 Boss、build 流派、成就、難度、音效與手機 UI。</li>
           </ul>
         </div>
@@ -68,7 +100,7 @@
         <div id="achievementPanel" class="achievement-panel"></div>
         <div class="actions">
           <button id="startBtn">開始 / 繼續</button>
-          <button id="difficultyBtn" class="secondary">難度：標準星環</button>
+          <button id="homeSettingsBtn" class="secondary">設定</button>
           <button id="howBtn" class="secondary">玩法說明</button>
         </div>
         <pre id="how" hidden>目標：完成地圖任務、撐過事件、擊破第 10 波 Boss 並撤離星環；成功後會依擊殺、目標、事件與碎晶收益給 C/B/A/S 評級，並產出可讀的戰鬥報告卡片。
@@ -78,7 +110,8 @@
 - 滑鼠：控制機身朝向與手動瞄準
 - 移動中：機身會跟著移動方向自然轉向；停止移動攻擊時會順著射擊方向轉向
 - E：開關自動鎖定最近敵人；自動鎖定只輔助射擊，不會搶機身方向
-- 音效 ON/OFF：切換 WebAudio 音效與手機震動回饋，設定會保存
+- 設定：操作模式、自動鎖定、音效、測試音效與難度都集中在設定選單內
+- 音效：使用 WebAudio 即時生成，若手機沒聲音，請先在設定內點「測試音效」喚醒
 - 空白：相位衝刺，短時間無敵
 - P：暫停並開啟艦載升級彈窗；暫停時才可購買永久升級
 
@@ -119,7 +152,7 @@
 - 艦載升級分成火力系、生存系與拾荒系；高階模組需要完成指定成就後才可購買。
 - 過載反應爐提升武器傷害，緊急裝甲提高耐久並減傷，星圖掃描提高目標/事件收益。
 - 成就不只給碎晶，也會解鎖模組與挑戰方向；首頁和結算會顯示下一個解鎖目標。
-- 難度按鈕可在首頁切換標準星環、高壓星環、失控星環；高難會增加壓力與獎勵，並寫入結算。
+- 難度可在設定中切換標準星環、高壓星環、失控星環；高難會增加壓力與獎勵，並寫入結算。
 - 手機版 HUD、升級彈窗、結算報告與觸控提示已針對單手操作縮小重排。
 - 視覺色彩規則：玩家青白/金、敵人紅紫橘、目標藍、危險紅、補給綠、Boss 高對比外框。
 - 結算的戰鬥壓力區會顯示性能預算：綠色穩定、黃色接近預算、紅線代表已進入強制預算。
@@ -153,6 +186,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=3.0.2"></script>
+  <script src="./game.js?v=3.0.3"></script>
 </body>
 </html>

@@ -240,6 +240,14 @@ h1, h2, p { margin: 0; }
   overflow: auto;
 }
 
+#settingsPanel {
+  width: min(620px, 94vw);
+  max-height: min(720px, 88vh);
+  padding: 18px;
+  border-radius: 24px;
+  overflow: auto;
+}
+
 .modal-head { display: flex; justify-content: space-between; gap: 14px; align-items: flex-start; }
 #panel h2 { font-size: 20px; margin-bottom: 8px; }
 .icon-btn {
@@ -253,6 +261,21 @@ h1, h2, p { margin: 0; }
 }
 .muted { color: var(--muted); font-size: 13px; line-height: 1.55; }
 #upgrades { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 16px 0; }
+.settings-list { display: grid; gap: 10px; margin-top: 16px; }
+.setting-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(118px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,.10);
+  background: rgba(255,255,255,.055);
+}
+.setting-row strong { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
+.setting-row small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
+.setting-row button { min-width: 118px; padding: 9px 10px; font-size: 12px; }
+#settingsPanel button { max-width: none; }
 
 .upgrade {
   padding: 12px;
@@ -442,11 +465,16 @@ body[data-control-mode="touch"] .hint { display: none; }
   #soundBtn { max-width: 76px; overflow: hidden; text-overflow: ellipsis; }
   #upgradeMenuBtn { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
   .modal-backdrop { padding: 10px; align-items: end; }
-  #panel { width: 100%; max-height: 72vh; padding: 12px; border-radius: 18px; }
-  #panel h2 { font-size: 15px; margin-bottom: 4px; }
+  #panel, #settingsPanel { width: 100%; max-height: 72vh; padding: 12px; border-radius: 18px; }
+  #panel h2, #settingsPanel h2 { font-size: 15px; margin-bottom: 4px; }
   .modal-head .muted { display: none; }
   .icon-btn { width: 36px; height: 36px; font-size: 22px; }
   #upgrades { grid-template-columns: repeat(2, 1fr); gap: 6px; margin: 8px 0; }
+  .settings-list { gap: 7px; margin-top: 10px; }
+  .setting-row { grid-template-columns: 1fr auto; gap: 8px; padding: 9px; border-radius: 12px; }
+  .setting-row strong { font-size: 12px; }
+  .setting-row small { font-size: 10px; }
+  .setting-row button { min-width: 92px; padding: 7px 8px; font-size: 11px; }
   .upgrade { padding: 7px; border-radius: 12px; }
   .upgrade p { display: none; }
   .upgrade strong { font-size: 12px; }
@@ -478,7 +506,10 @@ body[data-control-mode="touch"] .hint { display: none; }
   #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 82px); max-width: 90vw; padding: 10px 12px; font-size: 12px; }
   .modal-backdrop { padding: 8px; align-items: end; }
   #panel { max-height: 76dvh; padding: 11px; }
+  #settingsPanel { max-height: 76dvh; padding: 11px; }
   #upgrades { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .setting-row { grid-template-columns: 1fr; }
+  .setting-row button { width: 100%; min-height: 36px; }
   .upgrade-lane { font-size: 10px; padding-top: 8px; }
   .upgrade header { margin-bottom: 4px; }
   .upgrade .level { font-size: 10px; }

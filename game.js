@@ -18,13 +18,19 @@
     resetBtn: document.getElementById('resetBtn'),
     overlay: document.getElementById('overlay'),
     startBtn: document.getElementById('startBtn'),
+    homeSettingsBtn: document.getElementById('homeSettingsBtn'),
     howBtn: document.getElementById('howBtn'),
+    settingsBtn: document.getElementById('settingsBtn'),
+    settingsModal: document.getElementById('settingsModal'),
+    closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     difficultyBtn: document.getElementById('difficultyBtn'),
     how: document.getElementById('how'),
     toast: document.getElementById('toast'),
     controlModeBtn: document.getElementById('controlModeBtn'),
     autoAimBtn: document.getElementById('autoAimBtn'),
     soundBtn: document.getElementById('soundBtn'),
+    testSoundBtn: document.getElementById('testSoundBtn'),
+    audioStatus: document.getElementById('audioStatus'),
     pauseBtn: document.getElementById('pauseBtn'),
     upgradePrompt: document.getElementById('upgradePrompt'),
     offlineNotice: document.getElementById('offlineNotice'),
@@ -163,12 +169,21 @@
       const AudioContext = window.AudioContext || window.webkitAudioContext;
       if (!AudioContext) return null;
       if (!audioCtx) audioCtx = new AudioContext();
-      if (audioCtx.state === 'suspended') audioCtx.resume();
+      if (audioCtx.state === 'suspended') audioCtx.resume().then(updateSoundUi).catch(() => {});
       sfxUnlocked = true;
       return audioCtx;
     } catch (err) {
       return null;
     }
+  }
+
+  function audioStatusText() {
+    if (!meta.soundEnabled) return '音效已關閉；也會關閉手機震動回饋。';
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) return '此瀏覽器不支援 WebAudio 音效。';
+    if (!audioCtx) return '尚未啟動；請點「測試音效」或開始遊戲。';
+    if (audioCtx.state === 'running') return 'WebAudio 已啟動；若仍沒聲音，請確認手機靜音鍵與系統音量。';
+    return `WebAudio 狀態：${audioCtx.state}；請點「測試音效」喚醒。`;
   }
 
   function tone(freq, duration = .07, type = 'sine', gain = .035, slide = 1) {
@@ -235,9 +250,11 @@
   }
 
   function updateSoundUi() {
-    if (!ui.soundBtn) return;
-    ui.soundBtn.textContent = `音效 ${meta.soundEnabled ? 'ON' : 'OFF'}`;
-    ui.soundBtn.classList.toggle('active', meta.soundEnabled);
+    if (ui.soundBtn) {
+      ui.soundBtn.textContent = `音效 ${meta.soundEnabled ? 'ON' : 'OFF'}`;
+      ui.soundBtn.classList.toggle('active', meta.soundEnabled);
+    }
+    if (ui.audioStatus) ui.audioStatus.textContent = audioStatusText();
   }
 
   function updateDifficultyUi() {
@@ -261,6 +278,20 @@
     save(false);
     updateSoundUi();
     flash(`音效 ${meta.soundEnabled ? '開啟' : '關閉'}`);
+  }
+
+  function testSound() {
+    if (!meta.soundEnabled) meta.soundEnabled = true;
+    const ac = ensureAudio();
+    updateSoundUi();
+    if (!ac) return flash('此瀏覽器不支援 WebAudio 音效');
+    sfx('upgrade');
+    setTimeout(() => sfx('pickup'), 130);
+    setTimeout(() => sfx('success'), 260);
+    haptic(18);
+    save(false);
+    updateSoundUi();
+    flash('已播放測試音效');
   }
 
   function impactFeedback(x, y, color = '#37f6ff', strength = 1, sound = 'hit') {
@@ -756,6 +787,22 @@
     return !!ui.upgradeModal && !ui.upgradeModal.hidden;
   }
 
+  function isSettingsModalOpen() {
+    return !!ui.settingsModal && !ui.settingsModal.hidden;
+  }
+
+  function openSettingsModal() {
+    if (ui.settingsModal) ui.settingsModal.hidden = false;
+    resetTouchDirection();
+    updateCombatControls();
+  }
+
+  function closeSettingsModal() {
+    if (ui.settingsModal) ui.settingsModal.hidden = true;
+    resetTouchDirection();
+    updateCombatControls();
+  }
+
   function updateUpgradeAccessUi() {
     const allowed = canUsePermanentUpgrades();
     const available = availableUpgradeCount();
@@ -1136,6 +1183,7 @@
   }
 
   function updateCombatControls() {
+    if (ui.settingsBtn) ui.settingsBtn.classList.toggle('active', isSettingsModalOpen());
     if (ui.controlModeBtn) {
       ui.controlModeBtn.textContent = controlMode === 'touch' ? '手機' : '鍵鼠';
       ui.controlModeBtn.classList.toggle('active', controlMode === 'touch');
@@ -2337,6 +2385,7 @@
 
   function startOrResume() {
     closeUpgradeModal();
+    closeSettingsModal();
     ensureAudio();
     if (gameOver || !player) hardResetRun();
     running = true; paused = false; gameOver = false; skillChoosing = false;
@@ -2384,6 +2433,9 @@
   canvas.addEventListener('pointerdown', e => { mouse.down = true; setMouseFromClient(e.clientX, e.clientY); });
   canvas.addEventListener('pointerup', () => { mouse.down = false; });
   ui.startBtn.addEventListener('click', startOrResume);
+  ui.settingsBtn?.addEventListener('click', openSettingsModal);
+  ui.homeSettingsBtn?.addEventListener('click', openSettingsModal);
+  ui.closeSettingsBtn?.addEventListener('click', closeSettingsModal);
   ui.howBtn.addEventListener('click', () => { ui.how.hidden = !ui.how.hidden; });
   ui.saveBtn.addEventListener('click', () => save(true));
   ui.resetBtn.addEventListener('click', resetSave);
@@ -2394,6 +2446,7 @@
   ui.controlModeBtn?.addEventListener('click', toggleControlMode);
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
   ui.soundBtn?.addEventListener('click', toggleSound);
+  ui.testSoundBtn?.addEventListener('click', testSound);
   ui.difficultyBtn?.addEventListener('click', toggleDifficulty);
 
   function setTouchDirectionFromClient(e, start = false) {
@@ -2455,7 +2508,7 @@
   function bindTouchControls() {
     const touchStart = e => {
       if (controlMode !== 'touch') return;
-      if (ui.overlay.classList.contains('visible') || isUpgradeModalOpen()) return;
+      if (ui.overlay.classList.contains('visible') || isUpgradeModalOpen() || isSettingsModalOpen()) return;
       e.preventDefault();
       setTouchDirectionFromClient(e, true);
     };
