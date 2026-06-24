@@ -18,8 +18,13 @@
 
 html, body {
   margin: 0;
+  width: 100%;
+  height: var(--app-height, 100dvh);
   min-height: 100%;
   overflow: hidden;
+  position: fixed;
+  inset: 0;
+  overscroll-behavior: none;
   background:
     radial-gradient(circle at 20% 10%, rgba(255, 61, 242, 0.18), transparent 28%),
     radial-gradient(circle at 80% 20%, rgba(55, 246, 255, 0.16), transparent 26%),
@@ -51,7 +56,8 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 #app {
   position: relative;
   width: 100vw;
-  height: 100vh;
+  height: var(--app-height, 100dvh);
+  overflow: hidden;
   isolation: isolate;
 }
 
@@ -59,8 +65,9 @@ button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
   position: absolute;
   inset: 0;
   width: 100vw;
-  height: 100vh;
+  height: var(--app-height, 100dvh);
   display: block;
+  touch-action: none;
   background: transparent;
 }
 
@@ -419,20 +426,21 @@ body[data-control-mode="keyboard"] #touchControls { display: none; }
 body[data-control-mode="touch"] .hint { display: none; }
 
 @media (max-width: 860px) {
-  body { overflow: auto; }
-  #app { min-height: 100vh; height: 100dvh; }
-  #hud { left: 5px; right: 5px; top: 5px; grid-template-columns: 1fr; gap: 3px; transform: scale(.64); transform-origin: top left; width: calc((100vw - 10px) / .64); }
+  body { overflow: hidden; }
+  #app, #game { height: var(--app-height, 100dvh); }
+  #hud { left: 6px; right: 6px; top: calc(env(safe-area-inset-top, 0px) + 6px); grid-template-columns: 1fr; gap: 4px; transform: none; width: auto; }
   .brand { display: none; }
-  .stats { grid-template-columns: repeat(4, 1fr); gap: 5px; }
-  .stats div { padding: 4px 5px; border-radius: 8px; }
-  .stats b { font-size: 12px; }
-  .stats span { font-size: 8px; }
+  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
+  .stats div { min-width: 0; padding: 5px 6px; border-radius: 10px; background: rgba(5,7,18,.66); border-color: rgba(55,246,255,.20); }
+  .stats b { font-size: 13px; }
+  .stats span { font-size: 9px; }
   .bar { display: none; }
-  .combat-controls { gap: 5px; flex-wrap: nowrap; }
-  .combat-controls button, .upgrade-prompt { padding: 4px 6px; min-height: 24px; font-size: 9px; border-radius: 8px; white-space: nowrap; }
-  #pauseBtn { display: inline-flex; align-items: center; justify-content: center; min-width: 42px; font-weight: 950; }
-  #soundBtn { max-width: 64px; overflow: hidden; text-overflow: ellipsis; }
-  #upgradeMenuBtn { max-width: 86px; overflow: hidden; text-overflow: ellipsis; }
+  .combat-controls { gap: 4px; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; padding-bottom: 1px; scrollbar-width: none; }
+  .combat-controls::-webkit-scrollbar { display: none; }
+  .combat-controls button, .upgrade-prompt { flex: 0 0 auto; padding: 4px 7px; min-height: 28px; font-size: 10px; border-radius: 9px; white-space: nowrap; touch-action: manipulation; }
+  #pauseBtn { display: inline-flex; align-items: center; justify-content: center; min-width: 52px; font-weight: 950; }
+  #soundBtn { max-width: 76px; overflow: hidden; text-overflow: ellipsis; }
+  #upgradeMenuBtn { max-width: 96px; overflow: hidden; text-overflow: ellipsis; }
   .modal-backdrop { padding: 10px; align-items: end; }
   #panel { width: 100%; max-height: 72vh; padding: 12px; border-radius: 18px; }
   #panel h2 { font-size: 15px; margin-bottom: 4px; }
@@ -450,12 +458,12 @@ body[data-control-mode="touch"] .hint { display: none; }
   .post-run-actions { gap: 6px; }
   .post-run-actions button { flex-basis: calc(50% - 4px); padding: 8px; font-size: 11px; }
   .recent-row { grid-template-columns: 34px 1fr; font-size: 11px; }
-  #game { height: 100vh; }
+  #game { height: var(--app-height, 100dvh); }
   .hint { display: none; }
 }
 
 @media (max-width: 560px) {
-  #hud { transform: scale(.58); width: calc((100vw - 8px) / .58); left: 4px; right: 4px; top: 4px; }
+  #hud { transform: none; width: auto; left: 6px; right: 6px; top: calc(env(safe-area-inset-top, 0px) + 6px); }
   .combat-controls { gap: 4px; }
   .combat-controls button, .upgrade-prompt { min-height: 30px; padding: 5px 7px; font-size: 10px; touch-action: manipulation; }
   #pauseBtn { min-width: 52px; }
@@ -479,7 +487,9 @@ body[data-control-mode="touch"] .hint { display: none; }
 }
 
 @media (max-width: 860px) and (orientation: landscape) {
-  #hud { transform: scale(.52); width: calc((100vw - 10px) / .52); }
+  #hud { transform: none; width: auto; top: calc(env(safe-area-inset-top, 0px) + 4px); }
+  .stats div { padding: 4px 6px; }
+  .combat-controls button, .upgrade-prompt { min-height: 26px; }
   .card { max-height: 84dvh; }
   .version-card { max-height: 26dvh; overflow-y: auto; }
   #toast { bottom: 12px; }

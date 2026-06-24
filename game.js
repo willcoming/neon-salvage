@@ -646,10 +646,20 @@
       : `<b>解鎖進度 ${done}/${achievementDefs.length}</b><span>所有成就已解鎖</span><small>可以挑戰高難與更高評級。</small>`;
   }
 
+  function viewportSize() {
+    const vv = window.visualViewport;
+    return {
+      w: Math.max(320, Math.round(vv?.width || window.innerWidth || 320)),
+      h: Math.max(360, Math.round(vv?.height || window.innerHeight || 560))
+    };
+  }
+
   function resize() {
     dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
-    W = window.innerWidth;
-    H = window.innerHeight;
+    const viewport = viewportSize();
+    W = viewport.w;
+    H = viewport.h;
+    document.documentElement.style.setProperty('--app-height', `${H}px`);
     canvas.width = Math.floor(W * dpr);
     canvas.height = Math.floor(H * dpr);
     canvas.style.width = `${W}px`;
@@ -2353,6 +2363,8 @@
   function loop(now) { const dt = Math.min((now - lastTime) / 1000, .05); lastTime = now; updateFeedbackTimers(dt); update(dt); draw(); requestAnimationFrame(loop); }
 
   window.addEventListener('resize', resize);
+  window.visualViewport?.addEventListener('resize', resize);
+  window.visualViewport?.addEventListener('scroll', resize);
   window.addEventListener('keydown', e => {
     keys.add(e.code);
     if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) doDash(); }

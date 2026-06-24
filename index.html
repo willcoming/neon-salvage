@@ -2,9 +2,9 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=3.0.1" />
+  <link rel="stylesheet" href="./styles.css?v=3.0.2" />
 </head>
 <body>
   <div id="app">
@@ -57,10 +57,10 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v3.0.1 首頁穩定修正版</strong>
+          <strong>v3.0.2 手機視窗修正版</strong>
           <ul>
-            <li>首頁版本內容改成只顯示最新重點，不再列出完整歷史 changelog。</li>
-            <li>首頁與說明卡片加入捲動保護，桌機與手機都不會因內容過長卡住。</li>
+            <li>修正手機 Safari 下方多餘黑色空間，遊戲高度改與實際可視區同步。</li>
+            <li>修正手機上方 HUD 被頁面捲動吃掉，護盾、碎晶、波次與分數會固定顯示在上方。</li>
             <li>保留 v3.0 Demo/Beta 完整內容：10 波撤離、多星域、多事件、多 Boss、build 流派、成就、難度、音效與手機 UI。</li>
           </ul>
         </div>
@@ -153,6 +153,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=3.0.1"></script>
+  <script src="./game.js?v=3.0.2"></script>
 </body>
 </html>
