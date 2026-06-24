@@ -364,7 +364,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   function formatTime(seconds = 0) {
@@ -487,6 +487,7 @@
       if ((record.skills || []).length < 3) list.push('拿到 3 個局內技能');
     }
     if ((record.shieldSatelliteTime || 0) > 0 && (record.shieldSatelliteKills || 0) < 2) list.push('優先擊破 2 台護盾衛星');
+    if ((record.objectiveBonuses || 0) < 2 && (record.objectives || 0) >= 2) list.push('完成 2 個帶 ★ 副條件目標');
     if ((record.tacticsSeen || []).length) list.push(`破解 ${record.tacticsSeen[0]} 戰術`);
     if ((record.eventsSeen || []).includes('拾荒競速') && !record.salvageRushWins) list.push('完成一次拾荒競速');
     if ((record.maxEnemies || 0) >= enemyCap() - 1) list.push('帶一個範圍技能進後期');
@@ -521,6 +522,8 @@
       skills: [...(runStats?.skills || [])].slice(-6),
       build: detectBuildName(),
       zone: runStats?.zone || currentZone().name,
+      objectiveRoute: [...(runStats?.objectiveRoute || [])].slice(-6),
+      objectiveBonuses: runStats?.objectiveBonuses || 0,
       eventsSeen: [...(runStats?.eventsSeen || [])].slice(-5),
       tacticsSeen: [...(runStats?.tacticsSeen || [])].slice(-5),
       tacticPressure: runStats?.tacticPressure || 0,
@@ -593,6 +596,7 @@
     report.className = 'run-report';
     const skillHtml = record.skills.length ? record.skills.map(s => `<span>${escapeHtml(s)}</span>`).join('') : '<span>尚未選擇技能</span>';
     const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
+    const routeHtml = record.objectiveRoute?.length ? record.objectiveRoute.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成目標路線</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
     const bossHtml = record.bossMechanics?.length ? record.bossMechanics.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未遭遇 Boss 機制</span>';
     const unlock = nextAchievement();
@@ -600,12 +604,13 @@
     report.innerHTML = `
       <div class="grade-badge ${record.status === 'clear' ? 'win' : 'fail'}"><span>${escapeHtml(record.status === 'clear' ? record.grade : '失敗')}</span><small>${escapeHtml(record.status === 'clear' ? '撤離成功' : '資料已保存')}</small></div>
       <div class="report-grid">
-        <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
+        <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
         <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? '｜二階段' : ''}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
+      <div class="skill-chips"><b>目標路線</b>${routeHtml}</div>
       <div class="skill-chips"><b>Boss 機制</b>${bossHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
       <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
@@ -854,11 +859,11 @@
   }
 
   const objectiveDefs = {
-    scan: { name: '掃描信標', color: '#bdfcff', event: ['droneSwarm', 'gravityWell', 'rich', 'empStorm'], reward: 1, charge: 2.4 },
-    hold: { name: '守點核心', color: '#7aa7ff', event: ['droneSwarm', 'eliteStorm', 'empStorm'], reward: 1.35, charge: 6.2 },
-    harvest: { name: '採集晶礦', color: '#ffd166', event: ['rich', 'droneSwarm', 'salvageRush'], reward: 1.2, charge: 4.2 },
-    rift: { name: '清除裂隙', color: '#ff4d6d', event: ['hazard', 'gravityWell', 'empStorm'], reward: 1.45, charge: 4.8 },
-    hunt: { name: '獵殺菁英', color: '#ff3df2', event: ['eliteStorm', 'rich', 'salvageRush'], reward: 1.7, charge: 1 }
+    scan: { name: '掃描信標', color: '#bdfcff', event: ['droneSwarm', 'gravityWell', 'rich', 'empStorm'], routeBias: ['empStorm', 'rich'], reward: 1, charge: 2.4, sideLabel: '穩定掃描', sideGoal: 3, sideHint: '站在圈內完成 3 次掃描脈衝。' },
+    hold: { name: '守點核心', color: '#7aa7ff', event: ['droneSwarm', 'eliteStorm', 'empStorm'], routeBias: ['droneSwarm', 'eliteStorm'], reward: 1.35, charge: 6.2, sideLabel: '守住攻勢', sideGoal: 3, sideHint: '守點期間撐過 3 次敵群衝擊。' },
+    harvest: { name: '採集晶礦', color: '#ffd166', event: ['rich', 'droneSwarm', 'salvageRush'], routeBias: ['rich', 'salvageRush'], reward: 1.2, charge: 4.2, sideLabel: '採出晶礦', sideGoal: 6, sideHint: '採集期間噴出 6 批碎晶。' },
+    rift: { name: '清除裂隙', color: '#ff4d6d', event: ['hazard', 'gravityWell', 'empStorm'], routeBias: ['hazard', 'gravityWell'], reward: 1.45, charge: 4.8, sideLabel: '封印裂隙', sideGoal: 3, sideHint: '在圈內壓制 3 次裂隙脈衝。' },
+    hunt: { name: '獵殺菁英', color: '#ff3df2', event: ['eliteStorm', 'rich', 'salvageRush'], routeBias: ['eliteStorm', 'rich'], reward: 1.7, charge: 1, sideLabel: '擊破目標', sideGoal: 1, sideHint: '進入區域後擊破標記菁英。' }
   };
 
   const tutorialDefs = [
@@ -1243,6 +1248,47 @@
 
   function objectiveRewardMult() {
     return ((currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035) * currentDifficulty().reward;
+  }
+
+  function chooseObjectiveEvent(kind, def = objectiveDefs[kind] || objectiveDefs.scan) {
+    const pool = [...(def.event || ['droneSwarm'])];
+    if (def.routeBias?.length) pool.push(...def.routeBias);
+    const zoneId = currentZone().id;
+    if (zoneId === 'crystal' && def.event?.includes('salvageRush')) pool.push('salvageRush', 'rich');
+    if (zoneId === 'scrapyard' && def.event?.includes('empStorm')) pool.push('empStorm');
+    if (zoneId === 'rift') {
+      if (def.event?.includes('hazard')) pool.push('hazard');
+      if (def.event?.includes('gravityWell')) pool.push('gravityWell');
+    }
+    return choose(pool);
+  }
+
+  function objectiveSideGoal(beaconRef = beacon) {
+    const def = objectiveDefs[beaconRef?.kind] || objectiveDefs.scan;
+    return Math.max(1, beaconRef?.sideGoal || def.sideGoal || 1);
+  }
+
+  function objectiveSideProgress(beaconRef = beacon) {
+    return Math.min(objectiveSideGoal(beaconRef), Math.floor(beaconRef?.sideProgress || 0));
+  }
+
+  function objectiveSideComplete(beaconRef = beacon) {
+    return objectiveSideProgress(beaconRef) >= objectiveSideGoal(beaconRef);
+  }
+
+  function objectiveSideText(beaconRef = beacon) {
+    if (!beaconRef) return '';
+    const def = objectiveDefs[beaconRef.kind] || objectiveDefs.scan;
+    return `${def.sideLabel || '副目標'} ${objectiveSideProgress(beaconRef)}/${objectiveSideGoal(beaconRef)}`;
+  }
+
+  function recordObjectiveRoute(beaconRef, eventId, bonus) {
+    if (!runStats || !beaconRef) return;
+    const def = objectiveDefs[beaconRef.kind] || objectiveDefs.scan;
+    const eventName = eventDefs[eventId]?.name || '未知事件';
+    const label = `${def.name}→${eventName}${bonus ? '★' : ''}`;
+    runStats.objectiveRoute.push(label);
+    if (bonus) runStats.objectiveBonuses++;
   }
 
   function hardResetRun() {
@@ -1812,7 +1858,7 @@
     const keys = Object.keys(objectiveDefs);
     const objective = kind || choose(keys);
     const def = objectiveDefs[objective];
-    return { x: player ? player.x + Math.cos(a) * d : W / 2 + 900, y: player ? player.y + Math.sin(a) * d : H / 2 - 700, r: objective === 'hold' ? 86 : objective === 'hunt' ? 72 : 64, pulse: 0, charge: 0, armed: false, kind: objective, name: def.name, color: def.color, huntTarget: null, spawnClock: 0, tick: 0 };
+    return { x: player ? player.x + Math.cos(a) * d : W / 2 + 900, y: player ? player.y + Math.sin(a) * d : H / 2 - 700, r: objective === 'hold' ? 86 : objective === 'hunt' ? 72 : 64, pulse: 0, charge: 0, armed: false, kind: objective, name: def.name, color: def.color, previewEvent: chooseObjectiveEvent(objective, def), sideProgress: 0, sideGoal: def.sideGoal || 1, sideTick: 0, bonusGranted: false, huntTarget: null, spawnClock: 0, tick: 0 };
   }
 
   function objectiveReward(def) {
@@ -1846,21 +1892,25 @@
     if (!beacon || beacon.armed) return;
     beacon.armed = true;
     const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
-    const instant = Math.floor((12 + wave * 1.8) * def.reward);
+    const bonus = objectiveSideComplete(beacon);
+    const bonusScrap = bonus ? Math.floor(8 + wave * 1.4) : 0;
+    const instant = Math.floor((12 + wave * 1.8) * def.reward) + bonusScrap;
     runObjectives++;
     const reward = objectiveReward(def);
+    if (bonus) reward.xp += Math.ceil(xpNeed * .08);
     meta.scrap += instant;
-    xp += Math.ceil(xpNeed * .12);
+    xp += Math.ceil(xpNeed * (bonus ? .18 : .12));
     if (beacon.kind === 'rift') worldFeatures = worldFeatures.filter(f => f.type !== 'hazard' || Math.hypot(f.x - beacon.x, f.y - beacon.y) > 620);
-    addText(player.x, player.y - 50, `${def.name} +${instant}`, def.color);
-    burst(beacon.x, beacon.y, def.color, 38, 1.35);
+    addText(player.x, player.y - 50, `${def.name} +${instant}${bonus ? '★' : ''}`, def.color);
+    burst(beacon.x, beacon.y, def.color, bonus ? 50 : 38, bonus ? 1.55 : 1.35);
     sfx('upgrade');
-    addShake(1.6, .1);
-    const eventId = choose(def.event);
+    addShake(bonus ? 2.2 : 1.6, .1);
+    const eventId = beacon.previewEvent || chooseObjectiveEvent(beacon.kind, def);
+    recordObjectiveRoute(beacon, eventId, bonus);
     startEvent(eventId, reward);
     const eventBurst = Math.max(3, Math.round((4 + Math.floor(wave / 3)) * lateGameScale()));
     for (let i = 0; i < eventBurst; i++) spawnEnemy(eventId === 'droneSwarm' ? choose(['sprinter', 'bomber']) : undefined);
-    flash(`${def.name}完成：${eventDefs[eventId].name}｜+${instant} 碎晶`);
+    flash(`${def.name}完成：${eventDefs[eventId].name}｜${bonus ? '副目標達成 ' : ''}+${instant} 碎晶`);
     beacon = makeBeacon();
     save(false);
   }
@@ -1873,18 +1923,21 @@
     beacon.tick += dt;
     if (beacon.kind === 'hunt') {
       if (inside) spawnObjectiveHunter();
-      if (beacon.huntTarget?.dead) triggerBeacon();
+      if (beacon.huntTarget?.dead) { beacon.sideProgress = objectiveSideGoal(beacon); triggerBeacon(); }
       return;
     }
     if (inside) {
       beacon.charge += dt;
+      beacon.sideTick += dt;
       if (particles.length < MAX_PARTICLES) particles.push({ x: beacon.x + rand(-18, 18), y: beacon.y + rand(-18, 18), vx: rand(-8, 8), vy: rand(-8, 8), life: .22, max: .22, r: rand(1.4, 2.8), color: def.color, ring: false });
-      if (beacon.kind === 'hold') { beacon.spawnClock -= dt; if (beacon.spawnClock <= 0) { spawnEnemy(choose(['chaser', 'sprinter', 'bomber'])); beacon.spawnClock = .9 / lateGameScale(); } }
-      if (beacon.kind === 'harvest' && Math.random() < dt * 4.2) dropShard(beacon.x + rand(-58, 58), beacon.y + rand(-58, 58), 1);
-      if (beacon.kind === 'rift' && Math.random() < dt * .9 * lateGameScale()) addWorldFeature('hazard');
+      if (beacon.kind === 'scan' && beacon.sideTick >= .75 && beacon.sideProgress < objectiveSideGoal(beacon)) { beacon.sideProgress++; beacon.sideTick = 0; addText(beacon.x, beacon.y - 42, '掃描脈衝', def.color); }
+      if (beacon.kind === 'hold') { beacon.spawnClock -= dt; if (beacon.spawnClock <= 0) { spawnEnemy(choose(['chaser', 'sprinter', 'bomber'])); beacon.spawnClock = .9 / lateGameScale(); if (beacon.sideProgress < objectiveSideGoal(beacon)) beacon.sideProgress++; } }
+      if (beacon.kind === 'harvest' && Math.random() < dt * 4.2) { dropShard(beacon.x + rand(-58, 58), beacon.y + rand(-58, 58), 1); if (beacon.sideProgress < objectiveSideGoal(beacon)) beacon.sideProgress++; }
+      if (beacon.kind === 'rift' && beacon.sideTick >= 1.05) { beacon.sideTick = 0; if (beacon.sideProgress < objectiveSideGoal(beacon)) beacon.sideProgress++; if (Math.random() < .9 * lateGameScale()) addWorldFeature('hazard'); }
       if (beacon.charge >= def.charge) triggerBeacon();
     } else {
       beacon.charge = Math.max(0, beacon.charge - dt * (beacon.kind === 'hold' ? .95 : .55));
+      beacon.sideTick = Math.max(0, beacon.sideTick - dt * .5);
     }
   }
 
@@ -2671,8 +2724,9 @@
     const tutorialStep = currentTutorialStep();
     const hasTutorial = !!tutorialStep;
     const hasTactic = !!activeTactic && !bossActive;
+    const hasObjective = !!beacon;
     const x = 12; const y = 112; const w = 286;
-    const h = 64 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasTutorial ? 42 : 0);
+    const h = 64 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -2703,9 +2757,15 @@
     }
     if (beacon) {
       const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
+      const preview = eventDefs[beacon.previewEvent]?.name || '未知事件';
+      const sidePct = clamp(objectiveSideProgress(beacon) / objectiveSideGoal(beacon), 0, 1);
       ctx.fillStyle = def.color; ctx.font = '900 11px system-ui';
-      ctx.fillText(`目標：${def.name}`, x + 10, lineY);
-      lineY += 14;
+      ctx.fillText(`目標：${def.name} → ${preview}`, x + 10, lineY, w - 20);
+      ctx.fillStyle = objectiveSideComplete(beacon) ? '#4dff88' : 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+      ctx.fillText(`副條件：${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`, x + 10, lineY + 15, w - 20);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 21, w - 20, 3);
+      ctx.fillStyle = objectiveSideComplete(beacon) ? '#4dff88' : def.color; ctx.fillRect(x + 10, lineY + 21, (w - 20) * sidePct, 3);
+      lineY += 32;
     }
     if (hasTutorial) {
       const tp = tutorialProgress(tutorialStep);
