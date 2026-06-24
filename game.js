@@ -557,9 +557,9 @@
   ];
 
   const enemyTypes = {
-    chaser: { label: '追獵機', color: '#37f6ff', hp: 21, speed: 68, r: 15, sides: 5, scrap: 1 },
-    sprinter: { label: '閃擊機', color: '#4dff88', hp: 13, speed: 128, r: 11, sides: 3, scrap: 1 },
-    tank: { label: '重甲機', color: '#ffd166', hp: 58, speed: 42, r: 24, sides: 6, scrap: 3 },
+    chaser: { label: '追獵機', color: '#ff4d6d', hp: 21, speed: 68, r: 15, sides: 5, scrap: 1 },
+    sprinter: { label: '閃擊機', color: '#ff7a3d', hp: 13, speed: 128, r: 11, sides: 3, scrap: 1 },
+    tank: { label: '重甲機', color: '#ff9f1c', hp: 58, speed: 42, r: 24, sides: 6, scrap: 3 },
     shooter: { label: '狙擊球', color: '#ff3df2', hp: 27, speed: 50, r: 17, sides: 8, scrap: 2 },
     leech: { label: '吸能蟲', color: '#b66dff', hp: 34, speed: 76, r: 14, sides: 7, scrap: 2 },
     bomber: { label: '爆裂雷', color: '#ff7a3d', hp: 22, speed: 62, r: 16, sides: 6, scrap: 2 },
