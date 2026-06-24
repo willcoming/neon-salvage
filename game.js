@@ -336,6 +336,7 @@
 
   function balanceHint() {
     if (!runStats) return '診斷：資料不足，先完成更多波次。';
+    if (runStats.maxParticles >= MAX_PARTICLES * .92 || runStats.maxRings >= MAX_RING_PARTICLES) return '診斷：性能預算曾接近紅線，系統已限制粒子/ring；下一局可少疊高爆裂特效。';
     if ((runStats.shieldSatelliteTime || 0) > 8 && (runStats.shieldSatelliteKills || 0) <= 1) return '診斷：護盾衛星拖慢清場，下一局看到藍色衛星要優先擊破。';
     if ((runStats.eventsSeen || []).includes('拾荒競速') && !runStats.salvageRushWins) return '診斷：拾荒競速未達標，磁吸場與安全路線會提高收益。';
     if (runObjectives <= 1 && wave >= 5) return '診斷：目標參與偏低，建議多跑目標點換事件獎勵。';
@@ -363,9 +364,20 @@
   }
 
   function pressureLabel(record) {
+    if ((record.maxParticles || 0) >= MAX_PARTICLES * .92 || (record.maxRings || 0) >= MAX_RING_PARTICLES) return '紅線';
     if ((record.maxRings || 0) >= 8 || (record.maxParticles || 0) >= 150) return '高壓';
     if ((record.maxEnemies || 0) >= 28) return '密集';
     return '穩定';
+  }
+
+  function budgetLabel(record) {
+    const enemyRatio = (record.maxEnemies || 0) / Math.max(1, enemyCap());
+    const particleRatio = (record.maxParticles || 0) / MAX_PARTICLES;
+    const ringRatio = (record.maxRings || 0) / MAX_RING_PARTICLES;
+    const peak = Math.max(enemyRatio, particleRatio, ringRatio);
+    if (peak >= .92) return '紅線｜系統已進入強制預算';
+    if (peak >= .74) return '黃色｜接近預算，建議降特效密度';
+    return '綠色｜性能預算穩定';
   }
 
   function challengeList(record) {
@@ -421,6 +433,7 @@
       diagnosis: balanceHint()
     };
     record.pressure = pressureLabel(record);
+    record.budget = budgetLabel(record);
     record.challenges = challengeList(record);
     return record;
   }
@@ -486,7 +499,7 @@
       <div class="grade-badge ${record.status === 'clear' ? 'win' : 'fail'}"><span>${escapeHtml(record.status === 'clear' ? record.grade : '失敗')}</span><small>${escapeHtml(record.status === 'clear' ? '撤離成功' : '資料已保存')}</small></div>
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
-        <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div></dl></section>
+        <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
         <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
