@@ -42,7 +42,7 @@
     upgradePrompt: document.getElementById('upgradePrompt'),
     offlineNotice: document.getElementById('offlineNotice'),
     achievementPanel: document.getElementById('achievementPanel'),
-    touchGuide: document.getElementById('touchGuide')
+    zonePanel: document.getElementById('zonePanel')
   };
 
   const SAVE_KEY = 'neon-salvage-save-v2';
@@ -90,6 +90,7 @@
     autoAim: true,
     aimAssist: 'assist',
     tutorialDone: false,
+    selectedZone: 'random',
     difficulty: 'standard',
     lastSaved: Date.now(),
     upgrades: { cannon: 0, reactor: 0, shield: 0, armor: 0, engine: 0, magnet: 0, survey: 0, drone: 0 }
@@ -677,6 +678,43 @@
     rift: { name: '裂隙邊界', color: '#ff4d6d', desc: '危險裂隙較多，但目標獎勵更高。', featureBias: ['hazard', 'hazard', 'resource', 'debris', 'repair'], scrapBonus: 1, enemyBias: ['leech', 'shooter'] }
   };
 
+  function zoneOptions() {
+    return [
+      { id: 'random', name: '隨機航線', color: '#bdfcff', desc: '每局抽一個星域，適合保持新鮮感。' },
+      ...Object.entries(zoneDefs).map(([id, z]) => ({ id, ...z }))
+    ];
+  }
+
+  function selectedZoneId() {
+    return meta.selectedZone && (meta.selectedZone === 'random' || zoneDefs[meta.selectedZone]) ? meta.selectedZone : 'random';
+  }
+
+  function setSelectedZone(id) {
+    meta.selectedZone = id === 'random' || zoneDefs[id] ? id : 'random';
+    save(false);
+    renderZonePanel();
+    const name = zoneOptions().find(z => z.id === selectedZoneId())?.name || '隨機航線';
+    flash(`星域路線：${name}`);
+  }
+
+  function renderZonePanel() {
+    if (!ui.zonePanel) return;
+    const current = selectedZoneId();
+    ui.zonePanel.innerHTML = '<strong>星域路線</strong>';
+    const grid = document.createElement('div');
+    grid.className = 'zone-grid';
+    for (const z of zoneOptions()) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `zone-card${z.id === current ? ' active' : ''}`;
+      btn.style.setProperty('--zone-color', z.color || '#37f6ff');
+      btn.innerHTML = `<b style="color:${z.color || '#37f6ff'}">${z.name}</b><small>${z.desc}</small>`;
+      btn.addEventListener('click', () => setSelectedZone(z.id));
+      grid.appendChild(btn);
+    }
+    ui.zonePanel.appendChild(grid);
+  }
+
   const eventDefs = {
     meteor: { name: '流星雨', desc: '危險流星穿越戰場，擊中敵我皆會受傷。', color: '#ff7a3d' },
     overclock: { name: '超頻風暴', desc: '你的射速提升，但敵人行動也更快。', color: '#37f6ff' },
@@ -784,6 +822,7 @@
     if (show) flash('已保存到本機瀏覽器');
     renderUpgrades();
     renderAchievementPanel();
+    renderZonePanel();
   }
 
   function resetSave() {
@@ -1028,8 +1067,9 @@
   }
 
   function chooseZone() {
+    const picked = selectedZoneId();
     const ids = Object.keys(zoneDefs);
-    const id = choose(ids);
+    const id = picked === 'random' ? choose(ids) : picked;
     return { id, ...zoneDefs[id] };
   }
 
@@ -2374,7 +2414,9 @@
     const x = 12; const y = 112; const w = 286; const h = activeEvent ? (hasTutorial ? 124 : 82) : (hasTutorial ? 102 : 60);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
-    ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19);
+    ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
+    const zone = currentZone();
+    ctx.textAlign = 'right'; ctx.fillStyle = zone.color || '#37f6ff'; ctx.fillText(zone.name || '標準星環', x + w - 10, y + 19, 96); ctx.textAlign = 'left';
     const progress = mission ? clamp(mission.check() / mission.target, 0, 1) : 0;
     ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, y + 30, w - 20, 4); ctx.fillStyle = mission?.done ? '#4dff88' : '#37f6ff'; ctx.fillRect(x + 10, y + 30, (w - 20) * progress, 4);
     if (isPlayerProtected() && runTime < 5) {
@@ -2536,7 +2578,7 @@
     closeUpgradeModal();
     closeSettingsModal();
     ensureAudio();
-    if (gameOver || !player) hardResetRun();
+    if (gameOver || !player || !running) hardResetRun();
     running = true; paused = false; gameOver = false; skillChoosing = false;
     clearRunOverlayExtras();
     ui.overlay.classList.remove('visible'); ui.startBtn.textContent = '開始 / 繼續'; ui.startBtn.style.display = ''; ui.howBtn.style.display = '';
@@ -2709,5 +2751,5 @@
     };
   }
 
-  resize(); applyOfflineRewards(); hardResetRun(); renderUpgrades(); renderAchievementPanel(); updateSoundUi(); updateDifficultyUi(); updateUi(); requestAnimationFrame(loop);
+  resize(); applyOfflineRewards(); hardResetRun(); renderUpgrades(); renderAchievementPanel(); renderZonePanel(); updateSoundUi(); updateDifficultyUi(); updateUi(); requestAnimationFrame(loop);
 })();

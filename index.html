@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=3.2" />
+  <link rel="stylesheet" href="./styles.css?v=3.3" />
 </head>
 <body>
   <div id="app">
@@ -105,15 +105,16 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v3.2 新手流程教學版</strong>
+          <strong>v3.3 星域路線選擇版</strong>
           <ul>
-            <li>新增首局 5 步教學任務鏈：移動、擊殺、拾取、目標與第一次技能選擇。</li>
-            <li>新手任務會顯示在戰鬥左上角；完成後保存，之後不再打擾。</li>
+            <li>首頁新增星域路線選擇：隨機、電磁殘骸帶、晶礦雲帶、裂隙邊界。</li>
+            <li>選擇會保存；每局開始時依路線改變地圖物件、敵人傾向、事件與獎勵。</li>
             <li>保留 v3.0 Demo/Beta 完整內容：10 波撤離、多星域、多事件、多 Boss、build 流派、成就、難度、音效與手機 UI。</li>
           </ul>
         </div>
         <div id="offlineNotice" class="offline"></div>
         <div id="achievementPanel" class="achievement-panel"></div>
+        <div id="zonePanel" class="zone-panel" aria-label="星域路線選擇"></div>
         <div class="actions">
           <button id="startBtn">開始 / 繼續</button>
           <button id="homeSettingsBtn" class="secondary">設定</button>
@@ -158,7 +159,8 @@
 - 結算會顯示戰鬥報告：本局時間、最久波、峰值敵量/粒子/ring、Boss 時間、技能與平衡診斷。
 - 結算後會保存最近 5 場戰績，並提供再次出擊、艦載升級、最近戰績與玩法說明入口。
 - 命中、擊殺、Boss、受傷與撤離成功會有音效、火花與短促螢幕震動；可用 HUD 的音效按鈕關閉。
-- 每局會進入不同星域；電磁殘骸帶偏敵彈/殘骸，晶礦雲帶偏資源/高速敵，裂隙邊界偏危險但目標獎勵更高。
+- 首頁可選星域路線；隨機會每局抽一個星域，指定路線則固定進入該星域。
+- 電磁殘骸帶偏敵彈/殘骸，晶礦雲帶偏資源/高速敵，裂隙邊界偏危險但目標獎勵更高。
 - EMP 風暴會縮短自動鎖定距離，但也拖慢敵機與敵彈；拾荒競速會要求限時收集碎晶，達標有額外獎勵。
 - 護盾衛星是藍色小型衛星，會替附近敵人補盾；看到時優先擊破。
 - 新技能會讓武器形成明確 build：暴擊/灼燒、軌砲穿透、霰彈反沖、電漿連鎖或無人機追蹤。
@@ -203,6 +205,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=3.2"></script>
+  <script src="./game.js?v=3.3"></script>
 </body>
 </html>
