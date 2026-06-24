@@ -69,7 +69,7 @@
     recentRuns: [],
     soundEnabled: true,
     lastSaved: Date.now(),
-    upgrades: { cannon: 0, shield: 0, engine: 0, magnet: 0, drone: 0 }
+    upgrades: { cannon: 0, reactor: 0, shield: 0, armor: 0, engine: 0, magnet: 0, survey: 0, drone: 0 }
   });
 
   let meta = loadSave();
@@ -492,11 +492,14 @@
   };
 
   const upgradeDefs = [
-    { id: 'cannon', name: '脈衝主砲', desc: '提高射速與子彈傷害。', base: 18, scale: 1.47, max: 12 },
-    { id: 'shield', name: '護盾矩陣', desc: '提高最大護盾，每級 +15。', base: 16, scale: 1.45, max: 12 },
-    { id: 'engine', name: '離子引擎', desc: '提高移動速度與衝刺恢復。', base: 15, scale: 1.42, max: 10 },
-    { id: 'magnet', name: '磁吸場', desc: '擴大碎晶自動吸附範圍。', base: 12, scale: 1.4, max: 10 },
-    { id: 'drone', name: '無人機合約', desc: '提高離線碎晶收益。', base: 28, scale: 1.62, max: 8 }
+    { id: 'cannon', lane: '火力系', name: '脈衝主砲', desc: '提高射速與子彈傷害。', base: 18, scale: 1.47, max: 12 },
+    { id: 'reactor', lane: '火力系', name: '過載反應爐', desc: '提高所有武器傷害，Lv.3 後讓暴擊更穩。', base: 44, scale: 1.58, max: 6, requires: 'wave5' },
+    { id: 'shield', lane: '生存系', name: '護盾矩陣', desc: '提高最大護盾，每級 +15。', base: 16, scale: 1.45, max: 12 },
+    { id: 'armor', lane: '生存系', name: '緊急裝甲', desc: '提高最大護盾並略微降低撞擊/彈幕傷害。', base: 38, scale: 1.52, max: 6, requires: 'kills50' },
+    { id: 'engine', lane: '生存系', name: '離子引擎', desc: '提高移動速度與衝刺恢復。', base: 15, scale: 1.42, max: 10 },
+    { id: 'magnet', lane: '拾荒系', name: '磁吸場', desc: '擴大碎晶自動吸附範圍。', base: 12, scale: 1.4, max: 10 },
+    { id: 'survey', lane: '拾荒系', name: '星圖掃描', desc: '提高目標與事件獎勵，並更容易完成拾荒競速。', base: 34, scale: 1.52, max: 6, requires: 'scrap200' },
+    { id: 'drone', lane: '拾荒系', name: '無人機合約', desc: '提高離線碎晶收益。', base: 28, scale: 1.62, max: 8 }
   ];
 
   const skillPool = [
@@ -639,8 +642,9 @@
     const elapsed = Math.max(0, Date.now() - (meta.lastSaved || Date.now()));
     const hours = Math.min(24, elapsed / 36e5);
     const drone = meta.upgrades.drone || 0;
-    if (drone <= 0 || hours < 0.05) return;
-    const gain = Math.floor(hours * drone * 10 + Math.sqrt(Math.max(1, meta.bestWave)) * hours * 2.5);
+    const survey = meta.upgrades.survey || 0;
+    if ((drone + survey) <= 0 || hours < 0.05) return;
+    const gain = Math.floor(hours * drone * 10 + Math.sqrt(Math.max(1, meta.bestWave)) * hours * (2.5 + survey * .8));
     if (gain > 0) {
       meta.scrap += gain;
       ui.offlineNotice.textContent = `離線探勘回收 ${gain} 碎晶（最多計 24 小時）`;
@@ -653,10 +657,20 @@
     return Math.floor(def.base * Math.pow(def.scale, lvl));
   }
 
+  function upgradeUnlocked(def) {
+    return !def.requires || !!meta.achievements?.[def.requires];
+  }
+
+  function upgradeLockText(def) {
+    if (!def.requires) return '';
+    const ach = achievementDefs.find(a => a.id === def.requires);
+    return ach ? `需成就：${ach.name}` : '尚未解鎖';
+  }
+
   function availableUpgradeCount() {
     return upgradeDefs.filter(def => {
       const lvl = meta.upgrades[def.id] || 0;
-      return lvl < def.max && meta.scrap >= upgradeCost(def);
+      return upgradeUnlocked(def) && lvl < def.max && meta.scrap >= upgradeCost(def);
     }).length;
   }
 
@@ -719,6 +733,7 @@
     if (!canUsePermanentUpgrades()) return flash('請先按 P 暫停，再升級');
     const def = upgradeDefs.find(u => u.id === id);
     if (!def) return;
+    if (!upgradeUnlocked(def)) return flash(upgradeLockText(def));
     const lvl = meta.upgrades[id] || 0;
     if (lvl >= def.max) return flash('這項已滿級');
     const cost = upgradeCost(def);
@@ -737,30 +752,41 @@
 
   function renderUpgrades() {
     ui.upgrades.innerHTML = '';
+    let lane = '';
     for (const def of upgradeDefs) {
+      if (def.lane && def.lane !== lane) {
+        lane = def.lane;
+        const head = document.createElement('div');
+        head.className = 'upgrade-lane';
+        head.textContent = lane;
+        ui.upgrades.appendChild(head);
+      }
       const lvl = meta.upgrades[def.id] || 0;
       const cost = upgradeCost(def);
+      const unlocked = upgradeUnlocked(def);
       const el = document.createElement('article');
       el.className = 'upgrade';
-      el.innerHTML = `<header><strong>${def.name}</strong><span class="level">Lv.${lvl}/${def.max}</span></header><p>${def.desc}</p><button ${!canUsePermanentUpgrades() || lvl >= def.max || meta.scrap < cost ? 'disabled' : ''}>${lvl >= def.max ? '已滿級' : `升級｜${cost} 碎晶`}</button>`;
+      if (!unlocked) el.classList.add('locked');
+      el.innerHTML = `<header><strong>${def.name}</strong><span class="level">Lv.${lvl}/${def.max}</span></header><p>${def.desc}</p>${!unlocked ? `<small>${upgradeLockText(def)}</small>` : ''}<button ${!unlocked || !canUsePermanentUpgrades() || lvl >= def.max || meta.scrap < cost ? 'disabled' : ''}>${!unlocked ? '未解鎖' : lvl >= def.max ? '已滿級' : `升級｜${cost} 碎晶`}</button>`;
       el.querySelector('button').addEventListener('click', () => buyUpgrade(def.id));
       ui.upgrades.appendChild(el);
     }
     ui.scrap.textContent = Math.floor(meta.scrap).toString();
   }
 
-  function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15; }
+  function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15 + (meta.upgrades.armor || 0) * 12; }
   function playerScale() { return controlMode === 'touch' ? .46 : .72; }
   function playerRadius() { return 17 * playerScale(); }
   function enemyScale() { return controlMode === 'touch' ? .76 : .84; }
-  function speed() { return (282 + (meta.upgrades.engine || 0) * 18) * (controlMode === 'touch' ? .88 : 1); }
-  function fireRate() { return Math.max(.075, .215 - (meta.upgrades.cannon || 0) * .011); }
+  function speed() { return (282 + (meta.upgrades.engine || 0) * 18 + (meta.upgrades.armor || 0) * 2) * (controlMode === 'touch' ? .88 : 1); }
+  function fireRate() { return Math.max(.07, .215 - (meta.upgrades.cannon || 0) * .011 - (meta.upgrades.reactor || 0) * .004); }
   function weaponFireRate() {
     const harvest = upgradesRuntime.harvestDrive > 0 ? Math.max(.72, 1 - Math.min(.28, (runKills % 10) * .028 * upgradesRuntime.harvestDrive)) : 1;
     const storm = activeEvent?.id === 'overclock' ? .78 : 1;
     return fireRate() * harvest * storm;
   }
-  function damage() { return 15 + (meta.upgrades.cannon || 0) * 2.45; }
+  function damage() { return 15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15; }
+  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035); }
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28; }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
@@ -775,7 +801,7 @@
   }
 
   function objectiveRewardMult() {
-    return currentZone().id === 'rift' ? 1.12 : 1;
+    return (currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035;
   }
 
   function hardResetRun() {
@@ -1142,7 +1168,7 @@
 
   function dropShard(x, y, amount = 1) {
     const bonus = upgradesRuntime.shardMultiplier + (currentZone().scrapBonus || 0);
-    const total = amount + bonus + (Math.random() < .25 + bonus * .08 ? 1 : 0);
+    const total = amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0);
     for (let i = 0; i < total; i++) {
       const a = Math.random() * TWO_PI;
       shards.push({ x: x + rand(-12, 12), y: y + rand(-12, 12), vx: Math.cos(a) * rand(45, 145), vy: Math.sin(a) * rand(45, 145), r: rand(4, 7), value: 1, life: 20 });
@@ -1370,10 +1396,10 @@
         const push = (player.r + f.r * .76 - d) + 1;
         player.x += Math.cos(a) * push;
         player.y += Math.sin(a) * push;
-        if (f.cool <= 0 && !isPlayerProtected()) { playerImpact('obstacle', 2.2, 16); player.hp -= f.type === 'asteroid' ? 8 : 4; damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
+        if (f.cool <= 0 && !isPlayerProtected()) { playerImpact('obstacle', 2.2, 16); player.hp -= incomingDamage(f.type === 'asteroid' ? 8 : 4); damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'hazard' && d < f.r) {
-        if (zoneTick <= 0 && !isPlayerProtected()) { playerImpact('hazard', 1.6, 10); player.hp -= 3 + wave * .12; damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); if (player.hp <= 0) endRun(); }
+        if (zoneTick <= 0 && !isPlayerProtected()) { playerImpact('hazard', 1.6, 10); player.hp -= incomingDamage(3 + wave * .12); damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'repair' && d < f.r && f.cool <= 0) {
         player.hp = Math.min(player.maxHp, player.hp + 14);
@@ -1556,13 +1582,13 @@
       }
       if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; flash(e.finalBoss ? '最終 Boss 二階段：核心失控' : 'Boss 進入二階段：星環暴走'); burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 70 : 48, e.finalBoss ? 1.8 : 1.5); sfx('boss'); addShake(e.finalBoss ? 8 : 5, .24); haptic(e.finalBoss ? 55 : 28); }
       if (e.type === 'leech' && d < 185 && !isPlayerProtected()) {
-        playerImpact('leech', 1.2, 8); player.hp -= dt * (1.8 + wave * .04); damageFlash = Math.max(damageFlash, .12);
+        playerImpact('leech', 1.2, 8); player.hp -= incomingDamage(dt * (1.8 + wave * .04)); damageFlash = Math.max(damageFlash, .12);
         if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
         if (player.hp <= 0) endRun();
       }
       if (e.type === 'bomber' && d < 82 && !isPlayerProtected()) {
         e.dead = true;
-        playerImpact('bomber', 5.2, 40); player.hp -= 14 + wave * .38; damageFlash = .34;
+        playerImpact('bomber', 5.2, 40); player.hp -= incomingDamage(14 + wave * .38); damageFlash = .34;
         player.invuln = .38;
         burst(e.x, e.y, '#ff7a3d', 24, 1.2);
         if (player.hp <= 0) endRun();
@@ -1599,7 +1625,7 @@
       }
       const rr = e.r + player.r;
       if (dist2(e, player) < rr * rr && !isPlayerProtected()) {
-        playerImpact(e.type === 'boss' ? 'boss' : 'collision', e.type === 'boss' ? 5.5 : 3.1, e.type === 'boss' ? 42 : 18); player.hp -= Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55); damageFlash = .32;
+        playerImpact(e.type === 'boss' ? 'boss' : 'collision', e.type === 'boss' ? 5.5 : 3.1, e.type === 'boss' ? 42 : 18); player.hp -= incomingDamage(Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55)); damageFlash = .32;
         player.invuln = dashTime > 0 ? .05 : .68;
         if (e.type !== 'boss') e.dead = true;
         burst(player.x, player.y, '#ff4d6d', 18);
@@ -1617,7 +1643,7 @@
         particles.push({ x: s.x, y: s.y, vx: rand(-10, 10), vy: rand(-10, 10), life: .2, max: .2, r: 3, color: s.color || '#ff7a3d', ring: false });
       }
       if (dist2(s, player) < Math.pow(s.r + player.r, 2) && !isPlayerProtected()) {
-        playerImpact(s.type === 'meteor' ? 'meteor' : 'projectile', s.type === 'meteor' ? 4.5 : 3.4, s.type === 'meteor' ? 38 : 20); s.dead = true; player.hp -= s.dmg; damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
+        playerImpact(s.type === 'meteor' ? 'meteor' : 'projectile', s.type === 'meteor' ? 4.5 : 3.4, s.type === 'meteor' ? 38 : 20); s.dead = true; player.hp -= incomingDamage(s.dmg); damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
         if (player.hp <= 0) endRun();
       }
     }
@@ -1764,7 +1790,7 @@
     closeUpgradeModal();
     gameOver = true;
     paused = true;
-    const bonus = 120 + Math.floor(meta.bestWave * 3) + runKills;
+    const bonus = Math.floor((120 + Math.floor(meta.bestWave * 3) + runKills) * (1 + (meta.upgrades.survey || 0) * .035));
     meta.scrap += bonus;
     const grade = runGrade();
     const record = makeRunRecord('clear', grade, bonus);
@@ -1825,8 +1851,9 @@
     upgradeDefs.forEach((def, i) => {
       const btn = buttons[i]; if (!btn) return;
       const lvl = meta.upgrades[def.id] || 0; const cost = upgradeCost(def);
-      btn.disabled = !canUsePermanentUpgrades() || lvl >= def.max || meta.scrap < cost;
-      btn.textContent = lvl >= def.max ? '已滿級' : `升級｜${cost} 碎晶`;
+      const unlocked = upgradeUnlocked(def);
+      btn.disabled = !unlocked || !canUsePermanentUpgrades() || lvl >= def.max || meta.scrap < cost;
+      btn.textContent = !unlocked ? '未解鎖' : lvl >= def.max ? '已滿級' : `升級｜${cost} 碎晶`;
       const level = btn.closest('.upgrade')?.querySelector('.level'); if (level) level.textContent = `Lv.${lvl}/${def.max}`;
     });
   }
