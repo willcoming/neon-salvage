@@ -98,6 +98,7 @@
   let mission = null;
   let autoAim = false;
   let activeEvent = null;
+  let activeZone = null;
   let eventTimer = 0;
   let meteorTimer = 0;
   let eventBannerTimer = 0;
@@ -253,7 +254,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossKillTime: null, waveTimes: {}, skills: [], maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossKillTime: null, waveTimes: {}, skills: [], eventsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   function formatTime(seconds = 0) {
@@ -294,6 +295,8 @@
 
   function balanceHint() {
     if (!runStats) return '診斷：資料不足，先完成更多波次。';
+    if ((runStats.shieldSatelliteTime || 0) > 8 && (runStats.shieldSatelliteKills || 0) <= 1) return '診斷：護盾衛星拖慢清場，下一局看到藍色衛星要優先擊破。';
+    if ((runStats.eventsSeen || []).includes('拾荒競速') && !runStats.salvageRushWins) return '診斷：拾荒競速未達標，磁吸場與安全路線會提高收益。';
     if (runObjectives <= 1 && wave >= 5) return '診斷：目標參與偏低，建議多跑目標點換事件獎勵。';
     if (runStats.maxEnemies >= enemyCap() - 1) return '診斷：敵量曾達上限，範圍技能與走位會是關鍵。';
     if (runStats.maxRings >= Math.floor(MAX_RING_PARTICLES * .8)) return '診斷：特效接近預算上限，但已被系統壓住。';
@@ -336,6 +339,8 @@
       if ((record.objectives || 0) < 3) list.push('完成至少 3 個目標');
       if ((record.skills || []).length < 3) list.push('拿到 3 個局內技能');
     }
+    if ((record.shieldSatelliteTime || 0) > 0 && (record.shieldSatelliteKills || 0) < 2) list.push('優先擊破 2 台護盾衛星');
+    if ((record.eventsSeen || []).includes('拾荒競速') && !record.salvageRushWins) list.push('完成一次拾荒競速');
     if ((record.maxEnemies || 0) >= enemyCap() - 1) list.push('帶一個範圍技能進後期');
     return [...new Set(list)].slice(0, 3);
   }
@@ -362,6 +367,12 @@
       maxRings: runStats?.maxRings || 0,
       bossTime: runStats?.bossKillTime ? Math.floor(runStats.bossKillTime) : 0,
       skills: [...(runStats?.skills || [])].slice(-6),
+      zone: runStats?.zone || currentZone().name,
+      eventsSeen: [...(runStats?.eventsSeen || [])].slice(-5),
+      shieldSatelliteKills: runStats?.shieldSatelliteKills || 0,
+      shieldSatelliteTime: Math.floor(runStats?.shieldSatelliteTime || 0),
+      salvageRushWins: runStats?.salvageRushWins || 0,
+      salvageRushShards: Math.floor(runStats?.salvageRushShards || 0),
       deathCause: runStats?.deathCause || lastDamageCause || '',
       diagnosis: balanceHint()
     };
@@ -424,13 +435,16 @@
     report.id = 'runReport';
     report.className = 'run-report';
     const skillHtml = record.skills.length ? record.skills.map(s => `<span>${escapeHtml(s)}</span>`).join('') : '<span>尚未選擇技能</span>';
+    const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
     report.innerHTML = `
       <div class="grade-badge ${record.status === 'clear' ? 'win' : 'fail'}"><span>${escapeHtml(record.status === 'clear' ? record.grade : '失敗')}</span><small>${escapeHtml(record.status === 'clear' ? '撤離成功' : '資料已保存')}</small></div>
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div></dl></section>
         <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossTime ? formatTime(record.bossTime) : '-')}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
+      <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
       <div class="skill-chips"><b>技能流派</b>${skillHtml}</div>
       <div class="diagnosis"><b>診斷</b><p>${escapeHtml(record.diagnosis)}</p></div>
       <div class="next-challenges"><b>下一局挑戰</b><ul>${record.challenges.map(c => `<li>${escapeHtml(c)}</li>`).join('')}</ul></div>`;
@@ -486,6 +500,7 @@
     shooter: { label: '狙擊球', color: '#ff3df2', hp: 27, speed: 50, r: 17, sides: 8, scrap: 2 },
     leech: { label: '吸能蟲', color: '#b66dff', hp: 34, speed: 76, r: 14, sides: 7, scrap: 2 },
     bomber: { label: '爆裂雷', color: '#ff7a3d', hp: 22, speed: 62, r: 16, sides: 6, scrap: 2 },
+    shieldSat: { label: '護盾衛星', color: '#7aa7ff', hp: 38, speed: 48, r: 16, sides: 4, scrap: 4 },
     boss: { label: '星環吞噬者', color: '#ff4d6d', hp: 520, speed: 34, r: 48, sides: 10, scrap: 18 }
   };
 
@@ -498,6 +513,12 @@
     juggernaut: { name: '巨像', color: '#ff9f1c', hp: 2.05, speed: .72, scrap: 4 }
   };
 
+  const zoneDefs = {
+    scrapyard: { name: '電磁殘骸帶', color: '#7aa7ff', desc: '殘骸密集、敵彈較慢，碎晶略多但戰場更擁擠。', featureBias: ['debris', 'debris', 'asteroid', 'resource', 'hazard'], scrapBonus: 1, enemyBias: ['shooter', 'shieldSat'] },
+    crystal: { name: '晶礦雲帶', color: '#ffd166', desc: '資源點更常見，晶礦會吸引高速敵人與拾荒競速事件。', featureBias: ['resource', 'resource', 'resource', 'repair', 'debris'], scrapBonus: 2, enemyBias: ['sprinter', 'sprinter', 'bomber'] },
+    rift: { name: '裂隙邊界', color: '#ff4d6d', desc: '危險裂隙較多，但目標獎勵更高。', featureBias: ['hazard', 'hazard', 'resource', 'debris', 'repair'], scrapBonus: 1, enemyBias: ['leech', 'shooter'] }
+  };
+
   const eventDefs = {
     meteor: { name: '流星雨', desc: '危險流星穿越戰場，擊中敵我皆會受傷。', color: '#ff7a3d' },
     overclock: { name: '超頻風暴', desc: '你的射速提升，但敵人行動也更快。', color: '#37f6ff' },
@@ -507,15 +528,17 @@
     supply: { name: '補給航道', desc: '補給站出現率提高，適合喘息與回復。', color: '#4dff88' },
     eliteStorm: { name: '菁英獵殺令', desc: '菁英敵人大量出現，但擊破獎勵提高。', color: '#bdfcff' },
     droneSwarm: { name: '蜂群入侵', desc: '高速小型敵人持續湧入。', color: '#4dff88' },
-    gravityWell: { name: '重力井', desc: '戰場重力異常，敵我都會被拉向訊號核心。', color: '#b66dff' }
+    gravityWell: { name: '重力井', desc: '戰場重力異常，敵我都會被拉向訊號核心。', color: '#b66dff' },
+    empStorm: { name: 'EMP 風暴', desc: '自動鎖定距離縮短，但敵彈與敵機也會被拖慢。', color: '#7aa7ff' },
+    salvageRush: { name: '拾荒競速', desc: '限時收集碎晶，達標會追加事件獎勵。', color: '#ffd166' }
   };
 
   const objectiveDefs = {
-    scan: { name: '掃描信標', color: '#bdfcff', event: ['droneSwarm', 'gravityWell', 'rich'], reward: 1, charge: 2.4 },
-    hold: { name: '守點核心', color: '#7aa7ff', event: ['droneSwarm', 'eliteStorm'], reward: 1.35, charge: 6.2 },
-    harvest: { name: '採集晶礦', color: '#ffd166', event: ['rich', 'droneSwarm'], reward: 1.2, charge: 4.2 },
-    rift: { name: '清除裂隙', color: '#ff4d6d', event: ['hazard', 'gravityWell'], reward: 1.45, charge: 4.8 },
-    hunt: { name: '獵殺菁英', color: '#ff3df2', event: ['eliteStorm', 'rich'], reward: 1.7, charge: 1 }
+    scan: { name: '掃描信標', color: '#bdfcff', event: ['droneSwarm', 'gravityWell', 'rich', 'empStorm'], reward: 1, charge: 2.4 },
+    hold: { name: '守點核心', color: '#7aa7ff', event: ['droneSwarm', 'eliteStorm', 'empStorm'], reward: 1.35, charge: 6.2 },
+    harvest: { name: '採集晶礦', color: '#ffd166', event: ['rich', 'droneSwarm', 'salvageRush'], reward: 1.2, charge: 4.2 },
+    rift: { name: '清除裂隙', color: '#ff4d6d', event: ['hazard', 'gravityWell', 'empStorm'], reward: 1.45, charge: 4.8 },
+    hunt: { name: '獵殺菁英', color: '#ff3df2', event: ['eliteStorm', 'rich', 'salvageRush'], reward: 1.7, charge: 1 }
   };
 
   const achievementDefs = [
@@ -708,11 +731,25 @@
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28; }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
+  function chooseZone() {
+    const ids = Object.keys(zoneDefs);
+    const id = choose(ids);
+    return { id, ...zoneDefs[id] };
+  }
+
+  function currentZone() {
+    return activeZone || { id: 'default', name: '標準星環', color: '#37f6ff', desc: '標準星環航道。', featureBias: null, scrapBonus: 0, enemyBias: [] };
+  }
+
+  function objectiveRewardMult() {
+    return currentZone().id === 'rift' ? 1.12 : 1;
+  }
+
   function hardResetRun() {
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); runStats = newRunStats(); upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); activeZone = chooseZone(); runStats = newRunStats(); runStats.zone = activeZone.name; upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
     mission = newMission();
     startWave(1);
     for (let i = 0; i < 5; i++) dropShard(player.x + rand(-42, 42), player.y + rand(-42, 42), 1);
@@ -774,16 +811,18 @@
     if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
     if (bossActive) spawnBoss();
     if (runStats) { runStats.waveStart = runTime; if (bossActive) runStats.bossStart = runTime; }
-    flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : `第 ${wave} 波來襲`);
+    flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
     showWaveGuide(wave, bossActive);
   }
 
   function startEvent(forcedId = null, reward = null) {
-    const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm', 'droneSwarm', 'gravityWell'];
-    const id = forcedId || choose(ids);
-    activeEvent = { id, ...eventDefs[id], reward };
+    const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm', 'droneSwarm', 'gravityWell', 'empStorm', 'salvageRush'];
+    const zoneBonus = currentZone().id === 'crystal' ? ['salvageRush'] : currentZone().id === 'scrapyard' ? ['empStorm'] : [];
+    const id = forcedId || choose([...ids, ...zoneBonus]);
+    activeEvent = { id, ...eventDefs[id], reward, rushStart: meta.scrap, rushGoal: id === 'salvageRush' ? 22 + wave * 3 : 0, rushDone: false };
     runEvents++;
-    eventTimer = 18 + Math.min(12, wave * .8);
+    if (runStats && !runStats.eventsSeen.includes(eventDefs[id].name)) runStats.eventsSeen.push(eventDefs[id].name);
+    eventTimer = id === 'salvageRush' ? 20 : 18 + Math.min(12, wave * .8);
     meteorTimer = .8;
     eventBannerTimer = 2.2;
     if (player) burst(player.x, player.y, eventDefs[id].color, 18, .9);
@@ -794,6 +833,17 @@
     const reward = activeEvent.reward;
     const name = activeEvent.name;
     const color = activeEvent.color;
+    if (activeEvent.id === 'salvageRush') {
+      const collected = Math.max(0, Math.floor(meta.scrap - (activeEvent.rushStart || meta.scrap)));
+      if (runStats) runStats.salvageRushShards += collected;
+      if (collected >= (activeEvent.rushGoal || 0)) {
+        const rushBonus = 24 + wave * 4;
+        meta.scrap += rushBonus;
+        if (runStats) runStats.salvageRushWins++;
+        addText(player.x, player.y - 62, `競速成功 +${rushBonus}`, '#ffd166');
+        sfx('success');
+      }
+    }
     if (reward) {
       meta.scrap += reward.scrap;
       xp += reward.xp;
@@ -831,7 +881,9 @@
       shootClock: rand(.8, 2.4),
       elite: null,
       healClock: rand(1.1, 2.0),
-      splitDone: false
+      splitDone: false,
+      shield: 0,
+      shieldClock: rand(.4, 1.2)
     };
     maybeApplyElite(e, pick);
     e.maxHp = e.hp;
@@ -847,8 +899,10 @@
     if (wave >= 8) pool.push('sprinter', 'shooter');
     if (wave >= 6) pool.push('leech');
     if (wave >= 7 || activeEvent?.id === 'droneSwarm') pool.push('bomber');
+    if (wave >= 5) pool.push('shieldSat');
     if (activeEvent?.id === 'blackout') pool.push('shooter', 'shooter');
     if (activeEvent?.id === 'droneSwarm') pool.push('sprinter', 'sprinter', 'bomber');
+    if (activeZone?.enemyBias?.length) pool.push(...activeZone.enemyBias);
     return choose(pool);
   }
 
@@ -920,7 +974,7 @@
   }
 
   function shotTarget() {
-    const target = autoAim && !isMouseAiming() ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : Infinity) : null;
+    const target = autoAim && !isMouseAiming() ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : activeEvent?.id === 'empStorm' ? 620 : Infinity) : null;
     if (target) return Math.atan2(target.y - player.y, target.x - player.x);
     return mouseAimAngle();
   }
@@ -992,7 +1046,7 @@
       }
     }
     if (upgradesRuntime.homingRounds > 0) {
-      const target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 860);
+      const target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : activeEvent?.id === 'empStorm' ? 620 : 860);
       const count = Math.min(3, upgradesRuntime.homingRounds);
       for (let i = 0; i < count; i++) {
         const off = count === 1 ? 0 : (i - (count - 1) / 2) * .18;
@@ -1017,13 +1071,13 @@
     const count = e.type === 'boss' ? (e.finalBoss ? (e.phase2 ? 17 : 11) : e.bossVariant === 'void' ? (e.phase2 ? 15 : 9) : e.phase2 ? 11 : 7) : 1;
     for (let i = 0; i < count; i++) {
       const off = count === 1 ? 0 : (i - (count - 1) / 2) * (e.phase2 ? .13 : .16);
-      const bossSpeed = (e.type === 'boss' ? (e.phase2 ? 235 : 205) * (e.shotMult || 1) : 250);
+      const bossSpeed = (e.type === 'boss' ? (e.phase2 ? 235 : 205) * (e.shotMult || 1) : 250) * (activeEvent?.id === 'empStorm' ? .68 : 1);
       enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(a + off) * bossSpeed, vy: Math.sin(a + off) * bossSpeed, r: e.type === 'boss' ? 5 : 4, life: 4, dmg: e.type === 'boss' ? (e.phase2 ? 15 : 12) : 8 });
     }
   }
 
   function dropShard(x, y, amount = 1) {
-    const bonus = upgradesRuntime.shardMultiplier;
+    const bonus = upgradesRuntime.shardMultiplier + (currentZone().scrapBonus || 0);
     const total = amount + bonus + (Math.random() < .25 + bonus * .08 ? 1 : 0);
     for (let i = 0; i < total; i++) {
       const a = Math.random() * TWO_PI;
@@ -1054,6 +1108,7 @@
     const scoreGain = Math.floor((e.type === 'boss' ? 400 : 16) + wave * (e.type === 'boss' ? 24 : 3.5));
     meta.score += scoreGain;
     totalKills++; runKills++;
+    if (e.type === 'shieldSat' && runStats) runStats.shieldSatelliteKills++;
     xp += e.type === 'boss' ? 8 : e.elite ? 3 : e.type === 'tank' ? 2 : 1;
     if (e.elite?.id === 'splitter' && !e.splitDone) spawnSplinters(e);
     dropShard(e.x, e.y, e.scrap + Math.floor(wave / 5) + (activeEvent?.id === 'rich' ? 2 : 0));
@@ -1130,7 +1185,7 @@
   function objectiveReward(def) {
     const mult = def.reward || 1;
     return {
-      scrap: Math.floor((18 + wave * 3.1) * mult),
+      scrap: Math.floor((18 + wave * 3.1) * mult * objectiveRewardMult()),
       xp: Math.ceil(xpNeed * (.20 + mult * .065)),
       shards: Math.ceil(3 + wave * .3 * mult),
       heal: def === objectiveDefs.hold ? 10 : def === objectiveDefs.rift ? 6 : 0
@@ -1202,7 +1257,8 @@
 
   function addWorldFeature(kind = null) {
     if (!player) return;
-    const types = kind ? [kind] : ['asteroid', 'debris', 'resource', 'resource', 'hazard', 'repair'];
+    const zone = currentZone();
+    const types = kind ? [kind] : (zone.featureBias || ['asteroid', 'debris', 'resource', 'resource', 'hazard', 'repair']);
     const type = choose(types);
     const a = Math.random() * TWO_PI;
     const d = rand(Math.min(W, H) * .72, Math.max(W, H) * 1.9);
@@ -1275,6 +1331,8 @@
       if (activeEvent.id === 'hazard' && Math.random() < dt * .55 * lateGameScale()) addWorldFeature('hazard');
       if (activeEvent.id === 'supply' && Math.random() < dt * .38 * lateGameScale()) addWorldFeature('repair');
       if (activeEvent.id === 'droneSwarm' && Math.random() < dt * 5.2 * lateGameScale()) spawnEnemy(choose(['sprinter', 'chaser', 'bomber']));
+      if (activeEvent.id === 'salvageRush' && Math.random() < dt * 2.6) dropShard(player.x + rand(-160, 160), player.y + rand(-160, 160), 1);
+      if (activeEvent.id === 'empStorm' && Math.random() < dt * 3.4 && particles.length < MAX_PARTICLES) particles.push({ x: player.x + rand(-260, 260), y: player.y + rand(-180, 180), vx: rand(-16, 16), vy: rand(-16, 16), life: .24, max: .24, r: rand(1.8, 3.8), color: '#7aa7ff', ring: false });
       if (eventTimer <= 0) finishEvent();
     }
     featurePulse += dt; zoneTick -= dt; maintainWorldFeatures();
@@ -1332,7 +1390,7 @@
   function updateBullets(dt) {
     for (const b of bullets) {
       if (b.homing) {
-        if (!b.target || b.target.dead) b.target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : 860);
+        if (!b.target || b.target.dead) b.target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : activeEvent?.id === 'empStorm' ? 620 : 860);
         if (b.target) {
           const desired = Math.atan2(b.target.y - b.y, b.target.x - b.x);
           const current = Math.atan2(b.vy, b.vx);
@@ -1354,7 +1412,14 @@
         const rr = b.r + e.r;
         if (dist2(b, e) < rr * rr) {
           const weakMult = (upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1;
-          e.hp -= b.dmg * weakMult;
+          let hitDamage = b.dmg * weakMult;
+          if (e.shield > 0) {
+            const blocked = Math.min(e.shield, hitDamage * .85);
+            e.shield -= blocked;
+            hitDamage -= blocked * .72;
+            if (runStats) runStats.shieldSatelliteTime += .05;
+          }
+          e.hp -= hitDamage;
           e.hit = e.type === 'boss' ? .12 : .08;
           impactFeedback(b.x, b.y, e.type === 'boss' ? '#ffffff' : b.homing ? '#ffd166' : '#37f6ff', e.type === 'boss' ? .9 : .55, e.type === 'boss' ? 'bossHit' : 'hit');
           if (b.blast > 0) {
@@ -1384,7 +1449,7 @@
     for (const e of enemies) {
       const a = Math.atan2(player.y - e.y, player.x - e.x);
       const d = Math.hypot(player.x - e.x, player.y - e.y);
-      const slow = upgradesRuntime.slowField > 0 && d < slowRadius ? .55 : 1;
+      const slow = (upgradesRuntime.slowField > 0 && d < slowRadius ? .55 : 1) * (activeEvent?.id === 'empStorm' ? .82 : 1);
       const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
       e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
       e.y += Math.sin(a) * e.speed * slow * bossStop * dt;
@@ -1413,6 +1478,23 @@
         player.invuln = .38;
         burst(e.x, e.y, '#ff7a3d', 24, 1.2);
         if (player.hp <= 0) endRun();
+      }
+      if (e.type === 'shieldSat') {
+        e.shieldClock -= dt;
+        if (e.shieldClock <= 0) {
+          let linked = 0;
+          for (const ally of enemies) {
+            if (ally.dead || ally === e || ally.type === 'boss') continue;
+            const ad = Math.hypot(ally.x - e.x, ally.y - e.y);
+            if (ad < 180) {
+              ally.shield = Math.min(26 + wave * 1.4, (ally.shield || 0) + 9 + wave * .8);
+              linked++;
+              if (particles.length < MAX_PARTICLES) particles.push({ x: ally.x, y: ally.y, vx: (e.x - ally.x) * .08, vy: (e.y - ally.y) * .08, life: .2, max: .2, r: 2.4, color: '#7aa7ff', ring: false });
+            }
+          }
+          if (linked && runStats) runStats.shieldSatelliteTime += linked * .35;
+          e.shieldClock = 1.15;
+        }
       }
       if (e.elite?.id === 'medic') {
         e.healClock -= dt;
@@ -1579,6 +1661,7 @@
     if (lastDamageCause === 'hazard') return '建議：紅色裂隙是持續傷害區，不要硬穿；先升引擎或繞路完成其他目標。';
     if (lastDamageCause === 'leech') return '建議：紫色吸能蟲要優先拉開距離擊殺；可選霰彈、電漿或升主砲。';
     if (lastDamageCause === 'bomber') return '建議：爆裂雷閃爍時代表快自爆，先後退再用範圍火力清掉。';
+    if ((runStats?.shieldSatelliteTime || 0) > 10) return '建議：護盾衛星會替附近敵人補盾，先集火藍色衛星再清主群。';
     if (lastDamageCause === 'boss') return '建議：Boss 戰前優先主砲、穿甲光矛或蓄能軌砲，護盾不足就先升護盾矩陣。';
     if (lastDamageCause === 'projectile' || lastDamageCause === 'meteor') return '建議：彈幕多時不要貪撿碎晶，優先橫向移動並保留安全距離。';
     if (runObjectives <= 1 && wave >= 4) return '建議：多完成目標點，事件獎勵會讓技能與碎晶成長更快。';
@@ -1700,6 +1783,19 @@
     const oy = -((c.y % grid) + grid) % grid;
     for (let x = ox; x < W; x += grid) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for (let y = oy; y < H; y += grid) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    const zone = currentZone();
+    if (zone.id !== 'default') {
+      ctx.globalAlpha = .08;
+      ctx.fillStyle = zone.color;
+      ctx.fillRect(0, 0, W, H);
+      ctx.globalAlpha = .22;
+      ctx.strokeStyle = zone.color;
+      const t = performance.now() * .001;
+      for (let i = 0; i < 4; i++) {
+        const y = (Math.sin(t + i * 1.7) * .5 + .5) * H;
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y + Math.sin(t * 1.8 + i) * 26); ctx.stroke();
+      }
+    }
     ctx.restore();
   }
 
@@ -1849,11 +1945,13 @@
       ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(performance.now() * .001 * e.spin);
       ctx.shadowColor = e.color; ctx.shadowBlur = e.hit > 0 ? 20 : 9; ctx.fillStyle = e.hit > 0 ? '#fff' : e.color;
       if (e.type === 'bomber' && ed < 150) { ctx.shadowColor = '#ff7a3d'; ctx.shadowBlur = 22; ctx.globalAlpha = .62 + Math.sin(performance.now() * .024) * .28; }
+      if (e.type === 'shieldSat') { ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, er + 7 + Math.sin(performance.now() * .006) * 2, 0, TWO_PI); ctx.stroke(); }
       if (e.elite || e.phase2) { ctx.strokeStyle = e.elite?.color || '#ff4d6d'; ctx.lineWidth = 2; ctx.globalAlpha = .32 + Math.sin(performance.now() * .006) * .12; ctx.beginPath(); ctx.arc(0, 0, er + 3, 0, TWO_PI); ctx.stroke(); ctx.globalAlpha = 1; }
       ctx.beginPath();
       for (let i = 0; i < e.sides * 2; i++) { const a = i / (e.sides * 2) * TWO_PI; const r = i % 2 ? er * .66 : er; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
       ctx.closePath(); ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.75)'; ctx.stroke();
       if (e.type === 'bomber' && ed < 160) { ctx.strokeStyle = '#fff1c7'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-er * .55, 0); ctx.lineTo(er * .55, 0); ctx.moveTo(0, -er * .55); ctx.lineTo(0, er * .55); ctx.stroke(); }
+      if (e.shield > 0) { ctx.strokeStyle = '#7aa7ff'; ctx.globalAlpha = .75; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, er + 5, 0, TWO_PI); ctx.stroke(); ctx.globalAlpha = 1; }
       ctx.restore();
       const showHp = e.type === 'boss' || e.elite || e.hit > 0 || (!dense && ed < 420);
       if (showHp) {
