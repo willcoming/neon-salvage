@@ -276,6 +276,9 @@ h1, h2, p { margin: 0; }
 .setting-row small { display: block; color: var(--muted); font-size: 12px; line-height: 1.4; }
 .setting-row button { min-width: 118px; padding: 9px 10px; font-size: 12px; }
 #settingsPanel button { max-width: none; }
+.range-control { display: grid; grid-template-columns: minmax(120px, 1fr) 42px; gap: 10px; align-items: center; min-width: 190px; }
+.range-control input[type="range"] { width: 100%; accent-color: var(--cyan); cursor: pointer; }
+.range-control span { color: var(--gold); font-size: 12px; font-weight: 900; text-align: right; }
 
 .upgrade {
   padding: 12px;
@@ -475,6 +478,8 @@ body[data-control-mode="touch"] .hint { display: none; }
   .setting-row strong { font-size: 12px; }
   .setting-row small { font-size: 10px; }
   .setting-row button { min-width: 92px; padding: 7px 8px; font-size: 11px; }
+  .range-control { min-width: 150px; grid-template-columns: minmax(88px, 1fr) 38px; }
+  .range-control span { font-size: 11px; }
   .upgrade { padding: 7px; border-radius: 12px; }
   .upgrade p { display: none; }
   .upgrade strong { font-size: 12px; }
@@ -510,6 +515,7 @@ body[data-control-mode="touch"] .hint { display: none; }
   #upgrades { grid-template-columns: 1fr 1fr; gap: 6px; }
   .setting-row { grid-template-columns: 1fr; }
   .setting-row button { width: 100%; min-height: 36px; }
+  .range-control { width: 100%; min-width: 0; }
   .upgrade-lane { font-size: 10px; padding-top: 8px; }
   .upgrade header { margin-bottom: 4px; }
   .upgrade .level { font-size: 10px; }

@@ -31,6 +31,13 @@
     soundBtn: document.getElementById('soundBtn'),
     testSoundBtn: document.getElementById('testSoundBtn'),
     audioStatus: document.getElementById('audioStatus'),
+    volumeRange: document.getElementById('volumeRange'),
+    volumeValue: document.getElementById('volumeValue'),
+    hapticBtn: document.getElementById('hapticBtn'),
+    shakeRange: document.getElementById('shakeRange'),
+    shakeValue: document.getElementById('shakeValue'),
+    touchSensitivityRange: document.getElementById('touchSensitivityRange'),
+    touchSensitivityValue: document.getElementById('touchSensitivityValue'),
     pauseBtn: document.getElementById('pauseBtn'),
     upgradePrompt: document.getElementById('upgradePrompt'),
     offlineNotice: document.getElementById('offlineNotice'),
@@ -75,8 +82,13 @@
     achievements: {},
     recentRuns: [],
     soundEnabled: true,
+    volume: .75,
+    hapticsEnabled: true,
+    shakeStrength: .7,
+    touchSensitivity: 1,
     controlMode: 'keyboard',
     autoAim: true,
+    aimAssist: 'assist',
     difficulty: 'standard',
     lastSaved: Date.now(),
     upgrades: { cannon: 0, reactor: 0, shield: 0, armor: 0, engine: 0, magnet: 0, survey: 0, drone: 0 }
@@ -84,6 +96,12 @@
 
   let meta = loadSave();
   controlMode = meta.controlMode === 'touch' ? 'touch' : 'keyboard';
+  meta.aimAssist = ['off', 'assist', 'full'].includes(meta.aimAssist) ? meta.aimAssist : (meta.autoAim === false ? 'off' : 'assist');
+  meta.autoAim = meta.aimAssist !== 'off';
+  meta.volume = clamp(Number(meta.volume ?? .75), 0, 1);
+  meta.shakeStrength = clamp(Number(meta.shakeStrength ?? .7), 0, 1);
+  meta.touchSensitivity = clamp(Number(meta.touchSensitivity ?? 1), .55, 1.6);
+  meta.hapticsEnabled = meta.hapticsEnabled !== false;
   let player;
   let bullets = [];
   let enemies = [];
@@ -180,7 +198,7 @@
   }
 
   function audioStatusText() {
-    if (!meta.soundEnabled) return '音效已關閉；也會關閉手機震動回饋。';
+    if (!meta.soundEnabled) return '音效已關閉；震動可在下方獨立控制。';
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) return '此瀏覽器不支援 WebAudio 音效。';
     if (!audioCtx) return '尚未啟動；請點「測試音效」或開始遊戲。';
@@ -198,7 +216,7 @@
     osc.frequency.setValueAtTime(freq, now);
     if (slide !== 1) osc.frequency.exponentialRampToValueAtTime(Math.max(24, freq * slide), now + duration);
     amp.gain.setValueAtTime(0.0001, now);
-    amp.gain.exponentialRampToValueAtTime(gain, now + .008);
+    amp.gain.exponentialRampToValueAtTime(gain * clamp(meta.volume ?? .75, 0, 1), now + .008);
     amp.gain.exponentialRampToValueAtTime(0.0001, now + duration);
     osc.connect(amp).connect(ac.destination);
     osc.start(now);
@@ -226,13 +244,15 @@
   }
 
   function haptic(ms = 18) {
-    if (!meta.soundEnabled || typeof navigator?.vibrate !== 'function') return;
+    if (!meta.hapticsEnabled || typeof navigator?.vibrate !== 'function') return;
     try { navigator.vibrate(ms); } catch (err) {}
   }
 
   function addShake(power = 2, duration = .12) {
     if (reduceMotion) return;
-    shakePower = Math.max(shakePower, Math.min(12, power));
+    const scale = clamp(meta.shakeStrength ?? .7, 0, 1);
+    if (scale <= 0) return;
+    shakePower = Math.max(shakePower, Math.min(12, power * scale));
     shakeDuration = Math.max(shakeDuration, duration);
     shakeTime = Math.max(shakeTime, duration);
   }
@@ -251,12 +271,33 @@
     }
   }
 
+  const aimAssistDefs = {
+    off: { name: '關閉', desc: '完全手動瞄準' },
+    assist: { name: '輔助', desc: '滑鼠操作優先，停止手動瞄準時鎖定最近敵人' },
+    full: { name: '完全', desc: '持續鎖定最近敵人' }
+  };
+  const aimAssistOrder = ['assist', 'full', 'off'];
+
+  function percent(value) {
+    return `${Math.round(clamp(value, 0, 1) * 100)}%`;
+  }
+
   function updateSoundUi() {
     if (ui.soundBtn) {
       ui.soundBtn.textContent = `音效 ${meta.soundEnabled ? 'ON' : 'OFF'}`;
       ui.soundBtn.classList.toggle('active', meta.soundEnabled);
     }
-    if (ui.audioStatus) ui.audioStatus.textContent = audioStatusText();
+    if (ui.audioStatus) ui.audioStatus.textContent = `${audioStatusText()} 音量 ${percent(meta.volume ?? .75)}`;
+    if (ui.volumeRange) ui.volumeRange.value = Math.round(clamp(meta.volume ?? .75, 0, 1) * 100);
+    if (ui.volumeValue) ui.volumeValue.textContent = percent(meta.volume ?? .75);
+    if (ui.hapticBtn) {
+      ui.hapticBtn.textContent = `震動 ${meta.hapticsEnabled !== false ? 'ON' : 'OFF'}`;
+      ui.hapticBtn.classList.toggle('active', meta.hapticsEnabled !== false);
+    }
+    if (ui.shakeRange) ui.shakeRange.value = Math.round(clamp(meta.shakeStrength ?? .7, 0, 1) * 100);
+    if (ui.shakeValue) ui.shakeValue.textContent = percent(meta.shakeStrength ?? .7);
+    if (ui.touchSensitivityRange) ui.touchSensitivityRange.value = Math.round(clamp(meta.touchSensitivity ?? 1, .55, 1.6) * 100);
+    if (ui.touchSensitivityValue) ui.touchSensitivityValue.textContent = `${Math.round(clamp(meta.touchSensitivity ?? 1, .55, 1.6) * 100)}%`;
   }
 
   function updateDifficultyUi() {
@@ -1163,28 +1204,33 @@
   }
 
   function shotTarget() {
-    const target = autoAim && !isMouseAiming() ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : activeEvent?.id === 'empStorm' ? 620 : Infinity) : null;
+    const aimMode = meta.aimAssist || (autoAim ? 'assist' : 'off');
+    const assisted = autoAim && aimMode !== 'off' && (aimMode === 'full' || !isMouseAiming());
+    const target = assisted ? nearestEnemy(activeEvent?.id === 'blackout' ? 520 : activeEvent?.id === 'empStorm' ? 620 : Infinity) : null;
     if (target) return Math.atan2(target.y - player.y, target.x - player.x);
     return mouseAimAngle();
   }
 
   function toggleAutoAim() {
-    autoAim = !autoAim;
+    const idx = aimAssistOrder.indexOf(meta.aimAssist || 'assist');
+    meta.aimAssist = aimAssistOrder[(idx + 1) % aimAssistOrder.length];
+    autoAim = meta.aimAssist !== 'off';
     meta.autoAim = autoAim;
     save(false);
-    flash(autoAim ? '自動鎖定最近敵人：ON' : '自動鎖定最近敵人：OFF');
+    flash(`自動瞄準：${aimAssistDefs[meta.aimAssist]?.name || '輔助'}`);
     updateCombatControls();
   }
 
   function setControlMode(mode, announce = true) {
     controlMode = mode === 'touch' ? 'touch' : 'keyboard';
     document.body.dataset.controlMode = controlMode;
-    if (controlMode === 'touch') autoAim = true;
+    if (controlMode === 'touch' && (meta.aimAssist === 'off' || !meta.aimAssist)) meta.aimAssist = 'assist';
+    autoAim = meta.aimAssist !== 'off';
     meta.controlMode = controlMode;
     meta.autoAim = autoAim;
     if (player) player.r = playerRadius();
     touchMove.x = 0; touchMove.y = 0; touchMove.active = false; touchMove.pressed = false; touchMove.dir = ''; touchMove.force = 0;
-    if (announce) flash(controlMode === 'touch' ? '手機模式：自動瞄準 ON' : `滑鼠模式：自動瞄準 ${autoAim ? 'ON' : 'OFF'}`);
+    if (announce) flash(controlMode === 'touch' ? `手機模式：自動瞄準 ${aimAssistDefs[meta.aimAssist]?.name || '輔助'}` : `滑鼠模式：自動瞄準 ${aimAssistDefs[meta.aimAssist]?.name || '輔助'}`);
     save(false);
     updateCombatControls();
   }
@@ -1200,7 +1246,9 @@
       ui.controlModeBtn.classList.toggle('active', controlMode === 'touch');
     }
     if (ui.autoAimBtn) {
-      ui.autoAimBtn.textContent = `鎖定 ${autoAim ? 'ON' : 'OFF'}`;
+      const aim = aimAssistDefs[meta.aimAssist || 'assist'] || aimAssistDefs.assist;
+      ui.autoAimBtn.textContent = `自瞄：${aim.name}`;
+      ui.autoAimBtn.title = aim.desc;
       ui.autoAimBtn.classList.toggle('active', autoAim);
     }
     updateSoundUi();
@@ -2440,6 +2488,21 @@
     mouse.lastMove = performance.now();
   }
 
+  function setControlSetting(key, value, message = '') {
+    meta[key] = value;
+    save(false);
+    updateCombatControls();
+    if (message) flash(message);
+  }
+
+  function toggleHaptics() {
+    meta.hapticsEnabled = meta.hapticsEnabled === false;
+    save(false);
+    updateSoundUi();
+    if (meta.hapticsEnabled) haptic(18);
+    flash(`手機震動 ${meta.hapticsEnabled ? '開啟' : '關閉'}`);
+  }
+
   canvas.addEventListener('pointermove', e => { setMouseFromClient(e.clientX, e.clientY); });
   canvas.addEventListener('pointerdown', e => { mouse.down = true; setMouseFromClient(e.clientX, e.clientY); });
   canvas.addEventListener('pointerup', () => { mouse.down = false; });
@@ -2458,6 +2521,10 @@
   ui.autoAimBtn?.addEventListener('click', toggleAutoAim);
   ui.soundBtn?.addEventListener('click', toggleSound);
   ui.testSoundBtn?.addEventListener('click', testSound);
+  ui.volumeRange?.addEventListener('input', e => setControlSetting('volume', clamp(Number(e.target.value) / 100, 0, 1)));
+  ui.hapticBtn?.addEventListener('click', toggleHaptics);
+  ui.shakeRange?.addEventListener('input', e => setControlSetting('shakeStrength', clamp(Number(e.target.value) / 100, 0, 1)));
+  ui.touchSensitivityRange?.addEventListener('input', e => setControlSetting('touchSensitivity', clamp(Number(e.target.value) / 100, .55, 1.6)));
   ui.difficultyBtn?.addEventListener('click', toggleDifficulty);
 
   function setTouchDirectionFromClient(e, start = false) {
@@ -2497,7 +2564,8 @@
       touchMove.x = move.x;
       touchMove.y = move.y;
       touchMove.dir = move.dir;
-      touchMove.force = .45 + clamp((distance - deadZone) / 58, 0, 1) * .55;
+      const sensitivity = clamp(meta.touchSensitivity ?? 1, .55, 1.6);
+      touchMove.force = .45 + clamp((distance - deadZone) / (58 / sensitivity), 0, 1) * .55;
       touchMove.active = true;
     }
     mouse.x = sx;

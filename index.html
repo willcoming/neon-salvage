@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=3.0.4" />
+  <link rel="stylesheet" href="./styles.css?v=3.1" />
 </head>
 <body>
   <div id="app">
@@ -64,16 +64,32 @@
             <button id="controlModeBtn" type="button">滑鼠</button>
           </section>
           <section class="setting-row">
-            <div><strong>自動鎖定</strong><small>只輔助射擊，不會搶機身方向。</small></div>
-            <button id="autoAimBtn" type="button">鎖定 ON</button>
+            <div><strong>自動瞄準</strong><small>輔助會尊重滑鼠手動瞄準；完全會持續鎖最近敵人。</small></div>
+            <button id="autoAimBtn" type="button">自瞄：輔助</button>
+          </section>
+          <section class="setting-row slider-row">
+            <div><strong>音量</strong><small id="audioStatus">尚未測試音效</small></div>
+            <label class="range-control"><input id="volumeRange" type="range" min="0" max="100" step="5" value="75" /><span id="volumeValue">75%</span></label>
           </section>
           <section class="setting-row">
-            <div><strong>音效 / 震動</strong><small id="audioStatus">尚未測試音效</small></div>
+            <div><strong>音效</strong><small>WebAudio 即時生成，可用測試音效喚醒手機瀏覽器。</small></div>
             <button id="soundBtn" type="button">音效 ON</button>
+          </section>
+          <section class="setting-row">
+            <div><strong>手機震動</strong><small>獨立控制震動回饋，不再綁定音效開關。</small></div>
+            <button id="hapticBtn" type="button">震動 ON</button>
           </section>
           <section class="setting-row">
             <div><strong>測試音效</strong><small>如果手機沒聲音，請點這個喚醒 WebAudio。</small></div>
             <button id="testSoundBtn" type="button">播放測試</button>
+          </section>
+          <section class="setting-row slider-row">
+            <div><strong>畫面震動</strong><small>降低容易暈眩的 camera shake。</small></div>
+            <label class="range-control"><input id="shakeRange" type="range" min="0" max="100" step="10" value="70" /><span id="shakeValue">70%</span></label>
+          </section>
+          <section class="setting-row slider-row">
+            <div><strong>手機靈敏度</strong><small>調整浮動方向鍵推進力度成形速度。</small></div>
+            <label class="range-control"><input id="touchSensitivityRange" type="range" min="55" max="160" step="5" value="100" /><span id="touchSensitivityValue">100%</span></label>
           </section>
           <section class="setting-row">
             <div><strong>難度</strong><small>影響敵量、敵速、事件頻率與獎勵。</small></div>
@@ -89,10 +105,10 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v3.0.4 預設滑鼠自瞄版</strong>
+          <strong>v3.1 設定與操作完成版</strong>
           <ul>
-            <li>預設操作改成滑鼠/鍵盤模式，並且自動鎖定預設 ON。</li>
-            <li>切回滑鼠模式時不再自動關閉自動鎖定；操作模式與自動鎖定會保存。</li>
+            <li>設定選單補齊音量、音效、手機震動、畫面震動、手機靈敏度與三段自動瞄準。</li>
+            <li>所有操作/回饋設定都會保存；重置宇宙後仍回到滑鼠 + 自瞄輔助的友善預設。</li>
             <li>保留 v3.0 Demo/Beta 完整內容：10 波撤離、多星域、多事件、多 Boss、build 流派、成就、難度、音效與手機 UI。</li>
           </ul>
         </div>
@@ -109,8 +125,8 @@
 - WASD / 方向鍵：推進
 - 滑鼠：控制機身朝向與手動瞄準
 - 移動中：機身會跟著移動方向自然轉向；停止移動攻擊時會順著射擊方向轉向
-- E：開關自動鎖定最近敵人；自動鎖定只輔助射擊，不會搶機身方向
-- 設定：操作模式、自動鎖定、音效、測試音效與難度都集中在設定選單內；預設是滑鼠/鍵盤 + 自動鎖定 ON
+- E：切換自動瞄準強度：輔助 → 完全 → 關閉；輔助模式會讓滑鼠手動瞄準優先
+- 設定：操作模式、自動瞄準、音量、音效、手機震動、畫面震動、手機靈敏度、測試音效與難度都集中在設定選單內
 - 音效：使用 WebAudio 即時生成，若手機沒聲音，請先在設定內點「測試音效」喚醒
 - 空白：相位衝刺，短時間無敵
 - P：暫停並開啟艦載升級彈窗；暫停時才可購買永久升級
@@ -186,6 +202,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=3.0.4"></script>
+  <script src="./game.js?v=3.1"></script>
 </body>
 </html>
