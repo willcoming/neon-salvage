@@ -174,18 +174,39 @@
   }
 
   function lateGameScale() {
-    if (wave >= SECTOR_CLEAR_WAVE) return .62;
-    if (wave >= 9) return .68;
-    if (wave >= 7) return .78;
-    return 1;
+    return clamp(1 - Math.max(0, wave - 4) * .055, .64, 1);
   }
   function visualScale() {
     return lateGameScale() * (controlMode === 'touch' ? .9 : 1);
   }
   function enemyCap() {
     const base = controlMode === 'touch' ? 30 : 36;
-    const lateCut = Math.max(0, wave - 6) * 2;
-    return Math.round(Math.max(controlMode === 'touch' ? 22 : 26, base - lateCut) * currentDifficulty().cap);
+    const pressureCut = Math.max(0, wave - 7) * 1.35;
+    const stage = runStageForWave(wave);
+    const stageEase = stage === runStageDefs.warmup ? .88 : stage === runStageDefs.final ? .86 : stage === runStageDefs.pressure ? .94 : 1;
+    return Math.round(Math.max(controlMode === 'touch' ? 22 : 26, (base - pressureCut) * stageEase) * currentDifficulty().cap);
+  }
+
+  function waveEnemyBudget(n = wave) {
+    if (n % 5 === 0) return 0;
+    const budgets = { 1: 14, 2: 22, 3: 30, 4: 36, 6: 42, 7: 48, 8: 53, 9: 56 };
+    const base = budgets[n] || Math.round(34 + n * 3.2);
+    const mobileEase = controlMode === 'touch' ? .92 : 1;
+    const tutorialEase = tutorialRun && n <= 2 ? .72 : 1;
+    return Math.floor(base * mobileEase * tutorialEase * currentDifficulty().enemy);
+  }
+
+  function eventChanceForWave(n = wave) {
+    if (n <= 3 || n % 5 === 0) return 0;
+    if (n <= 6) return n === 6 ? .42 : .18;
+    if (n <= 8) return .46;
+    return 1;
+  }
+
+  function spawnIntervalForWave(n = wave) {
+    const stage = runStageForWave(n);
+    const base = stage === runStageDefs.warmup ? (n === 1 ? .19 : .165) : stage === runStageDefs.build ? .135 : .118;
+    return Math.max(controlMode === 'touch' ? .085 : .068, base - Math.max(0, n - 4) * .004 + (controlMode === 'touch' ? .012 : 0));
   }
   function compactWorldFeatureTarget() {
     return Math.max(14, Math.round((22 + Math.min(10, Math.floor(wave / 2))) * lateGameScale()));
@@ -364,7 +385,26 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+  }
+
+  const runStageDefs = {
+    warmup: { name: '暖機', waves: '1-3', color: '#bdfcff', desc: '操作 / 目標暖機' },
+    build: { name: 'Build 成形', waves: '4-6', color: '#ffd166', desc: '技能核心與第一個 Boss' },
+    pressure: { name: '高壓選擇', waves: '7-9', color: '#ff9f1c', desc: '戰術、事件與終局整備' },
+    final: { name: '終局考驗', waves: '10', color: '#ff4d6d', desc: '星環核心 Boss' }
+  };
+
+  function runStageForWave(n = wave) {
+    if (n >= SECTOR_CLEAR_WAVE) return runStageDefs.final;
+    if (n >= 7) return runStageDefs.pressure;
+    if (n >= 4) return runStageDefs.build;
+    return runStageDefs.warmup;
+  }
+
+  function recordPaceNode(label) {
+    if (!runStats || !label || runStats.paceNodes.includes(label)) return;
+    runStats.paceNodes.push(label);
   }
 
   function formatTime(seconds = 0) {
@@ -522,6 +562,8 @@
       skills: [...(runStats?.skills || [])].slice(-6),
       build: detectBuildName(),
       zone: runStats?.zone || currentZone().name,
+      paceNodes: [...(runStats?.paceNodes || [])].slice(-6),
+      prepDrops: runStats?.prepDrops || 0,
       objectiveRoute: [...(runStats?.objectiveRoute || [])].slice(-6),
       objectiveBonuses: runStats?.objectiveBonuses || 0,
       eventsSeen: [...(runStats?.eventsSeen || [])].slice(-5),
@@ -595,6 +637,7 @@
     report.id = 'runReport';
     report.className = 'run-report';
     const skillHtml = record.skills.length ? record.skills.map(s => `<span>${escapeHtml(s)}</span>`).join('') : '<span>尚未選擇技能</span>';
+    const paceHtml = record.paceNodes?.length ? record.paceNodes.map(p => `<span>${escapeHtml(p)}</span>`).join('') : '<span>尚未記錄節奏節點</span>';
     const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
     const routeHtml = record.objectiveRoute?.length ? record.objectiveRoute.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成目標路線</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
@@ -606,10 +649,11 @@
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
-        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? '｜二階段' : ''}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? '｜二階段' : ''}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
+      <div class="skill-chips"><b>節奏節點</b>${paceHtml}</div>
       <div class="skill-chips"><b>目標路線</b>${routeHtml}</div>
       <div class="skill-chips"><b>Boss 機制</b>${bossHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
@@ -1321,18 +1365,53 @@
   }
 
   function chooseObjectiveKind() {
-    if (wave <= 2) return choose(['scan', 'harvest']);
-    if (wave <= 5) return choose(['scan', 'harvest', 'hold', 'rift']);
+    if (wave <= 3) return choose(['scan', 'scan', 'harvest']);
+    if (wave <= 6) return choose(['scan', 'harvest', 'hold', 'rift']);
     if (wave === 9) return choose(['hunt', 'rift', 'hold']);
     return choose(['scan', 'hold', 'harvest', 'rift', 'hunt']);
+  }
+
+  function stageIntroForWave(n, isBoss = false) {
+    const stage = runStageForWave(n);
+    if (n === 1) return `${stage.name}：先熟悉移動、拾荒與自動開火。`;
+    if (n === 4) return `${stage.name}：開始補核心技能，讓流派成形。`;
+    if (n === 7) return `${stage.name}：戰術與事件密度上升，先拆關鍵敵。`;
+    if (n === 9) return '終局整備：補給艙已投放，拿完再迎戰核心。';
+    if (n >= SECTOR_CLEAR_WAVE && isBoss) return `${stage.name}：星環核心主宰啟動。`;
+    return '';
+  }
+
+  function applyWavePaceSupport(n, isBoss = false) {
+    const stage = runStageForWave(n);
+    if ([1, 4, 7, SECTOR_CLEAR_WAVE].includes(n) || (n === 9 && !runStats?.paceNodes?.some(p => p.startsWith(stage.name)))) recordPaceNode(`${stage.name}｜${stage.desc}`);
+    if (!player || isBoss) return '';
+    if (n === 4) {
+      xp += Math.ceil(xpNeed * .22);
+      dropPowerup('rapid', player.x + 86, player.y - 28, 18);
+      for (let i = 0; i < 6; i++) dropShard(player.x + rand(-86, 86), player.y + rand(-70, 70), 1);
+      recordPaceNode('成形補給｜XP + 超頻核心');
+      return 'Build 成形補給：額外經驗與超頻核心已投放。';
+    }
+    if (n === 9) {
+      player.hp = Math.min(player.maxHp, player.hp + 24);
+      dropPowerup('heal', player.x + 88, player.y, 22);
+      dropPowerup('nova', player.x - 88, player.y, 22);
+      for (let i = 0; i < 10; i++) dropShard(player.x + rand(-130, 130), player.y + rand(-95, 95), 1);
+      if (runStats) runStats.prepDrops++;
+      recordPaceNode('終局整備｜維修核心 + 新星炸彈');
+      return '終局整備：維修核心與新星炸彈已投放。';
+    }
+    return '';
   }
 
   function guideForWave(n, isBoss = false) {
     if (n === 1) return '引導：移動保持距離，主砲會自動開火；先撿旁邊碎晶。';
     if (n === 2) return '引導：藍色箭頭指向目標點，順路靠近可拿獎勵。';
-    if (n === 3) return '引導：完成目標會觸發事件；撐過去會再給獎勵。';
-    if (n === 5 && isBoss) return 'Boss 檢查：火力不足就優先選穿甲、軌砲或升主砲。';
-    if (n === 9) return '終局前壓力波：不要貪撿，先保血量與走位。';
+    if (n === 3) return '暖機收尾：完成目標會觸發事件；撐過去會再給獎勵。';
+    if (n === 4) return 'Build 成形：利用補給與三選一，先把一個流派疊起來。';
+    if (n === 5 && isBoss) return 'Boss 檢查：火力不足就優先選穿甲、軌砲、弱點或主砲強化。';
+    if (n === 7) return '高壓選擇：敵群開始更常組戰術，先拆衛星、治療或加速單位。';
+    if (n === 9) return '終局前整備：拿補給、完成高價目標，但不要為碎晶冒死。';
     if (n === SECTOR_CLEAR_WAVE && isBoss) return '最終 Boss：擊破星環核心主宰後即可撤離成功。';
     return '';
   }
@@ -1348,13 +1427,10 @@
   function startWave(n) {
     wave = n;
     bossActive = n % 5 === 0;
-    const mobileEase = controlMode === 'touch' ? .98 : 1;
-    const tutorialEase = tutorialRun && n <= 2 ? .72 : 1;
-    const earlyEase = (n === 1 ? .58 : n === 2 ? .74 : n === 3 ? .9 : n === 4 ? .95 : 1) * tutorialEase;
-    spawnLeft = bossActive ? 0 : Math.floor((19 + n * 3.9 + Math.pow(n, 1.26)) * mobileEase * earlyEase * currentDifficulty().enemy);
+    spawnLeft = waveEnemyBudget(n);
     spawnTimer = bossActive ? .35 : 0;
-    if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell']));
-    else if (wave >= 6 && !bossActive && (wave % 3 === 0 || Math.random() < .32 * currentDifficulty().event)) startEvent();
+    if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell', 'supply']));
+    else if (!bossActive && Math.random() < eventChanceForWave(wave) * currentDifficulty().event) startEvent();
     if (!beacon || wave % 3 === 1 || wave === 9) beacon = makeBeacon(chooseObjectiveKind());
     if (bossActive) { activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; }
     else {
@@ -1362,8 +1438,14 @@
       if (activeTactic) spawnTacticPack(activeTactic, true);
     }
     if (bossActive) spawnBoss();
+    const supportMsg = applyWavePaceSupport(wave, bossActive);
     if (runStats) { runStats.waveStart = runTime; if (bossActive) runStats.bossStart = runTime; }
-    if (!bossActive) flash(activeTactic ? `戰術：${activeTactic.name}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
+    if (!bossActive) {
+      const waveMsg = supportMsg || (activeTactic ? `戰術：${activeTactic.name}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
+      flash(waveMsg);
+    }
+    const stageMsg = stageIntroForWave(wave, bossActive);
+    if (stageMsg && !tutorialShown.has(`stage-${wave}`)) setTimeout(() => { if (running && !gameOver && !skillChoosing && wave === n) { tutorialShown.add(`stage-${wave}`); flash(stageMsg); } }, 520);
     showWaveGuide(wave, bossActive);
   }
 
@@ -1751,8 +1833,11 @@
 
   function maybeDropPowerup(x, y) {
     if (Math.random() > .045) return;
-    const kind = choose(['heal', 'nova', 'rapid']);
-    powerups.push({ kind, x, y, r: 12, life: 12, spin: 0 });
+    dropPowerup(choose(['heal', 'nova', 'rapid']), x, y);
+  }
+
+  function dropPowerup(kind = 'heal', x = player?.x || W / 2, y = player?.y || H / 2, life = 16) {
+    powerups.push({ kind, x, y, r: 12, life, spin: 0 });
   }
 
   function burst(x, y, color, n = 14, force = 1) {
@@ -2065,10 +2150,11 @@
     if (spawnLeft > 0 && spawnTimer <= 0) {
       const activeCap = enemyCap();
       const openSlots = Math.max(1, activeCap - enemies.length);
-      const burstCount = Math.min(spawnLeft, openSlots, wave === 1 ? 6 : Math.max(5, Math.round((7 + Math.floor(wave / 3)) * lateGameScale())));
+      const burstBase = runStageForWave(wave) === runStageDefs.warmup ? 5 : runStageForWave(wave) === runStageDefs.pressure ? 7 : 6;
+      const burstCount = Math.min(spawnLeft, openSlots, Math.max(4, Math.round((burstBase + Math.floor(wave / 3)) * lateGameScale())));
       for (let i = 0; i < burstCount; i++) spawnEnemy();
       spawnLeft -= burstCount;
-      spawnTimer = Math.max(controlMode === 'touch' ? .07 : .055, (wave === 1 ? .18 : .15) - wave * .006 + (controlMode === 'touch' ? .015 : 0));
+      spawnTimer = spawnIntervalForWave(wave);
     }
 
     updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updatePickups(dt); updateParticles(dt);
@@ -2725,8 +2811,9 @@
     const hasTutorial = !!tutorialStep;
     const hasTactic = !!activeTactic && !bossActive;
     const hasObjective = !!beacon;
+    const stage = runStageForWave(wave);
     const x = 12; const y = 112; const w = 286;
-    const h = 64 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 84 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -2741,6 +2828,11 @@
       ctx.fillText(`新手護盾 ${Math.ceil(shieldLeft)}s`, x + 10, y + h + 18);
     }
     let lineY = y + 52;
+    ctx.fillStyle = stage.color || '#ffd166'; ctx.font = '900 11px system-ui';
+    ctx.fillText(`節奏：${stage.name} ${stage.waves}`, x + 10, lineY, w - 20);
+    ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+    ctx.fillText(stage.desc || '星環節奏穩定。', x + 10, lineY + 15, w - 20);
+    lineY += 22;
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
       ctx.fillText(`事件：${activeEvent.name} ${Math.ceil(eventTimer)}s`, x + 10, lineY);
