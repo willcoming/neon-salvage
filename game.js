@@ -131,8 +131,10 @@
   let autoAim = meta.autoAim !== false;
   let activeEvent = null;
   let activeZone = null;
+  let activeTactic = null;
   let eventTimer = 0;
   let meteorTimer = 0;
+  let tacticPulse = 0;
   let eventBannerTimer = 0;
   let damageFlash = 0;
   let worldFeatures = [];
@@ -360,7 +362,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, waveTimes: {}, skills: [], eventsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   function formatTime(seconds = 0) {
@@ -427,6 +429,7 @@
     if (!runStats) return '診斷：資料不足，先完成更多波次。';
     if (runStats.maxParticles >= MAX_PARTICLES * .92 || runStats.maxRings >= MAX_RING_PARTICLES) return '診斷：性能預算曾接近紅線，系統已限制粒子/ring；下一局可少疊高爆裂特效。';
     if ((runStats.shieldSatelliteTime || 0) > 8 && (runStats.shieldSatelliteKills || 0) <= 1) return '診斷：護盾衛星拖慢清場，下一局看到藍色衛星要優先擊破。';
+    if ((runStats.tacticPressure || 0) >= 8) return '診斷：敵群戰術組合壓力偏高，先拆關鍵單位再清雜兵會更穩。';
     if ((runStats.eventsSeen || []).includes('拾荒競速') && !runStats.salvageRushWins) return '診斷：拾荒競速未達標，磁吸場與安全路線會提高收益。';
     if (runObjectives <= 1 && wave >= 5) return '診斷：目標參與偏低，建議多跑目標點換事件獎勵。';
     if (runStats.maxEnemies >= enemyCap() - 1) return '診斷：敵量曾達上限，範圍技能與走位會是關鍵。';
@@ -482,6 +485,7 @@
       if ((record.skills || []).length < 3) list.push('拿到 3 個局內技能');
     }
     if ((record.shieldSatelliteTime || 0) > 0 && (record.shieldSatelliteKills || 0) < 2) list.push('優先擊破 2 台護盾衛星');
+    if ((record.tacticsSeen || []).length) list.push(`破解 ${record.tacticsSeen[0]} 戰術`);
     if ((record.eventsSeen || []).includes('拾荒競速') && !record.salvageRushWins) list.push('完成一次拾荒競速');
     if ((record.maxEnemies || 0) >= enemyCap() - 1) list.push('帶一個範圍技能進後期');
     return [...new Set(list)].slice(0, 3);
@@ -514,6 +518,8 @@
       build: detectBuildName(),
       zone: runStats?.zone || currentZone().name,
       eventsSeen: [...(runStats?.eventsSeen || [])].slice(-5),
+      tacticsSeen: [...(runStats?.tacticsSeen || [])].slice(-5),
+      tacticPressure: runStats?.tacticPressure || 0,
       shieldSatelliteKills: runStats?.shieldSatelliteKills || 0,
       shieldSatelliteTime: Math.floor(runStats?.shieldSatelliteTime || 0),
       salvageRushWins: runStats?.salvageRushWins || 0,
@@ -583,6 +589,7 @@
     report.className = 'run-report';
     const skillHtml = record.skills.length ? record.skills.map(s => `<span>${escapeHtml(s)}</span>`).join('') : '<span>尚未選擇技能</span>';
     const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
+    const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
     const unlock = nextAchievement();
     const unlockHtml = unlock ? `${escapeHtml(unlock.name)}｜${escapeHtml(unlock.progress?.() || '')}｜${escapeHtml(unlock.unlock || '')}` : '所有成就已解鎖';
     report.innerHTML = `
@@ -591,9 +598,10 @@
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
         <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
-        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
+        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
+      <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
       <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
       <div class="skill-chips"><b>技能流派</b>${skillHtml}</div>
       <div class="diagnosis"><b>解鎖目標</b><p>${unlockHtml}</p></div>
@@ -781,6 +789,34 @@
     gravityWell: { name: '重力井', desc: '戰場重力異常，敵我都會被拉向訊號核心。', color: '#b66dff' },
     empStorm: { name: 'EMP 風暴', desc: '自動鎖定距離縮短，但敵彈與敵機也會被拖慢。', color: '#7aa7ff' },
     salvageRush: { name: '拾荒競速', desc: '限時收集碎晶，達標會追加事件獎勵。', color: '#ffd166' }
+  };
+
+  const tacticDefs = {
+    shieldWall: {
+      name: '護盾重甲陣', color: '#7aa7ff', minWave: 4,
+      desc: '護盾衛星保護重甲機；先打藍色衛星再清主群。',
+      bias: ['shieldSat', 'tank', 'tank', 'chaser'], elites: [], events: ['empStorm', 'eliteStorm'], zones: ['scrapyard']
+    },
+    blitzMines: {
+      name: '加速爆雷群', color: '#ff7a3d', minWave: 5,
+      desc: '加速精英帶爆裂雷逼你後撤；看到閃爍十字先拉開。',
+      bias: ['bomber', 'bomber', 'sprinter', 'sprinter'], elites: [{ type: 'sprinter', mod: 'accelerator' }], events: ['droneSwarm', 'overclock'], zones: ['crystal']
+    },
+    medicSwarm: {
+      name: '治療蜂群', color: '#4dff88', minWave: 6,
+      desc: '治療精英躲在小怪後方；範圍清場或先點殺治療者。',
+      bias: ['chaser', 'sprinter', 'sprinter', 'chaser'], elites: [{ type: 'chaser', mod: 'medic' }], events: ['droneSwarm', 'eliteStorm'], zones: ['crystal']
+    },
+    sniperRift: {
+      name: '狙擊裂隙線', color: '#ff3df2', minWave: 5,
+      desc: '狙擊球配裂隙封路；橫向移動，別站在紅區。',
+      bias: ['shooter', 'shooter', 'chaser'], elites: [], events: ['blackout', 'hazard'], zones: ['rift', 'scrapyard'], feature: 'hazard'
+    },
+    leechRefractor: {
+      name: '吸能折射網', color: '#b66dff', minWave: 7,
+      desc: '吸能蟲加折射精英拖長戰鬥；用穿透或爆裂快速破網。',
+      bias: ['leech', 'leech', 'shooter'], elites: [{ type: 'leech', mod: 'refractor' }], events: ['gravityWell', 'empStorm'], zones: ['rift']
+    }
   };
 
   const objectiveDefs = {
@@ -1131,6 +1167,46 @@
     return activeZone || { id: 'default', name: '標準星環', color: '#37f6ff', desc: '標準星環航道。', featureBias: null, scrapBonus: 0, enemyBias: [] };
   }
 
+  function chooseTacticForWave() {
+    if (bossActive || wave < 3 || (tutorialRun && wave <= 2)) return null;
+    const zoneId = currentZone().id;
+    const pool = [];
+    for (const [id, def] of Object.entries(tacticDefs)) {
+      if (wave < def.minWave) continue;
+      pool.push(id);
+      if (def.zones?.includes(zoneId)) pool.push(id, id);
+      if (activeEvent && def.events?.includes(activeEvent.id)) pool.push(id);
+    }
+    if (!pool.length) return null;
+    const id = choose(pool);
+    return { id, ...tacticDefs[id] };
+  }
+
+  function setActiveTactic(tactic) {
+    activeTactic = tactic;
+    tacticPulse = tactic ? rand(5.2, 8.4) : 0;
+    if (!tactic || !runStats) return;
+    if (!runStats.tacticsSeen.includes(tactic.name)) runStats.tacticsSeen.push(tactic.name);
+  }
+
+  function spawnTacticPack(tactic = activeTactic, opening = false) {
+    if (!tactic || bossActive || !player) return;
+    const entries = [...(tactic.bias || [])];
+    const elite = choose(tactic.elites || []);
+    if (elite) entries.unshift(elite.type);
+    const maxPack = opening ? (wave < 5 ? 2 : 3) : 1;
+    let spawned = 0;
+    for (const type of entries) {
+      if (spawned >= maxPack) break;
+      const opts = { tacticId: tactic.id };
+      if (elite && type === elite.type && spawned === 0) opts.elite = elite.mod;
+      const e = spawnEnemy(type, opts);
+      if (e) spawned++;
+    }
+    if (tactic.feature && opening) addWorldFeature(tactic.feature);
+    if (spawned && runStats) runStats.tacticPressure += spawned;
+  }
+
   function objectiveRewardMult() {
     return ((currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035) * currentDifficulty().reward;
   }
@@ -1139,7 +1215,7 @@
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); activeZone = chooseZone(); runStats = newRunStats(); runStats.zone = activeZone.name; upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; eventTimer = 0; meteorTimer = 0; eventBannerTimer = 0; damageFlash = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); activeZone = chooseZone(); runStats = newRunStats(); runStats.zone = activeZone.name; upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; eventBannerTimer = 0; damageFlash = 0;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     startWave(1);
@@ -1200,10 +1276,14 @@
     if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell']));
     else if (wave >= 6 && !bossActive && (wave % 3 === 0 || Math.random() < .32 * currentDifficulty().event)) startEvent();
     if (!beacon || wave % 3 === 1 || wave === 9) beacon = makeBeacon(chooseObjectiveKind());
-    if (bossActive) { activeEvent = null; eventTimer = 0; meteorTimer = 0; }
+    if (bossActive) { activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; }
+    else {
+      setActiveTactic(chooseTacticForWave());
+      if (activeTactic) spawnTacticPack(activeTactic, true);
+    }
     if (bossActive) spawnBoss();
     if (runStats) { runStats.waveStart = runTime; if (bossActive) runStats.bossStart = runTime; }
-    flash(bossActive ? `Boss 波：第 ${wave} 波` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
+    flash(bossActive ? `Boss 波：第 ${wave} 波` : activeTactic ? `戰術：${activeTactic.name}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
     showWaveGuide(wave, bossActive);
   }
 
@@ -1250,7 +1330,7 @@
     activeEvent = null;
   }
 
-  function spawnEnemy(typeId) {
+  function spawnEnemy(typeId, opts = {}) {
     if (enemies.length >= enemyCap() && typeId !== 'boss') return null;
     const side = Math.floor(Math.random() * 4);
     const pad = 58;
@@ -1277,7 +1357,8 @@
       shield: 0,
       shieldClock: rand(.4, 1.2)
     };
-    maybeApplyElite(e, pick);
+    maybeApplyElite(e, pick, opts.elite || null);
+    if (opts.tacticId) e.tacticId = opts.tacticId;
     e.maxHp = e.hp;
     enemies.push(e);
     return e;
@@ -1294,23 +1375,33 @@
     if (wave >= 5) pool.push('shieldSat');
     if (activeEvent?.id === 'blackout') pool.push('shooter', 'shooter');
     if (activeEvent?.id === 'droneSwarm') pool.push('sprinter', 'sprinter', 'bomber');
+    if (activeTactic?.bias?.length) pool.push(...activeTactic.bias);
     if (activeZone?.enemyBias?.length) pool.push(...activeZone.enemyBias);
     return choose(pool);
   }
 
-  function maybeApplyElite(e, pick) {
-    if (pick === 'boss' || wave < 7) return;
-    const chance = Math.min(.12 + wave * .012 + (activeEvent?.id === 'rich' ? .12 : 0) + (activeEvent?.id === 'eliteStorm' ? .20 : 0), .48);
-    if (Math.random() > chance) return;
-    const id = choose(wave >= 12 ? ['shielded', 'splitter', 'berserk', 'medic', 'phantom', 'juggernaut', 'accelerator', 'refractor'] : wave >= 8 ? ['shielded', 'splitter', 'berserk', 'medic', 'accelerator', 'refractor'] : ['shielded', 'splitter', 'berserk', 'medic']);
+  function applyEliteMod(e, id) {
+    if (!e || e.type === 'boss' || !eliteMods[id]) return;
     const mod = eliteMods[id];
+    const baseLabel = e.baseLabel || e.label;
+    e.baseLabel = baseLabel;
     e.elite = { id, name: mod.name, color: mod.color };
-    e.label = `${mod.name}${e.label}`;
+    e.label = `${mod.name}${baseLabel}`;
     e.hp *= mod.hp;
     e.speed *= mod.speed;
     e.scrap += mod.scrap + (activeEvent?.id === 'eliteStorm' ? 2 : 0);
     e.r += (id === 'shielded' ? 3 : 1.4) * enemyScale();
     e.color = mod.color;
+  }
+
+  function maybeApplyElite(e, pick, forcedId = null) {
+    if (pick === 'boss') return;
+    if (forcedId) { applyEliteMod(e, forcedId); return; }
+    if (wave < 7) return;
+    const chance = Math.min(.12 + wave * .012 + (activeEvent?.id === 'rich' ? .12 : 0) + (activeEvent?.id === 'eliteStorm' ? .20 : 0), .48);
+    if (Math.random() > chance) return;
+    const id = choose(wave >= 12 ? ['shielded', 'splitter', 'berserk', 'medic', 'phantom', 'juggernaut', 'accelerator', 'refractor'] : wave >= 8 ? ['shielded', 'splitter', 'berserk', 'medic', 'accelerator', 'refractor'] : ['shielded', 'splitter', 'berserk', 'medic']);
+    applyEliteMod(e, id);
   }
 
   function spawnBoss() {
@@ -1787,6 +1878,13 @@
       if (activeEvent.id === 'empStorm' && Math.random() < dt * 3.4 && particles.length < MAX_PARTICLES) particles.push({ x: player.x + rand(-260, 260), y: player.y + rand(-180, 180), vx: rand(-16, 16), vy: rand(-16, 16), life: .24, max: .24, r: rand(1.8, 3.8), color: '#7aa7ff', ring: false });
       if (eventTimer <= 0) finishEvent();
     }
+    if (activeTactic && !bossActive) {
+      tacticPulse -= dt;
+      if (tacticPulse <= 0) {
+        spawnTacticPack(activeTactic, false);
+        tacticPulse = rand(5.6, 9.2) / lateGameScale();
+      }
+    }
     featurePulse += dt; zoneTick -= dt; maintainWorldFeatures();
     shotTimer -= dt; spawnTimer -= dt; dashCooldown = Math.max(0, dashCooldown - dt); dashTime = Math.max(0, dashTime - dt); player.invuln = Math.max(0, player.invuln - dt); missionPulse += dt;
 
@@ -2133,6 +2231,8 @@
     if (lastDamageCause === 'leech') return '建議：紫色吸能蟲要優先拉開距離擊殺；可選霰彈、電漿或升主砲。';
     if (lastDamageCause === 'bomber') return '建議：爆裂雷閃爍時代表快自爆，先後退再用範圍火力清掉。';
     if ((runStats?.shieldSatelliteTime || 0) > 10) return '建議：護盾衛星會替附近敵人補盾，先集火藍色衛星再清主群。';
+    if ((runStats?.tacticsSeen || []).includes('加速爆雷群')) return '建議：加速爆雷群要先後撤，等爆裂雷離開主群再清掉。';
+    if ((runStats?.tacticsSeen || []).includes('治療蜂群')) return '建議：治療蜂群會拖長戰鬥，看到綠色 + 精英時先點殺治療者。';
     if (lastDamageCause === 'boss') return '建議：Boss 戰前優先主砲、穿甲光矛或蓄能軌砲，護盾不足就先升護盾矩陣。';
     if (lastDamageCause === 'projectile' || lastDamageCause === 'meteor') return '建議：彈幕多時不要貪撿碎晶，優先橫向移動並保留安全距離。';
     if (runObjectives <= 1 && wave >= 4) return '建議：多完成目標點，事件獎勵會讓技能與碎晶成長更快。';
@@ -2472,8 +2572,10 @@
     ctx.save();
     const tutorialStep = currentTutorialStep();
     const hasTutorial = !!tutorialStep;
-    const x = 12; const y = 112; const w = 286; const h = activeEvent ? (hasTutorial ? 124 : 82) : (hasTutorial ? 102 : 60);
-    ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.lineWidth = 1;
+    const hasTactic = !!activeTactic && !bossActive;
+    const x = 12; const y = 112; const w = 286;
+    const h = 64 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasTutorial ? 42 : 0);
+    ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
     const zone = currentZone();
@@ -2486,20 +2588,30 @@
       ctx.font = '800 11px system-ui';
       ctx.fillText(`新手護盾 ${Math.ceil(shieldLeft)}s`, x + 10, y + h + 18);
     }
+    let lineY = y + 52;
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
-      ctx.fillText(`事件：${activeEvent.name} ${Math.ceil(eventTimer)}s`, x + 10, y + 52);
-      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, y + 58, w - 20, 4);
-      ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 10, y + 58, (w - 20) * clamp(eventTimer / 30, 0, 1), 4);
+      ctx.fillText(`事件：${activeEvent.name} ${Math.ceil(eventTimer)}s`, x + 10, lineY);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
+      ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(eventTimer / 30, 0, 1), 4);
+      lineY += 24;
+    }
+    if (hasTactic) {
+      ctx.fillStyle = activeTactic.color || '#ffd166'; ctx.font = '900 11px system-ui';
+      ctx.fillText(`戰術：${activeTactic.name}`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+      ctx.fillText(activeTactic.desc || '敵群正在形成組合壓力。', x + 10, lineY + 15, w - 20);
+      lineY += 30;
     }
     if (beacon) {
       const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
       ctx.fillStyle = def.color; ctx.font = '900 11px system-ui';
-      ctx.fillText(`目標：${def.name}`, x + 10, y + (activeEvent ? 74 : 50));
+      ctx.fillText(`目標：${def.name}`, x + 10, lineY);
+      lineY += 14;
     }
     if (hasTutorial) {
       const tp = tutorialProgress(tutorialStep);
-      const ty = y + (activeEvent ? 88 : 64);
+      const ty = lineY + 10;
       ctx.fillStyle = '#bdfcff';
       ctx.font = '900 11px system-ui';
       ctx.fillText(`新手 ${tutorialRun.step + 1}/${tutorialDefs.length}｜${tutorialStep.label}`, x + 10, ty);
