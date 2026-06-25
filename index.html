@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=4.1" />
+  <link rel="stylesheet" href="./styles.css?v=4.2" />
 </head>
 <body>
   <div id="app">
@@ -105,11 +105,11 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v4.1 異變與操作修正版</strong>
+          <strong>v4.2 異變玩法差異化版</strong>
           <ul>
-            <li>修正方向輸入殘留：開局、失焦、觸控取消與指標離開時都會清空移動，避免飛機自動後退。</li>
-            <li>新增「本局異變」：每局抽到碎晶潮汐、懸賞獵場、裂隙干擾或補給航道，改變事件、目標與資源節奏。</li>
-            <li>左上任務面板與結算報告會顯示本局異變，讓每一局更有不同路線感。</li>
+            <li>四種異變都有專屬玩法任務：碎晶連撿、懸賞連賞、裂隙封印、補給護送。</li>
+            <li>裂隙封印點與補給艙會直接出現在地圖上，需要靠近充能或護送完成。</li>
+            <li>HUD 與結算新增異變任務進度，讓每局目標不只是撐波次。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -147,10 +147,16 @@
 - 若手機沒聲音，先到設定點「測試音效」喚醒音訊。
 
 畫面閱讀：
-- 左上 P1：目前 run 節奏與本局異變，例如碎晶潮汐 / 懸賞獵場 / 裂隙干擾 / 補給航道。
+- 左上 P1：目前 run 節奏與本局異變任務，例如潮汐連撿、懸賞擊破、封印裂隙、護送補給。
 - 左上 P2：當前事件與敵群戰術。
 - 左上 P3：目前目標與副條件。
 - 地圖標籤：維修、新星、超頻、危險區、補給、資源。
+
+異變玩法：
+- 碎晶潮汐：短時間內連撿碎晶，達標後給超頻核心。
+- 懸賞獵場：擊破菁英累積懸賞，達標後給新星炸彈。
+- 裂隙干擾：地圖會出現裂隙封印點，靠近充能可清掉危險區。
+- 補給航道：地圖會出現補給艙，靠近護送充能並避免敵人破壞。
 
 地圖與目標：
 - 藍色目標點會預告「目標 → 事件」。
@@ -171,6 +177,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=4.1"></script>
+  <script src="./game.js?v=4.2"></script>
 </body>
 </html>

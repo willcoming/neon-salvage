@@ -132,6 +132,7 @@
   let activeEvent = null;
   let activeZone = null;
   let activeAnomaly = null;
+  let anomalyState = null;
   let activeTactic = null;
   let eventTimer = 0;
   let meteorTimer = 0;
@@ -398,7 +399,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', anomaly: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -414,6 +415,144 @@
 
   function currentAnomaly() {
     return activeAnomaly || runAnomalyDefs.salvage;
+  }
+
+  function makeAnomalyState(def = currentAnomaly()) {
+    const base = { id: def.id, count: 0, target: 1, timer: 0, reward: false, pulse: 5, combo: 0, best: 0 };
+    if (def.id === 'salvage') return { ...base, label: '潮汐連撿', target: 12, timer: 0 };
+    if (def.id === 'bounty') return { ...base, label: '懸賞連賞', target: 3 };
+    if (def.id === 'rift') return { ...base, label: '裂隙封印', target: 3, pulse: 2.5 };
+    if (def.id === 'convoy') return { ...base, label: '補給護送', target: 2, pulse: 3.5 };
+    return base;
+  }
+
+  function anomalyTaskText() {
+    const s = anomalyState;
+    if (!s) return '異變任務準備中';
+    if (s.id === 'salvage') return `潮汐連撿 ${s.combo}/${s.target}${s.timer > 0 ? `｜${s.timer.toFixed(1)}s` : ''}`;
+    if (s.id === 'bounty') return `懸賞擊破 ${s.count}/${s.target}`;
+    if (s.id === 'rift') return `封印裂隙 ${s.count}/${s.target}`;
+    if (s.id === 'convoy') return `護送補給 ${s.count}/${s.target}`;
+    return `${s.label || '異變任務'} ${s.count}/${s.target}`;
+  }
+
+  function recordAnomalyTask(label) {
+    if (!runStats || !label) return;
+    runStats.anomalyTasks.push(label);
+    runStats.anomalyScore = (runStats.anomalyScore || 0) + 1;
+    recordPaceNode(`異變任務｜${label}`);
+  }
+
+  function rewardAnomalyTask(label, scrap = 22, xpGain = 0, powerup = null) {
+    if (!player) return;
+    meta.scrap += scrap;
+    xp += xpGain || Math.ceil(xpNeed * .18);
+    if (powerup) dropPowerup(powerup, player.x + rand(-72, 72), player.y + rand(-58, 58), 18);
+    addText(player.x, player.y - 72, `${label} +${scrap}`, currentAnomaly().color || '#ffd166');
+    burst(player.x, player.y, currentAnomaly().color || '#ffd166', 24, 1.05);
+    sfx('success');
+    recordAnomalyTask(label);
+  }
+
+  function spawnAnomalyFeature(type) {
+    if (!player) return null;
+    const a = Math.random() * TWO_PI;
+    const d = rand(360, 720);
+    const f = {
+      type,
+      x: player.x + Math.cos(a) * d,
+      y: player.y + Math.sin(a) * d,
+      r: type === 'convoyPod' ? 62 : 58,
+      spin: rand(-.6, .6),
+      seed: Math.random() * 999,
+      cool: 0,
+      charge: 0,
+      hp: type === 'convoyPod' ? 3 : 0,
+      maxHp: type === 'convoyPod' ? 3 : 0
+    };
+    worldFeatures.push(f);
+    return f;
+  }
+
+  function onShardCollected(value = 1) {
+    if (currentAnomaly().id !== 'salvage' || !anomalyState) return;
+    if (anomalyState.timer <= 0) anomalyState.combo = 0;
+    anomalyState.combo += value;
+    anomalyState.best = Math.max(anomalyState.best || 0, anomalyState.combo);
+    anomalyState.timer = 2.6;
+    if (!anomalyState.reward && anomalyState.combo >= anomalyState.target) {
+      anomalyState.reward = true;
+      anomalyState.count = 1;
+      rewardAnomalyTask('潮汐連撿達成', 34 + wave * 3, Math.ceil(xpNeed * .28), 'rapid');
+      flash('碎晶潮汐：連撿達成，超頻核心已投放');
+    }
+  }
+
+  function onEliteKilled(e) {
+    if (currentAnomaly().id !== 'bounty' || !anomalyState || !e?.elite) return;
+    anomalyState.count++;
+    addText(e.x, e.y - e.r - 22, `懸賞 ${anomalyState.count}/${anomalyState.target}`, '#ff3df2');
+    if (!anomalyState.reward && anomalyState.count >= anomalyState.target) {
+      anomalyState.reward = true;
+      rewardAnomalyTask('懸賞連賞達成', 40 + wave * 4, Math.ceil(xpNeed * .32), 'nova');
+      flash('懸賞獵場：連賞達成，新星炸彈已投放');
+    }
+  }
+
+  function completeRiftSeal(f) {
+    if (!f || f.dead || currentAnomaly().id !== 'rift' || !anomalyState) return;
+    f.dead = true;
+    anomalyState.count++;
+    worldFeatures = worldFeatures.filter(w => w === f || w.type !== 'hazard' || Math.hypot(w.x - f.x, w.y - f.y) > 520);
+    burst(f.x, f.y, '#b66dff', 34, 1.2);
+    addText(f.x, f.y - 54, `封印 ${anomalyState.count}/${anomalyState.target}`, '#b66dff');
+    if (!anomalyState.reward && anomalyState.count >= anomalyState.target) {
+      anomalyState.reward = true;
+      rewardAnomalyTask('裂隙封印達成', 42 + wave * 4, Math.ceil(xpNeed * .34), 'heal');
+      flash('裂隙干擾：封印完成，危險區已清理');
+    }
+  }
+
+  function completeConvoyPod(f) {
+    if (!f || f.dead || currentAnomaly().id !== 'convoy' || !anomalyState) return;
+    f.dead = true;
+    anomalyState.count++;
+    burst(f.x, f.y, '#4dff88', 28, 1.1);
+    dropPowerup('heal', f.x + 34, f.y, 18);
+    addText(f.x, f.y - 54, `護送 ${anomalyState.count}/${anomalyState.target}`, '#4dff88');
+    if (!anomalyState.reward && anomalyState.count >= anomalyState.target) {
+      anomalyState.reward = true;
+      rewardAnomalyTask('補給護送達成', 32 + wave * 3, Math.ceil(xpNeed * .24), 'rapid');
+      flash('補給航道：護送完成，額外補給已投放');
+    }
+  }
+
+  function updateAnomaly(dt) {
+    if (!anomalyState || !player || !running || bossActive) return;
+    if (anomalyState.id === 'salvage') {
+      anomalyState.timer = Math.max(0, anomalyState.timer - dt);
+      if (anomalyState.timer <= 0 && anomalyState.combo > 0 && !anomalyState.reward) anomalyState.combo = 0;
+      return;
+    }
+    if (anomalyState.reward) return;
+    if (anomalyState.id === 'rift') {
+      anomalyState.pulse -= dt;
+      const active = worldFeatures.some(f => f.type === 'riftSeal' && !f.dead);
+      if (!active && anomalyState.pulse <= 0 && anomalyState.count < anomalyState.target) {
+        const f = spawnAnomalyFeature('riftSeal');
+        anomalyState.pulse = 12;
+        if (f) flash('裂隙封印點出現：靠近充能可清理危險區');
+      }
+    }
+    if (anomalyState.id === 'convoy') {
+      anomalyState.pulse -= dt;
+      const active = worldFeatures.some(f => f.type === 'convoyPod' && !f.dead);
+      if (!active && anomalyState.pulse <= 0 && anomalyState.count < anomalyState.target) {
+        const f = spawnAnomalyFeature('convoyPod');
+        anomalyState.pulse = 16;
+        if (f) flash('補給艙出現：靠近護送到充能完成');
+      }
+    }
   }
 
   const runStageDefs = {
@@ -591,6 +730,8 @@
       build: detectBuildName(),
       zone: runStats?.zone || currentZone().name,
       anomaly: runStats?.anomaly || currentAnomaly().name,
+      anomalyTasks: [...(runStats?.anomalyTasks || [])].slice(-5),
+      anomalyScore: runStats?.anomalyScore || 0,
       paceNodes: [...(runStats?.paceNodes || [])].slice(-6),
       prepDrops: runStats?.prepDrops || 0,
       objectiveRoute: [...(runStats?.objectiveRoute || [])].slice(-6),
@@ -622,6 +763,18 @@
     card.querySelector('#runReport')?.remove();
     card.querySelector('#postRunActions')?.remove();
     card.querySelector('#recentRunsPanel')?.remove();
+  }
+
+  function setHomeOnlyPanels(card = ui.overlay.querySelector('.card'), visible = true) {
+    if (!card) return;
+    for (const selector of ['.version-card', '.beta-summary', '#offlineNotice', '#achievementPanel', '#zonePanel']) {
+      const el = card.querySelector(selector);
+      if (el) el.hidden = !visible;
+    }
+  }
+
+  function hideHomeOnlyPanels(card = ui.overlay.querySelector('.card')) {
+    setHomeOnlyPanels(card, false);
   }
 
   function renderRecentRuns(card) {
@@ -656,7 +809,7 @@
 
   function renderRunReport(card, record, leadText) {
     clearRunOverlayExtras(card);
-    if (ui.zonePanel) ui.zonePanel.hidden = true;
+    hideHomeOnlyPanels(card);
     card.classList.add('run-card', record.status === 'clear' ? 'success-run' : 'failed-run');
     const lead = card.querySelector('p:not(.eyebrow)');
     lead.textContent = leadText;
@@ -669,6 +822,7 @@
     const paceHtml = record.paceNodes?.length ? record.paceNodes.map(p => `<span>${escapeHtml(p)}</span>`).join('') : '<span>尚未記錄節奏節點</span>';
     const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
     const routeHtml = record.objectiveRoute?.length ? record.objectiveRoute.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成目標路線</span>';
+    const anomalyHtml = record.anomalyTasks?.length ? record.anomalyTasks.map(a => `<span>${escapeHtml(a)}</span>`).join('') : '<span>尚未完成異變任務</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
     const bossHtml = record.bossMechanics?.length ? record.bossMechanics.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未遭遇 Boss 機制</span>';
     const unlock = nextAchievement();
@@ -689,6 +843,7 @@
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
+      <div class="skill-chips"><b>異變任務</b>${anomalyHtml}</div>
       <div class="skill-chips"><b>節奏節點</b>${paceHtml}</div>
       <div class="skill-chips"><b>目標路線</b>${routeHtml}</div>
       <div class="skill-chips"><b>Boss 機制</b>${bossHtml}</div>
@@ -1380,6 +1535,7 @@
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set();
     activeZone = chooseZone();
     activeAnomaly = chooseRunAnomaly();
+    anomalyState = makeAnomalyState(activeAnomaly);
     runStats = newRunStats();
     runStats.zone = activeZone.name;
     runStats.anomaly = activeAnomaly.name;
@@ -1932,6 +2088,8 @@
     if (f.type === 'hazard') return { text: '危險區', color: '#ff4d6d', y: f.y - f.r - 18 };
     if (f.type === 'repair') return { text: '補給', color: '#4dff88', y: f.y - f.r - 16 };
     if (f.type === 'resource') return { text: '資源', color: '#ffd166', y: f.y - f.r - 16 };
+    if (f.type === 'riftSeal') return { text: '裂隙封印', color: '#b66dff', y: f.y - f.r - 18 };
+    if (f.type === 'convoyPod') return { text: '補給艙', color: '#4dff88', y: f.y - f.r - 18 };
     return null;
   }
 
@@ -1949,6 +2107,7 @@
     totalKills++; runKills++;
     if (e.type === 'shieldSat' && runStats) runStats.shieldSatelliteKills++;
     xp += e.type === 'boss' ? 8 : e.elite ? 3 : e.type === 'tank' ? 2 : 1;
+    if (e.elite) onEliteKilled(e);
     if (e.elite?.id === 'splitter' && !e.splitDone) spawnSplinters(e);
     dropShard(e.x, e.y, e.scrap + Math.floor(wave / 5) + (activeEvent?.id === 'rich' ? 2 : 0));
     maybeDropPowerup(e.x, e.y);
@@ -2151,6 +2310,36 @@
       f.cool = Math.max(0, f.cool - dt);
       f.spin += dt * .2;
       const d = Math.hypot(player.x - f.x, player.y - f.y);
+      if (f.type === 'riftSeal') {
+        if (d < f.r + player.r + 18) {
+          f.charge += dt;
+          if (particles.length < MAX_PARTICLES) particles.push({ x: f.x + rand(-22, 22), y: f.y + rand(-22, 22), vx: rand(-8, 8), vy: rand(-8, 8), life: .22, max: .22, r: rand(1.5, 3.1), color: '#b66dff', ring: false });
+          if (f.charge >= 2.2) completeRiftSeal(f);
+          if (f.dead) continue;
+        } else {
+          f.charge = Math.max(0, f.charge - dt * .42);
+        }
+        if (f.cool <= 0 && !f.dead) { addWorldFeature('hazard'); f.cool = 4.2; }
+        continue;
+      }
+      if (f.type === 'convoyPod') {
+        if (d < f.r + player.r + 30) {
+          f.charge += dt;
+          if (particles.length < MAX_PARTICLES) particles.push({ x: f.x + rand(-20, 20), y: f.y + rand(-20, 20), vx: rand(-6, 6), vy: rand(-8, 8), life: .2, max: .2, r: rand(1.4, 2.8), color: '#4dff88', ring: false });
+          if (f.charge >= 5.0) completeConvoyPod(f);
+          if (f.dead) continue;
+        } else {
+          f.charge = Math.max(0, f.charge - dt * .25);
+        }
+        const attackers = enemies.filter(e => !e.dead && Math.hypot(e.x - f.x, e.y - f.y) < f.r + e.r + 90);
+        if (attackers.length && f.cool <= 0) {
+          f.hp -= .42;
+          f.cool = .85;
+          addText(f.x, f.y - f.r - 18, `補給艙 ${Math.max(0, Math.ceil(f.hp))}`, '#4dff88');
+          if (f.hp <= 0) { f.dead = true; flash('補給艙受損：護送失敗，等待下一艙'); anomalyState.pulse = Math.min(anomalyState.pulse || 10, 8); }
+        }
+        continue;
+      }
       if ((f.type === 'asteroid' || f.type === 'debris') && d < player.r + f.r * .76) {
         const a = Math.atan2(player.y - f.y, player.x - f.x);
         const push = (player.r + f.r * .76 - d) + 1;
@@ -2179,6 +2368,7 @@
         }
       }
     }
+    worldFeatures = worldFeatures.filter(f => !f.dead);
     if (zoneTick <= 0) zoneTick = .55;
   }
 
@@ -2227,6 +2417,7 @@
       player.y += Math.sin(ga) * 34 * dt;
     }
     updatePlayerPose(dt, ax, ay);
+    updateAnomaly(dt);
     updateWorldFeatures(dt);
     updateBeacon(dt);
 
@@ -2434,7 +2625,7 @@
       const dx = player.x - s.x; const dy = player.y - s.y; const d = Math.hypot(dx, dy);
       if (d < mr) { const pull = clamp(1 - d / mr, 0, 1) * 900; s.vx += (dx / Math.max(1, d)) * pull * dt; s.vy += (dy / Math.max(1, d)) * pull * dt; }
       s.x += s.vx * dt; s.y += s.vy * dt;
-      if (d < player.r + s.r + 8) { s.dead = true; meta.scrap += s.value; meta.score += 2; sfx('pickup'); }
+      if (d < player.r + s.r + 8) { s.dead = true; meta.scrap += s.value; meta.score += 2; onShardCollected(s.value); sfx('pickup'); }
     }
     shards = shards.filter(s => !s.dead && s.life > 0);
 
@@ -2481,12 +2672,11 @@
     ui.overlay.classList.add('visible');
     const card = ui.overlay.querySelector('.card');
     clearRunOverlayExtras(card);
+    hideHomeOnlyPanels(card);
     card.querySelector('.eyebrow').textContent = 'LEVEL UP // 選擇一項本局技能';
     card.querySelector('h2').textContent = '飛船核心升級';
     const current = topBuild();
     card.querySelector('p:not(.eyebrow)').textContent = current.def ? `目前主流派：${current.def.name}（${current.score >= BUILD_CORE_SCORE ? '核心成形' : '成形中'}）。選同流派會加速核心成形，選副流派可補足弱點。` : '這些技能只在本局有效。先選一個起手流派，再沿同方向疊出核心。';
-    card.querySelector('.version-card')?.setAttribute('hidden', '');
-    if (ui.zonePanel) ui.zonePanel.hidden = true;
     ui.startBtn.style.display = 'none';
     ui.howBtn.style.display = 'none';
     ui.how.hidden = true;
@@ -2515,7 +2705,6 @@
     ui.howBtn.style.display = '';
     const box = document.getElementById('skillChoices');
     if (box) box.remove();
-    if (ui.zonePanel) ui.zonePanel.hidden = false;
     flash(`${name} Lv.${upgradesRuntime[id]}｜${detectBuildName()}`);
     sfx('upgrade');
   }
@@ -2592,7 +2781,6 @@
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'SECTOR CLEAR // 撤離成功';
     card.querySelector('h2').textContent = `星環核心已回收｜評級 ${grade}`;
-    card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '再次出擊';
     ui.startBtn.style.display = '';
     ui.howBtn.style.display = '';
@@ -2615,7 +2803,6 @@
     const card = ui.overlay.querySelector('.card');
     card.querySelector('.eyebrow').textContent = 'RUN TERMINATED';
     card.querySelector('h2').textContent = '飛船解體，但資料已保存。';
-    card.querySelector('.version-card')?.setAttribute('hidden', '');
     ui.startBtn.textContent = '重新出擊';
     ui.startBtn.style.display = '';
     ui.howBtn.style.display = '';
@@ -2726,10 +2913,19 @@
         }
         ctx.closePath(); ctx.fill(); ctx.stroke();
       } else {
-        const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' ? '#4dff88' : '#ffd166';
+        const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' || f.type === 'convoyPod' ? '#4dff88' : f.type === 'riftSeal' ? '#b66dff' : '#ffd166';
         ctx.globalAlpha = .82 + Math.sin(performance.now() * .004 + f.seed) * .12;
         ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2;
-        if (f.type === 'hazard') {
+        if (f.type === 'riftSeal') {
+          ctx.beginPath(); ctx.arc(0, 0, 24, 0, TWO_PI); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(-6, -26); ctx.lineTo(10, -8); ctx.lineTo(-4, 2); ctx.lineTo(12, 27); ctx.stroke();
+          ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 34, -Math.PI / 2, -Math.PI / 2 + TWO_PI * clamp((f.charge || 0) / 2.2, 0, 1)); ctx.stroke();
+        } else if (f.type === 'convoyPod') {
+          ctx.beginPath(); ctx.roundRect(-25, -18, 50, 36, 10); ctx.fill(); ctx.stroke();
+          ctx.fillStyle = '#050712'; ctx.fillRect(-4, -12, 8, 24); ctx.fillRect(-12, -4, 24, 8);
+          ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 36, -Math.PI / 2, -Math.PI / 2 + TWO_PI * clamp((f.charge || 0) / 5, 0, 1)); ctx.stroke();
+          ctx.fillStyle = '#4dff88'; ctx.globalAlpha *= .9; ctx.fillRect(-20, 24, 40 * clamp((f.hp || 0) / Math.max(1, f.maxHp || 3), 0, 1), 4);
+        } else if (f.type === 'hazard') {
           ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(18, 15); ctx.lineTo(-18, 15); ctx.closePath(); ctx.fill(); ctx.stroke();
           ctx.strokeStyle = '#050712'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, -6); ctx.lineTo(0, 5); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 10, 1.8, 0, TWO_PI); ctx.fillStyle = '#050712'; ctx.fill();
         } else if (f.type === 'repair') {
@@ -2938,7 +3134,7 @@
     ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '900 11px system-ui';
     ctx.fillText(`P1 異變｜${anomaly.name}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
-    ctx.fillText(anomaly.tag || anomaly.desc || '本局規則穩定。', x + 10, lineY + 15, w - 20);
+    ctx.fillText(`${anomaly.tag || anomaly.desc || '本局規則'}｜${anomalyTaskText()}`, x + 10, lineY + 15, w - 20);
     lineY += 22;
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
