@@ -342,6 +342,21 @@ h1, h2, p { margin: 0; }
 .grade-badge small { color: rgba(238,247,255,.72); font-weight: 900; letter-spacing: .08em; text-transform: uppercase; }
 .grade-badge.win span, .recent-row .win { color: var(--green); }
 .grade-badge.fail span, .recent-row .fail { color: var(--red); }
+.run-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.run-summary span {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,209,102,.18);
+  background: linear-gradient(135deg, rgba(255,209,102,.10), rgba(55,246,255,.055));
+  color: rgba(238,247,255,.86);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.28;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.run-summary span b { display: block; color: var(--gold); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 3px; }
 .report-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .report-grid section, .diagnosis, .next-challenges, .skill-chips, .recent-runs {
   padding: 11px;
@@ -514,6 +529,8 @@ body[data-control-mode="touch"] .hint { display: none; }
   .upgrade button { padding: 7px; font-size: 11px; }
   #panel > button { width: calc(50% - 5px); margin: 4px 2px 0; padding: 8px; font-size: 11px; }
   .card.run-card { width: min(94vw, 620px); max-height: 86vh; padding: 14px; }
+  .run-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+  .run-summary span { padding: 8px; font-size: 11px; }
   .report-grid { grid-template-columns: 1fr; gap: 7px; }
   .report-grid section, .diagnosis, .next-challenges, .skill-chips, .recent-runs { padding: 9px; border-radius: 12px; }
   .post-run-actions { gap: 6px; }

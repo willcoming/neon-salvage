@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage</title>
-  <link rel="stylesheet" href="./styles.css?v=3.8" />
+  <link rel="stylesheet" href="./styles.css?v=3.9" />
 </head>
 <body>
   <div id="app">
@@ -105,10 +105,10 @@
         <h2>在破碎星環裡活下來。</h2>
         <p>你是一名霓虹拾荒者，駕駛小型飛船穿越失控無人機群。擊毀敵人、收集碎晶、升級飛船。遊戲可隨時暫停，狀態會保存到瀏覽器；回來時還會結算離線收益。</p>
         <div class="version-card">
-          <strong>v3.8 節奏與難度曲線重整版</strong>
+          <strong>v3.9 UI 可讀性 Polish 版</strong>
           <ul>
-            <li>10 波流程重整成暖機、Build 成形、高壓選擇與終局考驗四段節奏。</li>
-            <li>第 4 波會投放成形補給，第 9 波會投放終局整備補給；結算會記錄節奏節點。</li>
+            <li>左上面板加入 P1/P2/P3 優先級，節奏、事件、戰術與目標更容易掃讀。</li>
+            <li>補給、危險區與資源點加入近距離文字標籤；結算新增一眼摘要 chips。</li>
             <li>保留 v3.0 Demo/Beta 完整內容：10 波撤離、多星域、多事件、多 Boss、build 流派、成就、難度、音效與手機 UI。</li>
           </ul>
         </div>
@@ -149,6 +149,9 @@
 - 藍色菱形準星：目標，靠近完成探索獎勵
 
 新玩法：
+- v3.9 將左上任務面板改為 P1/P2/P3 優先級：P1 看 run 節奏，P2 看事件/戰術，P3 看目標與副條件。
+- 地圖上的維修、新星、超頻補給會顯示文字標籤；危險區、資源點、補給點靠近時也會顯示標籤。
+- 結算報告新增一行摘要 chips：波次、Build、壓力、下一步，手機版也更容易掃讀。
 - v3.8 將 10 波整理成四段節奏：1-3 暖機、4-6 Build 成形、7-9 高壓選擇、10 終局考驗。
 - 左上面板會顯示目前節奏階段；第 4 波會投放經驗/超頻補給，第 9 波會投放維修核心與新星炸彈作為終局整備。
 - 刷怪量、上限與間隔改成較平滑的曲線：前期更穩，中期讓流派成形，後期以戰術/事件提高壓力而非只堆數量。
@@ -213,6 +216,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=3.8"></script>
+  <script src="./game.js?v=3.9"></script>
 </body>
 </html>

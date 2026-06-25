@@ -644,8 +644,15 @@
     const bossHtml = record.bossMechanics?.length ? record.bossMechanics.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未遭遇 Boss 機制</span>';
     const unlock = nextAchievement();
     const unlockHtml = unlock ? `${escapeHtml(unlock.name)}｜${escapeHtml(unlock.progress?.() || '')}｜${escapeHtml(unlock.unlock || '')}` : '所有成就已解鎖';
+    const summaryHtml = [
+      ['波次', `第 ${record.wave} 波`],
+      ['Build', record.build || '未成形'],
+      ['壓力', `${record.pressure || '-'}｜${(record.budget || '-').split('｜')[0]}`],
+      ['下一步', record.challenges?.[0] || '自由挑戰']
+    ].map(([k, v]) => `<span><b>${escapeHtml(k)}</b>${escapeHtml(v)}</span>`).join('');
     report.innerHTML = `
       <div class="grade-badge ${record.status === 'clear' ? 'win' : 'fail'}"><span>${escapeHtml(record.status === 'clear' ? record.grade : '失敗')}</span><small>${escapeHtml(record.status === 'clear' ? '撤離成功' : '資料已保存')}</small></div>
+      <div class="run-summary">${summaryHtml}</div>
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
@@ -1852,6 +1859,42 @@
     floatText.push({ x, y, text, color, life: 1.2, max: 1.2 });
   }
 
+  function drawMapLabel(text, x, y, color = '#eef7ff', alpha = .92) {
+    if (!text) return;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font = '900 10px system-ui';
+    const w = Math.min(92, ctx.measureText(text).width + 14);
+    ctx.fillStyle = 'rgba(5,7,18,.72)';
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.2;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 9;
+    ctx.beginPath();
+    ctx.roundRect(x - w / 2, y - 9, w, 18, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.fillText(text, x, y + .5, w - 6);
+    ctx.restore();
+  }
+
+  function worldFeatureLabel(f) {
+    if (f.type === 'hazard') return { text: '危險區', color: '#ff4d6d', y: f.y - f.r - 18 };
+    if (f.type === 'repair') return { text: '補給', color: '#4dff88', y: f.y - f.r - 16 };
+    if (f.type === 'resource') return { text: '資源', color: '#ffd166', y: f.y - f.r - 16 };
+    return null;
+  }
+
+  function powerupLabel(kind) {
+    if (kind === 'heal') return { text: '維修', color: '#4dff88' };
+    if (kind === 'nova') return { text: '新星', color: '#ffd166' };
+    if (kind === 'rapid') return { text: '超頻', color: '#37f6ff' };
+    return { text: '補給', color: '#eef7ff' };
+  }
+
   function killEnemy(e) {
     e.dead = true;
     const scoreGain = Math.floor((e.type === 'boss' ? 400 : 16) + wave * (e.type === 'boss' ? 24 : 3.5));
@@ -2650,6 +2693,10 @@
         }
       }
       ctx.restore();
+      const label = worldFeatureLabel(f);
+      if (label && (!player || Math.hypot(player.x - f.x, player.y - f.y) < (f.type === 'hazard' ? 620 : 420))) {
+        drawMapLabel(label.text, f.x, label.y, label.color, f.type === 'hazard' ? .95 : .86);
+      }
     }
     if (beacon) {
       beacon.pulse = (beacon.pulse || 0) + .02;
@@ -2792,7 +2839,12 @@
     const colors = { heal: '#4dff88', nova: '#ffd166', rapid: '#37f6ff' };
     const glyph = { heal: '+', nova: '✦', rapid: '⚡' };
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.font = '900 17px system-ui';
-    for (const p of powerups) { const pr = Math.max(7, p.r * visualScale()); ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.spin); ctx.shadowColor = colors[p.kind]; ctx.shadowBlur = 10; ctx.fillStyle = colors[p.kind]; ctx.beginPath(); ctx.arc(0, 0, pr, 0, TWO_PI); ctx.fill(); ctx.fillStyle = '#050712'; ctx.fillText(glyph[p.kind], 0, 1); ctx.restore(); }
+    for (const p of powerups) {
+      const pr = Math.max(7, p.r * visualScale());
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.spin); ctx.shadowColor = colors[p.kind]; ctx.shadowBlur = 10; ctx.fillStyle = colors[p.kind]; ctx.beginPath(); ctx.arc(0, 0, pr, 0, TWO_PI); ctx.fill(); ctx.fillStyle = '#050712'; ctx.fillText(glyph[p.kind], 0, 1); ctx.restore();
+      const label = powerupLabel(p.kind);
+      drawMapLabel(label.text, p.x, p.y - pr - 17, label.color, .94);
+    }
     ctx.restore();
   }
 
@@ -2829,20 +2881,20 @@
     }
     let lineY = y + 52;
     ctx.fillStyle = stage.color || '#ffd166'; ctx.font = '900 11px system-ui';
-    ctx.fillText(`節奏：${stage.name} ${stage.waves}`, x + 10, lineY, w - 20);
+    ctx.fillText(`P1 節奏｜${stage.name} ${stage.waves}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(stage.desc || '星環節奏穩定。', x + 10, lineY + 15, w - 20);
     lineY += 22;
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
-      ctx.fillText(`事件：${activeEvent.name} ${Math.ceil(eventTimer)}s`, x + 10, lineY);
+      ctx.fillText(`P2 事件｜${activeEvent.name} ${Math.ceil(eventTimer)}s`, x + 10, lineY);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
       ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(eventTimer / 30, 0, 1), 4);
       lineY += 24;
     }
     if (hasTactic) {
       ctx.fillStyle = activeTactic.color || '#ffd166'; ctx.font = '900 11px system-ui';
-      ctx.fillText(`戰術：${activeTactic.name}`, x + 10, lineY, w - 20);
+      ctx.fillText(`P2 戰術｜${activeTactic.name}`, x + 10, lineY, w - 20);
       ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
       ctx.fillText(activeTactic.desc || '敵群正在形成組合壓力。', x + 10, lineY + 15, w - 20);
       lineY += 30;
@@ -2852,7 +2904,7 @@
       const preview = eventDefs[beacon.previewEvent]?.name || '未知事件';
       const sidePct = clamp(objectiveSideProgress(beacon) / objectiveSideGoal(beacon), 0, 1);
       ctx.fillStyle = def.color; ctx.font = '900 11px system-ui';
-      ctx.fillText(`目標：${def.name} → ${preview}`, x + 10, lineY, w - 20);
+      ctx.fillText(`P3 目標｜${def.name} → ${preview}`, x + 10, lineY, w - 20);
       ctx.fillStyle = objectiveSideComplete(beacon) ? '#4dff88' : 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
       ctx.fillText(`副條件：${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`, x + 10, lineY + 15, w - 20);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 21, w - 20, 3);
