@@ -131,6 +131,7 @@
   let autoAim = meta.autoAim !== false;
   let activeEvent = null;
   let activeZone = null;
+  let activeAnomaly = null;
   let activeTactic = null;
   let eventTimer = 0;
   let meteorTimer = 0;
@@ -152,6 +153,18 @@
   let tutorialRun = null;
   let runStats = null;
   let upgradeFromRun = false;
+
+  function clearMovementInput() {
+    keys.clear();
+    touchMove.x = 0;
+    touchMove.y = 0;
+    touchMove.active = false;
+    touchMove.pressed = false;
+    touchMove.dir = '';
+    touchMove.force = 0;
+    mouse.down = false;
+    if (player) { player.vx = 0; player.vy = 0; }
+  }
   let audioCtx = null;
   let sfxUnlocked = false;
   let shakePower = 0;
@@ -193,14 +206,14 @@
     const base = budgets[n] || Math.round(34 + n * 3.2);
     const mobileEase = controlMode === 'touch' ? .92 : 1;
     const tutorialEase = tutorialRun && n <= 2 ? .72 : 1;
-    return Math.floor(base * mobileEase * tutorialEase * currentDifficulty().enemy);
+    return Math.floor(base * mobileEase * tutorialEase * currentDifficulty().enemy * (currentAnomaly()?.enemyMult || 1));
   }
 
   function eventChanceForWave(n = wave) {
     if (n <= 3 || n % 5 === 0) return 0;
-    if (n <= 6) return n === 6 ? .42 : .18;
-    if (n <= 8) return .46;
-    return 1;
+    const boost = currentAnomaly()?.eventBoost || 0;
+    if (n <= 6) return (n === 6 ? .42 : .18) + boost;
+    return (n === 9 ? .72 : .48) + boost;
   }
 
   function spawnIntervalForWave(n = wave) {
@@ -385,7 +398,22 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', anomaly: '', shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+  }
+
+  const runAnomalyDefs = {
+    salvage: { id: 'salvage', name: '碎晶潮汐', tag: '資源多｜競速多', color: '#ffd166', desc: '資源點、碎晶與拾荒競速更常出現。', events: ['rich', 'salvageRush', 'supply'], objectiveBias: ['harvest', 'scan'], rewardMult: 1.14 },
+    bounty: { id: 'bounty', name: '懸賞獵場', tag: '菁英多｜獎勵高', color: '#ff3df2', desc: '菁英與獵殺目標更常見，擊破獎勵提高。', events: ['eliteStorm', 'droneSwarm'], objectiveBias: ['hunt', 'hold'], enemyMult: 1.04, rewardMult: 1.1 },
+    rift: { id: 'rift', name: '裂隙干擾', tag: '危險多｜事件強', color: '#ff4d6d', desc: '裂隙、重力與電磁事件更常出現，目標獎勵更高。', events: ['gravityWell', 'hazard', 'empStorm'], objectiveBias: ['rift', 'hold'], eventBoost: .12, rewardMult: 1.18 },
+    convoy: { id: 'convoy', name: '補給航道', tag: '補給多｜節奏穩', color: '#4dff88', desc: '維修與補給事件更常見，前中期更容易整理 build。', events: ['supply', 'rich', 'overclock'], objectiveBias: ['scan', 'harvest'], support: true, rewardMult: 1.05 }
+  };
+
+  function chooseRunAnomaly() {
+    return { ...choose(Object.values(runAnomalyDefs)) };
+  }
+
+  function currentAnomaly() {
+    return activeAnomaly || runAnomalyDefs.salvage;
   }
 
   const runStageDefs = {
@@ -562,6 +590,7 @@
       skills: [...(runStats?.skills || [])].slice(-6),
       build: detectBuildName(),
       zone: runStats?.zone || currentZone().name,
+      anomaly: runStats?.anomaly || currentAnomaly().name,
       paceNodes: [...(runStats?.paceNodes || [])].slice(-6),
       prepDrops: runStats?.prepDrops || 0,
       objectiveRoute: [...(runStats?.objectiveRoute || [])].slice(-6),
@@ -657,7 +686,7 @@
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
         <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? '｜二階段' : ''}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
-        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
+        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
       <div class="skill-chips"><b>節奏節點</b>${paceHtml}</div>
@@ -1298,12 +1327,13 @@
   }
 
   function objectiveRewardMult() {
-    return ((currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035) * currentDifficulty().reward;
+    return ((currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1);
   }
 
   function chooseObjectiveEvent(kind, def = objectiveDefs[kind] || objectiveDefs.scan) {
     const pool = [...(def.event || ['droneSwarm'])];
     if (def.routeBias?.length) pool.push(...def.routeBias);
+    if (currentAnomaly()?.events?.length) pool.push(...currentAnomaly().events);
     const zoneId = currentZone().id;
     if (zoneId === 'crystal' && def.event?.includes('salvageRush')) pool.push('salvageRush', 'rich');
     if (zoneId === 'scrapyard' && def.event?.includes('empStorm')) pool.push('empStorm');
@@ -1343,10 +1373,18 @@
   }
 
   function hardResetRun() {
+    clearMovementInput();
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
-    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set(); activeZone = chooseZone(); runStats = newRunStats(); runStats.zone = activeZone.name; upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; damageFlash = 0;
+    wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set();
+    activeZone = chooseZone();
+    activeAnomaly = chooseRunAnomaly();
+    runStats = newRunStats();
+    runStats.zone = activeZone.name;
+    runStats.anomaly = activeAnomaly.name;
+    recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; damageFlash = 0;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     startWave(1);
@@ -1372,10 +1410,10 @@
   }
 
   function chooseObjectiveKind() {
-    if (wave <= 3) return choose(['scan', 'scan', 'harvest']);
-    if (wave <= 6) return choose(['scan', 'harvest', 'hold', 'rift']);
-    if (wave === 9) return choose(['hunt', 'rift', 'hold']);
-    return choose(['scan', 'hold', 'harvest', 'rift', 'hunt']);
+    const bias = currentAnomaly()?.objectiveBias || [];
+    if (wave <= 3) return choose(['scan', 'scan', 'harvest', ...bias]);
+    if (wave <= 6) return choose(['scan', 'harvest', 'hold', 'rift', ...bias]);
+    return choose(['hunt', 'hold', 'rift', 'harvest', 'scan', ...bias, ...bias]);
   }
 
   function stageIntroForWave(n, isBoss = false) {
@@ -1392,6 +1430,14 @@
     const stage = runStageForWave(n);
     if ([1, 4, 7, SECTOR_CLEAR_WAVE].includes(n) || (n === 9 && !runStats?.paceNodes?.some(p => p.startsWith(stage.name)))) recordPaceNode(`${stage.name}｜${stage.desc}`);
     if (!player || isBoss) return '';
+    if (n === 1 && activeAnomaly) {
+      addText(player.x, player.y - 64, `異變：${activeAnomaly.name}`, activeAnomaly.color || '#ffd166');
+    }
+    if (currentAnomaly()?.id === 'convoy' && (n === 2 || n === 6)) {
+      dropPowerup(n === 2 ? 'heal' : 'rapid', player.x + 72, player.y + 36, 18);
+      recordPaceNode(`異變支援｜${currentAnomaly().name}`);
+      return `${currentAnomaly().name}：額外補給已投放。`;
+    }
     if (n === 4) {
       xp += Math.ceil(xpNeed * .22);
       dropPowerup('rapid', player.x + 86, player.y - 28, 18);
@@ -1448,7 +1494,7 @@
     const supportMsg = applyWavePaceSupport(wave, bossActive);
     if (runStats) { runStats.waveStart = runTime; if (bossActive) runStats.bossStart = runTime; }
     if (!bossActive) {
-      const waveMsg = supportMsg || (activeTactic ? `戰術：${activeTactic.name}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
+      const waveMsg = supportMsg || (activeTactic ? `戰術：${activeTactic.name}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜異變：${currentAnomaly().name}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
       flash(waveMsg);
     }
     const stageMsg = stageIntroForWave(wave, bossActive);
@@ -1459,7 +1505,8 @@
   function startEvent(forcedId = null, reward = null) {
     const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm', 'droneSwarm', 'gravityWell', 'empStorm', 'salvageRush'];
     const zoneBonus = currentZone().id === 'crystal' ? ['salvageRush'] : currentZone().id === 'scrapyard' ? ['empStorm'] : [];
-    const id = forcedId || choose([...ids, ...zoneBonus]);
+    const anomalyBonus = currentAnomaly()?.events || [];
+    const id = forcedId || choose([...ids, ...zoneBonus, ...anomalyBonus, ...anomalyBonus]);
     activeEvent = { id, ...eventDefs[id], reward, rushStart: meta.scrap, rushGoal: id === 'salvageRush' ? 22 + wave * 3 : 0, rushDone: false };
     runEvents++;
     if (runStats && !runStats.eventsSeen.includes(eventDefs[id].name)) runStats.eventsSeen.push(eventDefs[id].name);
@@ -1566,8 +1613,8 @@
   function maybeApplyElite(e, pick, forcedId = null) {
     if (pick === 'boss') return;
     if (forcedId) { applyEliteMod(e, forcedId); return; }
-    if (wave < 7) return;
-    const chance = Math.min(.12 + wave * .012 + (activeEvent?.id === 'rich' ? .12 : 0) + (activeEvent?.id === 'eliteStorm' ? .20 : 0), .48);
+    if (wave < 7 && currentAnomaly()?.id !== 'bounty') return;
+    const chance = Math.min(.12 + wave * .012 + (activeEvent?.id === 'rich' ? .12 : 0) + (activeEvent?.id === 'eliteStorm' ? .20 : 0) + (currentAnomaly()?.id === 'bounty' ? .16 : 0), .52);
     if (Math.random() > chance) return;
     const id = choose(wave >= 12 ? ['shielded', 'splitter', 'berserk', 'medic', 'phantom', 'juggernaut', 'accelerator', 'refractor'] : wave >= 8 ? ['shielded', 'splitter', 'berserk', 'medic', 'accelerator', 'refractor'] : ['shielded', 'splitter', 'berserk', 'medic']);
     applyEliteMod(e, id);
@@ -1831,7 +1878,7 @@
 
   function dropShard(x, y, amount = 1) {
     const bonus = upgradesRuntime.shardMultiplier + (currentZone().scrapBonus || 0);
-    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward));
+    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1)));
     for (let i = 0; i < total; i++) {
       const a = Math.random() * TWO_PI;
       shards.push({ x: x + rand(-12, 12), y: y + rand(-12, 12), vx: Math.cos(a) * rand(45, 145), vy: Math.sin(a) * rand(45, 145), r: rand(4, 7), value: 1, life: 20 });
@@ -2072,7 +2119,9 @@
   function addWorldFeature(kind = null) {
     if (!player) return;
     const zone = currentZone();
-    const types = kind ? [kind] : (zone.featureBias || ['asteroid', 'debris', 'resource', 'resource', 'hazard', 'repair']);
+    const anomaly = currentAnomaly();
+    const anomalyBias = anomaly.id === 'salvage' ? ['resource', 'resource', 'repair'] : anomaly.id === 'convoy' ? ['repair', 'repair', 'resource'] : anomaly.id === 'rift' ? ['hazard', 'hazard', 'resource'] : anomaly.id === 'bounty' ? ['resource', 'hazard'] : [];
+    const types = kind ? [kind] : [...(zone.featureBias || ['asteroid', 'debris', 'resource', 'resource', 'hazard', 'repair']), ...anomalyBias];
     const type = choose(types);
     const a = Math.random() * TWO_PI;
     const d = rand(Math.min(W, H) * .72, Math.max(W, H) * 1.9);
@@ -2865,7 +2914,7 @@
     const hasObjective = !!beacon;
     const stage = runStageForWave(wave);
     const x = 12; const y = 112; const w = 286;
-    const h = 84 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 106 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -2884,6 +2933,12 @@
     ctx.fillText(`P1 節奏｜${stage.name} ${stage.waves}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(stage.desc || '星環節奏穩定。', x + 10, lineY + 15, w - 20);
+    lineY += 22;
+    const anomaly = currentAnomaly();
+    ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '900 11px system-ui';
+    ctx.fillText(`P1 異變｜${anomaly.name}`, x + 10, lineY, w - 20);
+    ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+    ctx.fillText(anomaly.tag || anomaly.desc || '本局規則穩定。', x + 10, lineY + 15, w - 20);
     lineY += 22;
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
@@ -3068,6 +3123,7 @@
   function startOrResume() {
     closeUpgradeModal();
     closeSettingsModal();
+    clearMovementInput();
     ensureAudio();
     if (gameOver || !player || !running) hardResetRun();
     running = true; paused = false; gameOver = false; skillChoosing = false;
@@ -3096,6 +3152,9 @@
   window.addEventListener('resize', resize);
   window.visualViewport?.addEventListener('resize', resize);
   window.visualViewport?.addEventListener('scroll', resize);
+  window.addEventListener('blur', clearMovementInput);
+  window.addEventListener('pagehide', clearMovementInput);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) clearMovementInput(); });
   window.addEventListener('keydown', e => {
     keys.add(e.code);
     if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) doDash(); }
@@ -3127,8 +3186,11 @@
   }
 
   canvas.addEventListener('pointermove', e => { setMouseFromClient(e.clientX, e.clientY); });
-  canvas.addEventListener('pointerdown', e => { mouse.down = true; setMouseFromClient(e.clientX, e.clientY); });
-  canvas.addEventListener('pointerup', () => { mouse.down = false; });
+  canvas.addEventListener('pointerdown', e => { mouse.down = true; setMouseFromClient(e.clientX, e.clientY); canvas.setPointerCapture?.(e.pointerId); });
+  canvas.addEventListener('pointerup', e => { mouse.down = false; canvas.releasePointerCapture?.(e.pointerId); if (controlMode === 'touch') resetTouchDirection(); });
+  canvas.addEventListener('pointercancel', clearMovementInput);
+  canvas.addEventListener('pointerleave', () => { mouse.down = false; if (controlMode === 'touch') resetTouchDirection(); });
+  window.addEventListener('pointerup', () => { mouse.down = false; if (controlMode === 'touch') resetTouchDirection(); });
   ui.startBtn.addEventListener('click', startOrResume);
   ui.settingsBtn?.addEventListener('click', openSettingsModal);
   ui.homeSettingsBtn?.addEventListener('click', openSettingsModal);

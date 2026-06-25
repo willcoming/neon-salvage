@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=4.0" />
+  <link rel="stylesheet" href="./styles.css?v=4.1" />
 </head>
 <body>
   <div id="app">
@@ -105,11 +105,11 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v4.0 Beta Demo 公開展示版</strong>
+          <strong>v4.1 異變與操作修正版</strong>
           <ul>
-            <li>首頁改成公開展示用 landing：清楚標示 Beta Demo、10 波撤離、桌機 / 手機皆可玩。</li>
-            <li>玩法說明整理成速讀指南，不再堆疊歷史版本；新玩家能更快知道目標、操作與重點。</li>
-            <li>保留完整 Beta 內容：星域路線、地圖事件、敵群戰術、Boss 二階段、build 流派、結算報告與手機 UI。</li>
+            <li>修正方向輸入殘留：開局、失焦、觸控取消與指標離開時都會清空移動，避免飛機自動後退。</li>
+            <li>新增「本局異變」：每局抽到碎晶潮汐、懸賞獵場、裂隙干擾或補給航道，改變事件、目標與資源節奏。</li>
+            <li>左上任務面板與結算報告會顯示本局異變，讓每一局更有不同路線感。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -147,7 +147,7 @@
 - 若手機沒聲音，先到設定點「測試音效」喚醒音訊。
 
 畫面閱讀：
-- 左上 P1：目前 run 節奏，例如暖機 / Build 成形 / 高壓選擇 / 終局考驗。
+- 左上 P1：目前 run 節奏與本局異變，例如碎晶潮汐 / 懸賞獵場 / 裂隙干擾 / 補給航道。
 - 左上 P2：當前事件與敵群戰術。
 - 左上 P3：目前目標與副條件。
 - 地圖標籤：維修、新星、超頻、危險區、補給、資源。
@@ -171,6 +171,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=4.0"></script>
+  <script src="./game.js?v=4.1"></script>
 </body>
 </html>
