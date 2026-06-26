@@ -143,6 +143,7 @@
   let missionHudWakeUntil = 0;
   let missionHudSignature = '';
   let damageFlash = 0;
+  let playerDamageCue = null;
   let worldFeatures = [];
   let featurePulse = 0;
   let zoneTick = 0;
@@ -314,6 +315,10 @@
       shakeTime = Math.max(0, shakeTime - dt);
       if (shakeTime <= 0) shakePower = 0;
     }
+    if (playerDamageCue) {
+      playerDamageCue.life -= dt;
+      if (playerDamageCue.life <= 0) playerDamageCue = null;
+    }
   }
 
   const aimAssistDefs = {
@@ -382,20 +387,31 @@
     flash('已播放測試音效');
   }
 
-  function impactFeedback(x, y, color = '#37f6ff', strength = 1, sound = 'hit') {
+  function impactFeedback(x, y, color = '#37f6ff', strength = 1, sound = 'hit', angle = null) {
     sfx(sound);
-    if (strength >= 2.2) addShake(strength, .12);
-    const count = Math.min(12, Math.ceil(3 + strength * 2));
+    if (strength >= 1.8) addShake(strength, .12);
+    const count = Math.min(18, Math.ceil(4 + strength * 3));
     for (let i = 0; i < count && particles.length < MAX_PARTICLES; i++) {
-      const a = Math.random() * TWO_PI;
-      particles.push({ x, y, vx: Math.cos(a) * rand(50, 180) * strength, vy: Math.sin(a) * rand(50, 180) * strength, life: rand(.12, .24), max: .24, r: rand(1.1, 2.8) * Math.min(1.7, strength), color, ring: false });
+      const a = angle == null ? Math.random() * TWO_PI : angle + rand(-1.8, 1.8);
+      const sp = rand(70, 230) * strength;
+      particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(.12, .28), max: .28, r: rand(1.1, 2.9) * Math.min(1.8, strength), color, ring: false, kind: i % 3 === 0 ? 'spark' : 'dot', len: rand(8, 20) * Math.min(1.7, strength) });
     }
+    if (particles.length < MAX_PARTICLES) particles.push({ x, y, vx: 0, vy: 0, life: .14, max: .14, r: 5 + strength * 4, color: '#ffffff', ring: true, fastRing: true });
   }
 
-  function playerImpact(cause, shake = 3.2, vibrateMs = 18) {
+  function playerImpact(cause, shake = 3.2, vibrateMs = 18, sourceX = null, sourceY = null) {
     lastDamageCause = cause;
     sfx('hurt');
     addShake(shake, .13);
+    if (player && sourceX != null && sourceY != null) {
+      playerDamageCue = { angle: Math.atan2(sourceY - player.y, sourceX - player.x), life: .55, max: .55, cause };
+      for (let i = 0; i < 8 && particles.length < MAX_PARTICLES; i++) {
+        const a = playerDamageCue.angle + Math.PI + rand(-.75, .75);
+        particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: Math.cos(a) * rand(55, 160), vy: Math.sin(a) * rand(55, 160), life: rand(.16, .3), max: .3, r: rand(1.6, 3.2), color: '#ff4d6d', ring: false, kind: 'spark', len: rand(10, 22) });
+      }
+    } else {
+      playerDamageCue = { angle: -Math.PI / 2, life: .45, max: .45, cause };
+    }
     const now = performance.now();
     if (now - (sfxGate.haptic || 0) > 220) { sfxGate.haptic = now; haptic(vibrateMs); }
   }
@@ -1570,7 +1586,7 @@
     runStats.zone = activeZone.name;
     runStats.anomaly = activeAnomaly.name;
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -2103,6 +2119,20 @@
     particles.push({ x, y, vx: 0, vy: 0, life: .38, max: .38, r: 8, color, ring: true });
   }
 
+  function deathBurst(e) {
+    if (!e) return;
+    const color = e.color || '#ff4d6d';
+    const force = e.type === 'boss' ? 2.1 : e.elite ? 1.55 : 1.05;
+    const spokes = e.type === 'boss' ? 26 : e.elite ? 18 : 12;
+    for (let i = 0; i < spokes && particles.length < MAX_PARTICLES; i++) {
+      const a = i / spokes * TWO_PI + rand(-.08, .08);
+      const sp = rand(160, 360) * force;
+      particles.push({ x: e.x, y: e.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(.18, .42), max: .42, r: rand(1.4, 3.2) * force, color: i % 4 === 0 ? '#ffffff' : color, ring: false, kind: 'spark', len: rand(16, 34) * force });
+    }
+    particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: .28, max: .28, r: Math.max(10, e.r * .45), color, ring: true, fastRing: true });
+    if (e.elite || e.type === 'boss') particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: .45, max: .45, r: Math.max(18, e.r * .7), color: '#ffffff', ring: true });
+  }
+
   function addText(x, y, text, color = '#eef7ff') {
     floatText.push({ x, y, text, color, life: 1.2, max: 1.2 });
   }
@@ -2157,6 +2187,7 @@
     dropShard(e.x, e.y, e.scrap + Math.floor(wave / 5) + (activeEvent?.id === 'rich' ? 2 : 0));
     maybeDropPowerup(e.x, e.y);
     burst(e.x, e.y, e.color, e.type === 'boss' ? 44 : 18, e.type === 'boss' ? 1.5 : 1);
+    deathBurst(e);
     addText(e.x, e.y - e.r - 10, `+${scoreGain}`, e.color);
     impactFeedback(e.x, e.y, e.color, e.type === 'boss' ? 4.8 : e.elite ? 2.4 : 1.2, e.type === 'boss' ? 'bossDie' : e.elite ? 'elite' : 'kill');
     if (e.type === 'boss') {
@@ -2391,10 +2422,10 @@
         const push = (player.r + f.r * .76 - d) + 1;
         player.x += Math.cos(a) * push;
         player.y += Math.sin(a) * push;
-        if (f.cool <= 0 && !isPlayerProtected()) { playerImpact('obstacle', 2.2, 16); player.hp -= incomingDamage(f.type === 'asteroid' ? 8 : 4); damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
+        if (f.cool <= 0 && !isPlayerProtected()) { playerImpact('obstacle', 2.2, 16, f.x, f.y); player.hp -= incomingDamage(f.type === 'asteroid' ? 8 : 4); damageFlash = .28; player.invuln = .38; f.cool = .75; burst(player.x, player.y, '#ff4d6d', 8); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'hazard' && d < f.r) {
-        if (zoneTick <= 0 && !isPlayerProtected()) { playerImpact('hazard', 1.6, 10); player.hp -= incomingDamage(3 + wave * .12); damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); if (player.hp <= 0) endRun(); }
+        if (zoneTick <= 0 && !isPlayerProtected()) { playerImpact('hazard', 1.6, 10, f.x, f.y); player.hp -= incomingDamage(3 + wave * .12); damageFlash = .22; player.invuln = .12; burst(player.x, player.y, '#ff4d6d', 4, .45); if (player.hp <= 0) endRun(); }
       }
       if (f.type === 'repair' && d < f.r && f.cool <= 0) {
         player.hp = Math.min(player.maxHp, player.hp + 14);
@@ -2534,7 +2565,7 @@
           e.hit = e.type === 'boss' ? .12 : .08;
           if (b.crit) addText(e.x, e.y - e.r - 14, 'CRIT', '#fff6c7');
           if (b.burn > 0) e.burn = Math.max(e.burn || 0, 1.6 + b.burn * .35);
-          impactFeedback(b.x, b.y, e.type === 'boss' ? '#ffffff' : b.homing ? '#ffd166' : '#37f6ff', e.type === 'boss' ? .9 : .55, e.type === 'boss' ? 'bossHit' : 'hit');
+          impactFeedback(b.x, b.y, e.type === 'boss' ? '#ffffff' : b.homing ? '#ffd166' : '#37f6ff', e.type === 'boss' ? 1.2 : .78, e.type === 'boss' ? 'bossHit' : 'hit', Math.atan2(b.vy, b.vx));
           if (b.blast > 0) {
             const blastDamage = b.dmg * (.35 + upgradesRuntime.plasmaBurst * .08);
             particles.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: .22, max: .22, r: b.blast * .32, color: '#ff7a3d', ring: true });
@@ -2668,7 +2699,7 @@
       }
       if (e.type === 'boss' && !e.phase2 && e.hp < e.maxHp * .5) { e.phase2 = true; e.speed *= 1.22; e.abilityClock = Math.min(e.abilityClock || 1.4, 1.1); if (runStats) runStats.bossPhase2 = true; announceBoss(e, 'phase2'); burst(e.x, e.y, e.color || '#ff4d6d', e.finalBoss ? 70 : 48, e.finalBoss ? 1.8 : 1.5); sfx('boss'); addShake(e.finalBoss ? 8 : 5, .24); haptic(e.finalBoss ? 55 : 28); }
       if (e.type === 'leech' && d < 185 && !isPlayerProtected()) {
-        playerImpact('leech', 1.2, 8); player.hp -= incomingDamage(dt * (1.8 + wave * .04)); damageFlash = Math.max(damageFlash, .12);
+        playerImpact('leech', 1.2, 8, e.x, e.y); player.hp -= incomingDamage(dt * (1.8 + wave * .04)); damageFlash = Math.max(damageFlash, .12);
         if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
         if (player.hp <= 0) endRun();
       }
@@ -2680,7 +2711,7 @@
           e.dead = true;
           const blastD = Math.hypot(player.x - e.x, player.y - e.y);
           if (blastD < 128 && !isPlayerProtected()) {
-            playerImpact('bomber', 5.2, 40);
+            playerImpact('bomber', 5.2, 40, e.x, e.y);
             player.hp -= incomingDamage(15 + wave * .42);
             damageFlash = .34;
             player.invuln = .42;
@@ -2723,7 +2754,7 @@
       }
       const rr = e.r + player.r;
       if (!(e.type === 'bomber' && e.detonate > 0) && dist2(e, player) < rr * rr && !isPlayerProtected()) {
-        playerImpact(e.type === 'boss' ? 'boss' : 'collision', e.type === 'boss' ? 5.5 : 3.1, e.type === 'boss' ? 42 : 18); player.hp -= incomingDamage(Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55)); damageFlash = .32;
+        playerImpact(e.type === 'boss' ? 'boss' : 'collision', e.type === 'boss' ? 5.5 : 3.1, e.type === 'boss' ? 42 : 18, e.x, e.y); player.hp -= incomingDamage(Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55)); damageFlash = .32;
         player.invuln = dashTime > 0 ? .05 : .68;
         if (e.type !== 'boss') e.dead = true;
         burst(player.x, player.y, '#ff4d6d', 18);
@@ -2741,7 +2772,7 @@
         particles.push({ x: s.x, y: s.y, vx: rand(-10, 10), vy: rand(-10, 10), life: .2, max: .2, r: 3, color: s.color || '#ff7a3d', ring: false });
       }
       if (dist2(s, player) < Math.pow(s.r + player.r, 2) && !isPlayerProtected()) {
-        playerImpact(s.type === 'meteor' ? 'meteor' : 'projectile', s.type === 'meteor' ? 4.5 : 3.4, s.type === 'meteor' ? 38 : 20); s.dead = true; player.hp -= incomingDamage(s.dmg); damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
+        playerImpact(s.type === 'meteor' ? 'meteor' : 'projectile', s.type === 'meteor' ? 4.5 : 3.4, s.type === 'meteor' ? 38 : 20, s.x, s.y); s.dead = true; player.hp -= incomingDamage(s.dmg); damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
         if (player.hp <= 0) endRun();
       }
     }
@@ -2753,9 +2784,18 @@
     for (const s of shards) {
       s.life -= dt; s.vx *= .985; s.vy *= .985;
       const dx = player.x - s.x; const dy = player.y - s.y; const d = Math.hypot(dx, dy);
-      if (d < mr) { const pull = clamp(1 - d / mr, 0, 1) * 900; s.vx += (dx / Math.max(1, d)) * pull * dt; s.vy += (dy / Math.max(1, d)) * pull * dt; }
+      if (d < mr) {
+        const magnet = clamp(1 - d / mr, 0, 1);
+        const pull = magnet * 980;
+        s.magnet = Math.max(s.magnet || 0, magnet);
+        s.vx += (dx / Math.max(1, d)) * pull * dt;
+        s.vy += (dy / Math.max(1, d)) * pull * dt;
+        if (magnet > .18 && Math.random() < dt * 18 && particles.length < MAX_PARTICLES) particles.push({ x: s.x, y: s.y, vx: -s.vx * .05, vy: -s.vy * .05, life: .18, max: .18, r: 2.2 + magnet * 2.2, color: '#ffd166', ring: false, kind: 'pickupTrail', len: 8 + magnet * 14 });
+      } else {
+        s.magnet = Math.max(0, (s.magnet || 0) - dt * 1.5);
+      }
       s.x += s.vx * dt; s.y += s.vy * dt;
-      if (d < player.r + s.r + 8) { s.dead = true; meta.scrap += s.value; meta.score += 2; onShardCollected(s.value); sfx('pickup'); }
+      if (d < player.r + s.r + 8) { s.dead = true; meta.scrap += s.value; meta.score += 2; onShardCollected(s.value); impactFeedback(s.x, s.y, '#ffd166', .45, 'pickup', Math.atan2(dy, dx)); }
     }
     shards = shards.filter(s => !s.dead && s.life > 0);
 
@@ -2772,7 +2812,7 @@
   }
 
   function updateParticles(dt) {
-    for (const p of particles) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .96; p.vy *= .96; if (p.ring) p.r += 90 * dt; }
+    for (const p of particles) { p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= .96; p.vy *= .96; if (p.ring) p.r += (p.fastRing ? 150 : 90) * dt; }
     particles = particles.filter(p => p.life > 0);
     let rings = 0;
     particles = particles.filter(p => {
@@ -3098,7 +3138,7 @@
     ctx.scale(playerScale(), playerScale());
     const flicker = isPlayerProtected() && Math.sin(performance.now() * .05) > 0;
     ctx.globalAlpha = flicker ? .45 : 1;
-    ctx.shadowColor = dashTime > 0 ? '#ffd166' : '#37f6ff'; ctx.shadowBlur = 10;
+    ctx.shadowColor = playerDamageCue ? '#ff4d6d' : dashTime > 0 ? '#ffd166' : '#37f6ff'; ctx.shadowBlur = playerDamageCue ? 22 : 10;
     if (upgradesRuntime.railCharge > 0) {
       const cadence = Math.max(3, 7 - upgradesRuntime.railCharge);
       const railReady = (shotSeq + 1) % cadence === 0;
@@ -3111,6 +3151,7 @@
     ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(-22, -15); ctx.lineTo(-11, -4); ctx.lineTo(-24, 0); ctx.lineTo(-11, 4); ctx.lineTo(-22, 15); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = '#eef7ff'; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#050712'; ctx.beginPath(); ctx.arc(0, 0, 5.2, 0, TWO_PI); ctx.fill();
+    if (playerDamageCue) { ctx.strokeStyle = '#ff4d6d'; ctx.lineWidth = 3; ctx.globalAlpha *= .72; ctx.beginPath(); ctx.arc(0, 0, 31, 0, TWO_PI); ctx.stroke(); ctx.globalAlpha = flicker ? .45 : 1; }
     ctx.fillStyle = '#ff3df2'; ctx.globalAlpha *= .82; ctx.beginPath(); ctx.moveTo(-23, -5); ctx.lineTo(-29 - Math.random() * 4, 0); ctx.lineTo(-23, 5); ctx.fill();
     ctx.restore();
 
@@ -3240,7 +3281,27 @@
     ctx.restore();
   }
 
-  function drawShards() { ctx.save(); for (const s of shards) { const sr = Math.max(2.5, s.r * visualScale()); ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 8; ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.moveTo(s.x, s.y - sr); ctx.lineTo(s.x + sr, s.y); ctx.lineTo(s.x, s.y + sr); ctx.lineTo(s.x - sr, s.y); ctx.closePath(); ctx.fill(); } ctx.restore(); }
+  function drawShards() {
+    ctx.save();
+    for (const s of shards) {
+      const sr = Math.max(2.5, s.r * visualScale());
+      const mag = clamp(s.magnet || 0, 0, 1);
+      if (mag > .08) {
+        ctx.globalAlpha = .18 + mag * .36;
+        ctx.strokeStyle = '#ffd166';
+        ctx.lineWidth = 1.2;
+        ctx.shadowColor = '#ffd166';
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, sr + 5 + mag * 10, 0, TWO_PI);
+        ctx.stroke();
+      }
+      ctx.globalAlpha = .86 + mag * .14;
+      ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 8 + mag * 12; ctx.fillStyle = '#ffd166';
+      ctx.beginPath(); ctx.moveTo(s.x, s.y - sr); ctx.lineTo(s.x + sr, s.y); ctx.lineTo(s.x, s.y + sr); ctx.lineTo(s.x - sr, s.y); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
 
   function drawPowerups() {
     const colors = { heal: '#4dff88', nova: '#ffd166', rapid: '#37f6ff' };
@@ -3257,9 +3318,34 @@
 
   function drawParticles() {
     ctx.save();
-    for (const p of particles) { const alpha = clamp(p.life / p.max, 0, 1); ctx.globalAlpha = alpha; ctx.strokeStyle = p.color; ctx.fillStyle = p.color; ctx.shadowColor = p.color; ctx.shadowBlur = p.ring ? 3 : 8; ctx.beginPath(); if (p.ring) { ctx.lineWidth = 1; ctx.arc(p.x, p.y, Math.min(p.r, 26 * visualScale()), 0, TWO_PI); ctx.stroke(); } else { ctx.arc(p.x, p.y, p.r * visualScale(), 0, TWO_PI); ctx.fill(); } }
+    for (const p of particles) {
+      const alpha = clamp(p.life / p.max, 0, 1);
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = p.color;
+      ctx.fillStyle = p.color;
+      ctx.shadowColor = p.color;
+      ctx.shadowBlur = p.ring ? 3 : p.kind === 'spark' ? 14 : 8;
+      ctx.beginPath();
+      if (p.ring) {
+        ctx.lineWidth = p.fastRing ? 2 : 1;
+        ctx.arc(p.x, p.y, Math.min(p.r, (p.fastRing ? 34 : 26) * visualScale()), 0, TWO_PI);
+        ctx.stroke();
+      } else if (p.kind === 'spark' || p.kind === 'pickupTrail') {
+        const a = Math.atan2(p.vy, p.vx);
+        const len = (p.len || 12) * visualScale();
+        ctx.lineWidth = Math.max(1, (p.kind === 'pickupTrail' ? 1.3 : 1.8) * visualScale());
+        ctx.moveTo(p.x - Math.cos(a) * len * .45, p.y - Math.sin(a) * len * .45);
+        ctx.lineTo(p.x + Math.cos(a) * len * .55, p.y + Math.sin(a) * len * .55);
+        ctx.stroke();
+      } else {
+        ctx.arc(p.x, p.y, p.r * visualScale(), 0, TWO_PI);
+        ctx.fill();
+      }
+    }
     ctx.restore();
-    ctx.save(); ctx.textAlign = 'center'; ctx.font = '800 14px system-ui';
+    ctx.save();
+    ctx.textAlign = 'center';
+    ctx.font = '800 14px system-ui';
     for (const t of floatText) { ctx.globalAlpha = clamp(t.life / t.max, 0, 1); ctx.fillStyle = t.color; ctx.fillText(t.text, t.x, t.y); }
     ctx.restore();
   }
@@ -3450,14 +3536,41 @@
   }
 
   function drawScreenEffects() {
-    if (damageFlash <= 0) return;
+    if (damageFlash <= 0 && !playerDamageCue) return;
     ctx.save();
-    const a = clamp(damageFlash / .34, 0, 1) * .18;
-    ctx.strokeStyle = `rgba(255,77,109,${a * 2.1})`;
-    ctx.lineWidth = 18;
-    ctx.strokeRect(8, 8, W - 16, H - 16);
-    ctx.fillStyle = `rgba(255,77,109,${a})`;
-    ctx.fillRect(0, 0, W, H);
+    if (damageFlash > 0) {
+      const a = clamp(damageFlash / .34, 0, 1) * .18;
+      ctx.strokeStyle = `rgba(255,77,109,${a * 2.1})`;
+      ctx.lineWidth = 18;
+      ctx.strokeRect(8, 8, W - 16, H - 16);
+      ctx.fillStyle = `rgba(255,77,109,${a})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+    if (playerDamageCue) {
+      const t = clamp(playerDamageCue.life / playerDamageCue.max, 0, 1);
+      const a = playerDamageCue.angle;
+      const cx = W / 2 + Math.cos(a) * Math.min(W, H) * .42;
+      const cy = H / 2 + Math.sin(a) * Math.min(W, H) * .42;
+      ctx.translate(cx, cy);
+      ctx.rotate(a + Math.PI / 2);
+      ctx.globalAlpha = .18 + t * .46;
+      ctx.fillStyle = '#ff4d6d';
+      ctx.shadowColor = '#ff4d6d';
+      ctx.shadowBlur = 20;
+      ctx.beginPath();
+      ctx.moveTo(0, -34);
+      ctx.lineTo(24, 18);
+      ctx.lineTo(0, 8);
+      ctx.lineTo(-24, 18);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = '#fff1c7';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(0, -24);
+      ctx.lineTo(0, 12);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
