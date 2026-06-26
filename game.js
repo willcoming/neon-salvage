@@ -140,6 +140,8 @@
   let bossAlertTimer = 0;
   let bossAlert = null;
   let eventBannerTimer = 0;
+  let missionHudWakeUntil = 0;
+  let missionHudSignature = '';
   let damageFlash = 0;
   let worldFeatures = [];
   let featurePulse = 0;
@@ -417,6 +419,33 @@
     return activeAnomaly || runAnomalyDefs.salvage;
   }
 
+  function missionHudNow() {
+    return performance.now() / 1000;
+  }
+
+  function wakeMissionHud(seconds = 3) {
+    missionHudWakeUntil = Math.max(missionHudWakeUntil, missionHudNow() + seconds);
+  }
+
+  function updateMissionHudSignature(signature, seconds = 3) {
+    if (missionHudSignature === signature) return false;
+    missionHudSignature = signature;
+    wakeMissionHud(seconds);
+    return true;
+  }
+
+  function missionHudAlpha(forceBright = false) {
+    if (!running || paused || gameOver || skillChoosing) return 1;
+    const bright = forceBright || runTime < 3 || eventBannerTimer > 0 || bossAlertTimer > 0 || missionHudNow() < missionHudWakeUntil;
+    return bright ? 1 : .35;
+  }
+
+  function currentMissionHudSignature() {
+    const beaconSig = beacon ? `${beacon.kind}:${beacon.previewEvent}:${objectiveSideComplete(beacon) ? 1 : 0}` : '';
+    const anomalySig = `${anomalyState?.id || ''}:${anomalyState?.reward ? 1 : 0}:${anomalyState?.count || 0}`;
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig].join('|');
+  }
+
   function makeAnomalyState(def = currentAnomaly()) {
     const base = { id: def.id, count: 0, target: 1, timer: 0, reward: false, pulse: 5, combo: 0, best: 0 };
     if (def.id === 'salvage') return { ...base, label: '潮汐連撿', target: 12, timer: 0 };
@@ -451,6 +480,7 @@
     addText(player.x, player.y - 72, `${label} +${scrap}`, currentAnomaly().color || '#ffd166');
     burst(player.x, player.y, currentAnomaly().color || '#ffd166', 24, 1.05);
     sfx('success');
+    wakeMissionHud(3.6);
     recordAnomalyTask(label);
   }
 
@@ -1540,9 +1570,10 @@
     runStats.zone = activeZone.name;
     runStats.anomaly = activeAnomaly.name;
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; damageFlash = 0;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
+    wakeMissionHud(4.5);
     startWave(1);
     for (let i = 0; i < (tutorialRun ? 9 : 5); i++) dropShard(player.x + rand(-48, 48), player.y + rand(-48, 48), 1);
     updateUi();
@@ -1562,6 +1593,7 @@
     meta.scrap += mission.reward;
     addText(player.x, player.y - 36, `任務完成 +${mission.reward}`, '#4dff88');
     flash(`任務完成：獲得 ${mission.reward} 碎晶`);
+    wakeMissionHud(3.8);
     save(false);
   }
 
@@ -1635,12 +1667,13 @@
 
   function startWave(n) {
     wave = n;
+    wakeMissionHud(3.4);
     bossActive = n % 5 === 0;
     spawnLeft = waveEnemyBudget(n);
     spawnTimer = bossActive ? .35 : 0;
     if (wave === 9 && !bossActive) startEvent(choose(['eliteStorm', 'hazard', 'gravityWell', 'supply']));
     else if (!bossActive && Math.random() < eventChanceForWave(wave) * currentDifficulty().event) startEvent();
-    if (!beacon || wave % 3 === 1 || wave === 9) beacon = makeBeacon(chooseObjectiveKind());
+    if (!beacon || wave % 3 === 1 || wave === 9) { beacon = makeBeacon(chooseObjectiveKind()); wakeMissionHud(3.2); }
     if (bossActive) { activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; }
     else {
       setActiveTactic(chooseTacticForWave());
@@ -1669,6 +1702,7 @@
     eventTimer = id === 'salvageRush' ? 20 : 18 + Math.min(12, wave * .8);
     meteorTimer = .8;
     eventBannerTimer = 2.2;
+    wakeMissionHud(3.8);
     if (player) burst(player.x, player.y, eventDefs[id].color, 18, .9);
   }
 
@@ -1700,6 +1734,7 @@
     }
     flash(`${name} 結束${reward ? `｜獎勵 +${reward.scrap}` : ''}`);
     activeEvent = null;
+    wakeMissionHud(2.4);
   }
 
   function spawnEnemy(typeId, opts = {}) {
@@ -2256,6 +2291,7 @@
     for (let i = 0; i < eventBurst; i++) spawnEnemy(eventId === 'droneSwarm' ? choose(['sprinter', 'bomber']) : undefined);
     flash(`${def.name}完成：${eventDefs[eventId].name}｜${bonus ? '副目標達成 ' : ''}+${instant} 碎晶`);
     beacon = makeBeacon();
+    wakeMissionHud(3.2);
     save(false);
   }
 
@@ -3241,10 +3277,12 @@
       const h = 42;
       const zone = currentZone();
       const progress = mission ? clamp(mission.check() / mission.target, 0, 1) : 0;
-      ctx.globalAlpha = .76; ctx.fillStyle = 'rgba(5,7,18,.52)'; ctx.strokeStyle = mission?.done ? '#4dff88' : currentAnomaly().color || '#ffd166'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.roundRect(x, y, w, h, 9); ctx.fill(); ctx.stroke();
-      ctx.globalAlpha = 1;
       const anomaly = currentAnomaly();
+      const changed = updateMissionHudSignature(currentMissionHudSignature(), 3.2);
+      const hudAlpha = missionHudAlpha(changed);
+      ctx.globalAlpha = .76 * hudAlpha; ctx.fillStyle = 'rgba(5,7,18,.52)'; ctx.strokeStyle = mission?.done ? '#4dff88' : anomaly.color || '#ffd166'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, 9); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = hudAlpha;
       let detail = `節奏 ${stage.name}`;
       let color = stage.color || '#bdfcff';
       if (activeEvent) { detail = `事件 ${activeEvent.name}｜${Math.ceil(eventTimer)}s`; color = activeEvent.color; }

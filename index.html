@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=4.3.1" />
+  <link rel="stylesheet" href="./styles.css?v=4.3.2" />
 </head>
 <body>
   <div id="app">
@@ -105,11 +105,11 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v4.3.1 手機 HUD 超緊湊版</strong>
+          <strong>v4.3.2 手機 HUD 自動淡出版</strong>
           <ul>
             <li>敵人不再只會直線追擊：追獵包抄、閃擊突進、狙擊保持距離、爆雷倒數引爆。</li>
             <li>新增突進線、狙擊瞄準線、爆炸範圍圈與重甲衝撞預警，玩家有更明確反打窗口。</li>
-            <li>手機任務 HUD 再縮成單條橫列，約 42px 高，最大化戰場視野。</li>
+            <li>手機任務 HUD 平常自動淡出，事件、目標、任務變化時短暫亮起。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -144,7 +144,7 @@
 手機：
 - 切到手機模式後，按住螢幕會出現浮動方向鍵。
 - 手機模式預設使用自動瞄準，沒有衝刺鍵。
-- 手機版任務 HUD 是單條橫列，只顯示任務、異變與當前事件/目標，避免遮住戰場。
+- 手機版任務 HUD 是單條橫列；平常會淡出，事件、目標或任務變化時會短暫亮起。
 - 若手機沒聲音，先到設定點「測試音效」喚醒音訊。
 
 畫面閱讀：
@@ -182,6 +182,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=4.3.1"></script>
+  <script src="./game.js?v=4.3.2"></script>
 </body>
 </html>
