@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=4.2" />
+  <link rel="stylesheet" href="./styles.css?v=4.3" />
 </head>
 <body>
   <div id="app">
@@ -105,11 +105,11 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v4.2 異變玩法差異化版</strong>
+          <strong>v4.3 敵人行為差異化版</strong>
           <ul>
-            <li>四種異變都有專屬玩法任務：碎晶連撿、懸賞連賞、裂隙封印、補給護送。</li>
-            <li>裂隙封印點與補給艙會直接出現在地圖上，需要靠近充能或護送完成。</li>
-            <li>HUD 與結算新增異變任務進度，讓每局目標不只是撐波次。</li>
+            <li>敵人不再只會直線追擊：追獵包抄、閃擊突進、狙擊保持距離、爆雷倒數引爆。</li>
+            <li>新增突進線、狙擊瞄準線、爆炸範圍圈與重甲衝撞預警，玩家有更明確反打窗口。</li>
+            <li>手機版任務卡改成緊湊顯示，降低遮擋戰場的面積。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -144,6 +144,7 @@
 手機：
 - 切到手機模式後，按住螢幕會出現浮動方向鍵。
 - 手機模式預設使用自動瞄準，沒有衝刺鍵。
+- 手機版任務卡只顯示任務進度、異變任務與當前事件/目標，避免遮住戰場。
 - 若手機沒聲音，先到設定點「測試音效」喚醒音訊。
 
 畫面閱讀：
@@ -165,6 +166,10 @@
 
 戰鬥重點：
 - 先撿碎晶、拿技能，盡快讓一個 Build 成形。
+- 追獵機會包抄，別只往後退；橫向走位能拉開角度。
+- 閃擊機會先預備再突進，看到橘色突進線可側移反打。
+- 狙擊球會保持距離，看到粉色瞄準線要橫向移動。
+- 爆裂雷接近後會倒數，橘色爆炸圈是安全距離提示。
 - 護盾衛星、治療者、加速單位要優先拆。
 - 第 9 波有終局整備補給；拿完再打第 10 波核心。
 - 失敗也會保存資源，可用艦載升級強化下一局。</pre>
@@ -177,6 +182,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=4.2"></script>
+  <script src="./game.js?v=4.3"></script>
 </body>
 </html>

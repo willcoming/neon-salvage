@@ -1727,7 +1727,17 @@
       healClock: rand(1.1, 2.0),
       splitDone: false,
       shield: 0,
-      shieldClock: rand(.4, 1.2)
+      shieldClock: rand(.4, 1.2),
+      aiPhase: rand(0, TWO_PI),
+      strafeDir: Math.random() < .5 ? -1 : 1,
+      dashWindup: rand(.9, 1.7),
+      dashTime: 0,
+      dashRecover: 0,
+      dashA: 0,
+      detonate: 0,
+      ramClock: rand(1.4, 2.7),
+      ramTime: 0,
+      telegraph: 0
     };
     maybeApplyElite(e, pick, opts.elite || null);
     if (opts.tacticId) e.tacticId = opts.tacticId;
@@ -2511,6 +2521,76 @@
     { const c = camera(); bullets = bullets.filter(b => !b.dead && b.life > 0 && b.x > c.x - 160 && b.x < c.x + W + 160 && b.y > c.y - 160 && b.y < c.y + H + 160); }
   }
 
+  function enemyBehaviorVector(e, a, d, dt) {
+    const toward = { x: Math.cos(a), y: Math.sin(a), speed: 1 };
+    if (!e || e.type === 'boss') return { ...toward, speed: d < 230 ? .18 : 1 };
+    const sideA = a + Math.PI / 2 * (e.strafeDir || 1);
+    const side = { x: Math.cos(sideA), y: Math.sin(sideA) };
+    if (e.type === 'chaser') {
+      const flank = d > 95 ? .34 : .62;
+      return { x: toward.x * (1 - flank) + side.x * flank, y: toward.y * (1 - flank) + side.y * flank, speed: d < 70 ? .55 : 1.05 };
+    }
+    if (e.type === 'sprinter') {
+      e.dashRecover = Math.max(0, e.dashRecover - dt);
+      if (e.dashTime > 0) {
+        e.dashTime -= dt;
+        if (e.dashTime <= 0) { e.dashRecover = .5; e.dashWindup = rand(1.05, 1.85); }
+        return { x: Math.cos(e.dashA), y: Math.sin(e.dashA), speed: 2.35 };
+      }
+      if (e.dashRecover > 0) return { x: -toward.x * .25 + side.x * .45, y: -toward.y * .25 + side.y * .45, speed: .42 };
+      e.dashWindup -= dt;
+      if (d < 540 && e.dashWindup <= 0) {
+        e.dashA = a;
+        e.dashTime = .32;
+        e.telegraph = .34;
+        addText(e.x, e.y - e.r - 15, '突進', '#ffb36b');
+        return { x: 0, y: 0, speed: 0 };
+      }
+      if (d < 540 && e.dashWindup < .34) { e.telegraph = .18; return { x: side.x, y: side.y, speed: .35 }; }
+      return { x: toward.x * .75 + side.x * .25, y: toward.y * .75 + side.y * .25, speed: 1.08 };
+    }
+    if (e.type === 'shooter') {
+      if (d < 250) return { x: -toward.x * .9 + side.x * .25, y: -toward.y * .9 + side.y * .25, speed: 1.05 };
+      if (d > 440) return { x: toward.x * .85 + side.x * .22, y: toward.y * .85 + side.y * .22, speed: .88 };
+      return { x: side.x, y: side.y, speed: .62 };
+    }
+    if (e.type === 'bomber') {
+      if (d < 155 && !e.detonate) { e.detonate = 1.05; e.telegraph = 1.05; addText(e.x, e.y - e.r - 14, '引爆', '#ffb36b'); }
+      if (e.detonate > 0) return { x: toward.x, y: toward.y, speed: .34 };
+      return { x: toward.x * .86 + side.x * .2, y: toward.y * .86 + side.y * .2, speed: .96 };
+    }
+    if (e.type === 'tank') {
+      e.ramClock -= dt;
+      if (e.ramTime > 0) { e.ramTime -= dt; return { x: toward.x, y: toward.y, speed: 1.75 }; }
+      if (e.ramClock <= 0 && d < 360) { e.ramTime = .5; e.ramClock = rand(2.2, 3.4); e.telegraph = .45; addText(e.x, e.y - e.r - 16, '盾推', '#ffcf7a'); return { x: 0, y: 0, speed: 0 }; }
+      return { x: toward.x * .88 + side.x * .12, y: toward.y * .88 + side.y * .12, speed: d < 90 ? .32 : .82 };
+    }
+    if (e.type === 'leech') {
+      if (d < 145) return { x: -toward.x * .55 + side.x * .7, y: -toward.y * .55 + side.y * .7, speed: .72 };
+      if (d < 210) return { x: side.x, y: side.y, speed: .72 };
+      return { x: toward.x * .82 + side.x * .18, y: toward.y * .82 + side.y * .18, speed: .95 };
+    }
+    if (e.type === 'shieldSat') {
+      let anchor = null;
+      let best = Infinity;
+      for (const ally of enemies) {
+        if (ally.dead || ally === e || ally.type === 'boss' || ally.type === 'shieldSat') continue;
+        const ad = Math.hypot(ally.x - e.x, ally.y - e.y);
+        if (ad < best) { best = ad; anchor = ally; }
+      }
+      if (anchor && best > 126) {
+        const aa = Math.atan2(anchor.y - e.y, anchor.x - e.x);
+        return { x: Math.cos(aa), y: Math.sin(aa), speed: .82 };
+      }
+      if (anchor) {
+        const aa = Math.atan2(anchor.y - e.y, anchor.x - e.x) + Math.PI / 2 * (e.strafeDir || 1);
+        return { x: Math.cos(aa), y: Math.sin(aa), speed: .46 };
+      }
+      return { ...toward, speed: .72 };
+    }
+    return toward;
+  }
+
   function updateEnemies(dt) {
     const slowRadius = 150 + upgradesRuntime.slowField * 45;
     for (const e of enemies) {
@@ -2524,9 +2604,11 @@
       }
       const auraSpeed = enemies.some(ae => !ae.dead && ae !== e && ae.elite?.id === 'accelerator' && Math.hypot(ae.x - e.x, ae.y - e.y) < 165) ? 1.16 : 1;
       const slow = (upgradesRuntime.slowField > 0 && d < slowRadius ? .55 : 1) * (activeEvent?.id === 'empStorm' ? .82 : 1) * auraSpeed;
-      const bossStop = e.type === 'boss' && d < 230 ? .18 : 1;
-      e.x += Math.cos(a) * e.speed * slow * bossStop * dt;
-      e.y += Math.sin(a) * e.speed * slow * bossStop * dt;
+      e.telegraph = Math.max(0, (e.telegraph || 0) - dt);
+      const mv = enemyBehaviorVector(e, a, d, dt);
+      const ml = Math.hypot(mv.x, mv.y) || 1;
+      e.x += (mv.x / ml) * e.speed * slow * (mv.speed ?? 1) * dt;
+      e.y += (mv.y / ml) * e.speed * slow * (mv.speed ?? 1) * dt;
       if (e.type === 'boss') {
         e.abilityClock = (e.abilityClock ?? bossAbilityDelay(e)) - dt;
         if (e.abilityClock <= 0) {
@@ -2554,12 +2636,24 @@
         if (Math.random() < dt * 5) particles.push({ x: player.x + rand(-8, 8), y: player.y + rand(-8, 8), vx: (e.x - player.x) * .4, vy: (e.y - player.y) * .4, life: .18, max: .18, r: 2.2, color: '#b66dff', ring: false });
         if (player.hp <= 0) endRun();
       }
-      if (e.type === 'bomber' && d < 82 && !isPlayerProtected()) {
-        e.dead = true;
-        playerImpact('bomber', 5.2, 40); player.hp -= incomingDamage(14 + wave * .38); damageFlash = .34;
-        player.invuln = .38;
-        burst(e.x, e.y, '#ff7a3d', 24, 1.2);
-        if (player.hp <= 0) endRun();
+      if (e.type === 'bomber' && e.detonate > 0) {
+        e.detonate -= dt;
+        e.telegraph = Math.max(e.telegraph || 0, e.detonate);
+        if (Math.random() < dt * 14 && particles.length < MAX_PARTICLES) particles.push({ x: e.x + rand(-e.r, e.r), y: e.y + rand(-e.r, e.r), vx: rand(-18, 18), vy: rand(-18, 18), life: .18, max: .18, r: rand(2, 4), color: '#ff7a3d', ring: false });
+        if (e.detonate <= 0) {
+          e.dead = true;
+          const blastD = Math.hypot(player.x - e.x, player.y - e.y);
+          if (blastD < 128 && !isPlayerProtected()) {
+            playerImpact('bomber', 5.2, 40);
+            player.hp -= incomingDamage(15 + wave * .42);
+            damageFlash = .34;
+            player.invuln = .42;
+            if (player.hp <= 0) endRun();
+          }
+          burst(e.x, e.y, '#ff7a3d', 30, 1.3);
+          particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, life: .26, max: .26, r: 42, color: '#ff7a3d', ring: true });
+          continue;
+        }
       }
       if (e.type === 'shieldSat') {
         e.shieldClock -= dt;
@@ -2592,7 +2686,7 @@
         if (e.shootClock <= 0) { enemyShoot(e); e.shootClock = e.type === 'boss' ? (e.finalBoss ? (e.phase2 ? rand(.42, .72) : rand(.62, .96)) : e.phase2 ? rand(.72, 1.12) : rand(1.0, 1.65)) : rand(1.7, 2.7); }
       }
       const rr = e.r + player.r;
-      if (dist2(e, player) < rr * rr && !isPlayerProtected()) {
+      if (!(e.type === 'bomber' && e.detonate > 0) && dist2(e, player) < rr * rr && !isPlayerProtected()) {
         playerImpact(e.type === 'boss' ? 'boss' : 'collision', e.type === 'boss' ? 5.5 : 3.1, e.type === 'boss' ? 42 : 18); player.hp -= incomingDamage(Math.ceil((e.type === 'boss' ? 22 : 7) + wave * .55)); damageFlash = .32;
         player.invuln = dashTime > 0 ? .05 : .68;
         if (e.type !== 'boss') e.dead = true;
@@ -3049,6 +3143,38 @@
         for (const ally of enemies) if (!ally.dead && ally !== e && ally.shield > 0 && Math.hypot(ally.x - e.x, ally.y - e.y) < 190) { ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(ally.x, ally.y); ctx.stroke(); }
         ctx.restore();
       }
+      if (e.type === 'shooter' && e.shootClock < .48 && ed < 620) {
+        ctx.save();
+        const alpha = clamp(1 - e.shootClock / .48, .12, .72);
+        ctx.globalAlpha = alpha;
+        ctx.strokeStyle = '#ff9af8'; ctx.lineWidth = 2; ctx.setLineDash([8, 7]); ctx.shadowColor = '#ff3df2'; ctx.shadowBlur = 10;
+        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(player.x, player.y); ctx.stroke();
+        ctx.restore();
+      }
+      if (e.type === 'sprinter' && (e.telegraph > 0 || e.dashTime > 0)) {
+        ctx.save();
+        const a = e.dashTime > 0 ? e.dashA : Math.atan2(player.y - e.y, player.x - e.x);
+        ctx.globalAlpha = e.dashTime > 0 ? .56 : .32;
+        ctx.strokeStyle = '#ffb36b'; ctx.lineWidth = e.dashTime > 0 ? 4 : 2; ctx.setLineDash(e.dashTime > 0 ? [] : [9, 8]); ctx.shadowColor = '#ff7a3d'; ctx.shadowBlur = 16;
+        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(a) * 145, e.y + Math.sin(a) * 145); ctx.stroke();
+        ctx.restore();
+      }
+      if (e.type === 'bomber' && e.detonate > 0) {
+        ctx.save();
+        const p = clamp(1 - e.detonate / 1.05, 0, 1);
+        ctx.globalAlpha = .24 + p * .38;
+        ctx.strokeStyle = '#ff7a3d'; ctx.lineWidth = 2 + p * 2; ctx.shadowColor = '#ff7a3d'; ctx.shadowBlur = 18;
+        ctx.beginPath(); ctx.arc(e.x, e.y, 128 * visualScale(), 0, TWO_PI); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(e.x - 15, e.y); ctx.lineTo(e.x + 15, e.y); ctx.moveTo(e.x, e.y - 15); ctx.lineTo(e.x, e.y + 15); ctx.stroke();
+        ctx.restore();
+      }
+      if (e.type === 'tank' && (e.telegraph > 0 || e.ramTime > 0)) {
+        ctx.save();
+        const a = Math.atan2(player.y - e.y, player.x - e.x);
+        ctx.globalAlpha = e.ramTime > 0 ? .46 : .24; ctx.strokeStyle = '#ffcf7a'; ctx.lineWidth = e.ramTime > 0 ? 4 : 2; ctx.setLineDash(e.ramTime > 0 ? [] : [7, 7]);
+        ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(e.x + Math.cos(a) * 92, e.y + Math.sin(a) * 92); ctx.stroke();
+        ctx.restore();
+      }
       if (e.elite?.id === 'accelerator') {
         ctx.save(); ctx.globalAlpha = .16; ctx.strokeStyle = '#4dff88'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.x, e.y, 165 * visualScale(), 0, TWO_PI); ctx.stroke(); ctx.restore();
       }
@@ -3109,6 +3235,52 @@
     const hasTactic = !!activeTactic && !bossActive;
     const hasObjective = !!beacon;
     const stage = runStageForWave(wave);
+    const compactMission = controlMode === 'touch' || W < 640;
+    if (compactMission) {
+      const x = 10; const y = 104; const w = Math.min(W - 20, 258);
+      const h = activeEvent || beacon || hasTutorial ? 78 : 64;
+      const zone = currentZone();
+      const progress = mission ? clamp(mission.check() / mission.target, 0, 1) : 0;
+      ctx.globalAlpha = .82; ctx.fillStyle = 'rgba(5,7,18,.56)'; ctx.strokeStyle = mission?.done ? '#4dff88' : currentAnomaly().color || '#ffd166'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '900 10px system-ui';
+      ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務', x + 8, y + 17, w - 96);
+      ctx.textAlign = 'right'; ctx.fillStyle = zone.color || '#37f6ff'; ctx.fillText(zone.name || '星環', x + w - 8, y + 17, 86); ctx.textAlign = 'left';
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 8, y + 25, w - 16, 3);
+      ctx.fillStyle = mission?.done ? '#4dff88' : '#37f6ff'; ctx.fillRect(x + 8, y + 25, (w - 16) * progress, 3);
+
+      const anomaly = currentAnomaly();
+      ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '900 10px system-ui';
+      ctx.fillText(`${anomaly.name}｜${anomalyTaskText()}`, x + 8, y + 43, w - 16);
+
+      let detail = `節奏 ${stage.name}`;
+      let color = stage.color || '#bdfcff';
+      if (activeEvent) { detail = `事件 ${activeEvent.name}｜${Math.ceil(eventTimer)}s`; color = activeEvent.color; }
+      else if (beacon) {
+        const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
+        detail = `目標 ${def.name}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
+        color = def.color;
+      } else if (hasTactic) { detail = `戰術 ${activeTactic.name}`; color = activeTactic.color || '#ffd166'; }
+      if (hasTutorial && !activeEvent && !beacon) {
+        const tp = tutorialProgress(tutorialStep);
+        detail = `教學 ${tutorialStep.label}｜${tp.value}/${tp.target}`;
+        color = '#bdfcff';
+      }
+      ctx.fillStyle = color; ctx.font = '800 9px system-ui';
+      ctx.fillText(detail, x + 8, y + 58, w - 16);
+      if (activeEvent) {
+        ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 8, y + 65, w - 16, 3);
+        ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 8, y + 65, (w - 16) * clamp(eventTimer / 30, 0, 1), 3);
+      } else if (beacon) {
+        const sidePct = clamp(objectiveSideProgress(beacon) / objectiveSideGoal(beacon), 0, 1);
+        const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
+        ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 8, y + 65, w - 16, 3);
+        ctx.fillStyle = objectiveSideComplete(beacon) ? '#4dff88' : def.color; ctx.fillRect(x + 8, y + 65, (w - 16) * sidePct, 3);
+      }
+      ctx.restore();
+      return;
+    }
     const x = 12; const y = 112; const w = 286;
     const h = 106 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
