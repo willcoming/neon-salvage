@@ -3237,23 +3237,14 @@
     const stage = runStageForWave(wave);
     const compactMission = controlMode === 'touch' || W < 640;
     if (compactMission) {
-      const x = 10; const y = 104; const w = Math.min(W - 20, 258);
-      const h = activeEvent || beacon || hasTutorial ? 78 : 64;
+      const x = 8; const y = 104; const w = Math.min(W - 16, 330);
+      const h = 42;
       const zone = currentZone();
       const progress = mission ? clamp(mission.check() / mission.target, 0, 1) : 0;
-      ctx.globalAlpha = .82; ctx.fillStyle = 'rgba(5,7,18,.56)'; ctx.strokeStyle = mission?.done ? '#4dff88' : currentAnomaly().color || '#ffd166'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill(); ctx.stroke();
+      ctx.globalAlpha = .76; ctx.fillStyle = 'rgba(5,7,18,.52)'; ctx.strokeStyle = mission?.done ? '#4dff88' : currentAnomaly().color || '#ffd166'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.roundRect(x, y, w, h, 9); ctx.fill(); ctx.stroke();
       ctx.globalAlpha = 1;
-      ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '900 10px system-ui';
-      ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務', x + 8, y + 17, w - 96);
-      ctx.textAlign = 'right'; ctx.fillStyle = zone.color || '#37f6ff'; ctx.fillText(zone.name || '星環', x + w - 8, y + 17, 86); ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 8, y + 25, w - 16, 3);
-      ctx.fillStyle = mission?.done ? '#4dff88' : '#37f6ff'; ctx.fillRect(x + 8, y + 25, (w - 16) * progress, 3);
-
       const anomaly = currentAnomaly();
-      ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '900 10px system-ui';
-      ctx.fillText(`${anomaly.name}｜${anomalyTaskText()}`, x + 8, y + 43, w - 16);
-
       let detail = `節奏 ${stage.name}`;
       let color = stage.color || '#bdfcff';
       if (activeEvent) { detail = `事件 ${activeEvent.name}｜${Math.ceil(eventTimer)}s`; color = activeEvent.color; }
@@ -3267,16 +3258,19 @@
         detail = `教學 ${tutorialStep.label}｜${tp.value}/${tp.target}`;
         color = '#bdfcff';
       }
-      ctx.fillStyle = color; ctx.font = '800 9px system-ui';
-      ctx.fillText(detail, x + 8, y + 58, w - 16);
+      const missionLabel = mission?.done ? '任務完成' : (mission?.text || '任務');
+      ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '900 9px system-ui';
+      ctx.fillText(`${missionLabel}｜${zone.name || '星環'}`, x + 7, y + 15, w - 14);
+      ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '800 9px system-ui';
+      ctx.fillText(`異變 ${anomalyTaskText()}｜${detail}`, x + 7, y + 30, w - 14);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 7, y + h - 6, w - 14, 2);
+      ctx.fillStyle = mission?.done ? '#4dff88' : '#37f6ff'; ctx.fillRect(x + 7, y + h - 6, (w - 14) * progress, 2);
       if (activeEvent) {
-        ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 8, y + 65, w - 16, 3);
-        ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 8, y + 65, (w - 16) * clamp(eventTimer / 30, 0, 1), 3);
+        ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(eventTimer / 30, 0, 1), 2);
       } else if (beacon) {
         const sidePct = clamp(objectiveSideProgress(beacon) / objectiveSideGoal(beacon), 0, 1);
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
-        ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 8, y + 65, w - 16, 3);
-        ctx.fillStyle = objectiveSideComplete(beacon) ? '#4dff88' : def.color; ctx.fillRect(x + 8, y + 65, (w - 16) * sidePct, 3);
+        ctx.fillStyle = objectiveSideComplete(beacon) ? '#4dff88' : def.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * sidePct, 2);
       }
       ctx.restore();
       return;
