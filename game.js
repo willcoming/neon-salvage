@@ -701,7 +701,7 @@
 
   function combatReport() {
     const boss = runStats?.bossKillTime ? `｜Boss ${formatTime(runStats.bossKillTime)}` : '';
-    return `戰鬥報告｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}`;
+    return `戰鬥報告｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
   }
 
   function escapeHtml(value) {
@@ -989,6 +989,51 @@
     if (before.id === skill.build && before.score > 0) return '主流派強化';
     if (before.score > 0) return '副流派展開';
     return '流派起手';
+  }
+
+  function buildCoverageHint(extraSkillId = null) {
+    const scores = buildScoreMap(extraSkillId);
+    const top = topBuild(extraSkillId);
+    if (!top.def || top.score <= 0) return 'Build 診斷：尚未成形，先沿同一流派疊核心。';
+    const boss = (scores.rail || 0) + (scores.burn || 0) + (scores.rapid || 0);
+    const clear = (scores.plasma || 0) + (scores.flak || 0) + (scores.seeker || 0) + (scores.drone || 0);
+    const sustain = (scores.survival || 0) + (scores.economy || 0) * .5;
+    if (top.score < BUILD_CORE_SCORE) return `Build 診斷：${top.def.name} 還差 ${BUILD_CORE_SCORE - top.score} 分成核心。`;
+    if (wave >= 5 && boss < 4) return `Build 診斷：${top.def.name} 已成形，但 Boss 火力偏少，可補軌砲/暴擊/主砲。`;
+    if (runStats?.maxEnemies >= enemyCap() - 3 && clear < 4) return `Build 診斷：${top.def.name} 已成形，但清群偏弱，可補電漿/霰彈/追蹤。`;
+    if (player && player.hp < player.maxHp * .42 && sustain < 3) return `Build 診斷：${top.def.name} 已成形，但續航偏弱，可補護盾或拾荒。`;
+    return `Build 診斷：${top.def.name} 路線清楚，下一步可補副流派弱點。`;
+  }
+
+  function skillChoiceAnalysis(skill) {
+    const beforeScores = buildScoreMap();
+    const afterScores = buildScoreMap(skill.id);
+    const before = topBuild();
+    const after = topBuild(skill.id);
+    const def = buildDefs[skill.build] || { name: '未分類', color: '#92a5c8', core: '核心' };
+    const current = beforeScores[skill.build] || 0;
+    const next = afterScores[skill.build] || 0;
+    const tags = [];
+    if (after.id === skill.build && next >= BUILD_CORE_SCORE && current < BUILD_CORE_SCORE) tags.push('核心候選');
+    if (before.id === skill.build && before.score > 0) tags.push('主流派強化');
+    if (before.score > 0 && before.id !== skill.build) tags.push('副流派展開');
+    if (player && player.hp < player.maxHp * .45 && (skill.build === 'survival' || skill.id === 'shieldRegen')) tags.push('生存補強');
+    if (wave >= 5 && ['rail', 'burn', 'rapid'].includes(skill.build)) tags.push('Boss 火力');
+    if ((runStats?.maxEnemies || enemies.length) >= Math.max(10, enemyCap() - 7) && ['plasma', 'flak', 'seeker', 'drone'].includes(skill.build)) tags.push('清群補強');
+    if (wave <= 5 && skill.build === 'economy') tags.push('早期滾雪球');
+    if (!tags.length) tags.push('流派起手');
+
+    let reason = `${def.name} ${current} → ${next} / ${BUILD_CORE_SCORE}`;
+    if (tags.includes('核心候選')) reason += `，選下去會啟動「${def.core}」。`;
+    else if (tags.includes('主流派強化')) reason += '，穩定推高目前主軸。';
+    else if (tags.includes('生存補強')) reason += '，目前護盾偏低，能降低暴斃風險。';
+    else if (tags.includes('Boss 火力')) reason += '，適合準備 Boss 檢查。';
+    else if (tags.includes('清群補強')) reason += '，適合處理敵量壓力。';
+    else if (tags.includes('早期滾雪球')) reason += '，前期收益會放大後續選擇。';
+    else if (tags.includes('副流派展開')) reason += `，補足 ${before.def?.name || '主流派'} 的弱點。`;
+    else reason += '，建立本局第一個方向。';
+
+    return { def, current, next, topAfter: after, tags, reason, core: tags.includes('核心候選'), coverage: buildCoverageHint(skill.id) };
   }
 
   function makeSkillChoices() {
@@ -2864,7 +2909,7 @@
     card.querySelector('.eyebrow').textContent = 'LEVEL UP // 選擇一項本局技能';
     card.querySelector('h2').textContent = '飛船核心升級';
     const current = topBuild();
-    card.querySelector('p:not(.eyebrow)').textContent = current.def ? `目前主流派：${current.def.name}（${current.score >= BUILD_CORE_SCORE ? '核心成形' : '成形中'}）。選同流派會加速核心成形，選副流派可補足弱點。` : '這些技能只在本局有效。先選一個起手流派，再沿同方向疊出核心。';
+    card.querySelector('p:not(.eyebrow)').textContent = current.def ? `目前主流派：${current.def.name}（${current.score}/${BUILD_CORE_SCORE}，${current.score >= BUILD_CORE_SCORE ? '核心成形' : '成形中'}）。卡片會標出主流派、副流派、核心候選與補強理由。` : '這些技能只在本局有效。先選一個起手流派，再沿同方向疊出核心；卡片會顯示分數預覽與推薦理由。';
     ui.startBtn.style.display = 'none';
     ui.howBtn.style.display = 'none';
     ui.how.hidden = true;
@@ -2872,12 +2917,22 @@
     if (!box) { box = document.createElement('div'); box.id = 'skillChoices'; box.className = 'skill-choices'; card.appendChild(box); }
     box.innerHTML = '';
     for (const c of choices) {
-      const def = buildDefs[c.build] || { name: '未分類', color: '#92a5c8', core: '核心' };
-      const hint = buildChoiceHint(c);
-      const next = topBuild(c.id);
+      const analysis = skillChoiceAnalysis(c);
+      const def = analysis.def;
+      const scorePct = Math.round(clamp(analysis.next / BUILD_CORE_SCORE, 0, 1) * 100);
       const btn = document.createElement('button');
-      btn.className = `skill-choice${hint.startsWith('核心候選') ? ' core' : ''}`;
-      btn.innerHTML = `<span class="skill-tag" style="color:${def.color}">${def.name}｜${c.role}</span><b>${c.name}</b><small>${c.desc}</small><em>目前 Lv.${upgradesRuntime[c.id]} → Lv.${upgradesRuntime[c.id] + 1}｜${hint}${next.score >= BUILD_CORE_SCORE && next.id === c.build ? '｜核心分數達標' : ''}</em>`;
+      btn.className = `skill-choice${analysis.core ? ' core' : ''}`;
+      btn.style.setProperty('--skill-color', def.color);
+      const chips = analysis.tags.map(tag => `<span>${escapeHtml(tag)}</span>`).join('');
+      btn.innerHTML = `
+        <span class="skill-tag" style="color:${def.color}">${escapeHtml(def.name)}｜${escapeHtml(c.role)}</span>
+        <b>${escapeHtml(c.name)}</b>
+        <small>${escapeHtml(c.desc)}</small>
+        <div class="skill-meta"><span>Lv.${upgradesRuntime[c.id]} → ${upgradesRuntime[c.id] + 1}</span><span>${analysis.current} → ${analysis.next} / ${BUILD_CORE_SCORE}</span></div>
+        <div class="skill-score" aria-label="${escapeHtml(def.name)} 分數 ${analysis.next}/${BUILD_CORE_SCORE}"><i style="width:${scorePct}%"></i></div>
+        <div class="skill-tags">${chips}</div>
+        <em>推薦：${escapeHtml(analysis.reason)}</em>
+        <small class="skill-coverage">選後：${escapeHtml(analysis.coverage)}</small>`;
       btn.addEventListener('click', () => chooseSkill(c.id, c.name));
       box.appendChild(btn);
     }

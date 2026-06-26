@@ -373,12 +373,18 @@ h1, h2, p { margin: 0; }
 .skill-chips b, .diagnosis b, .next-challenges b, .recent-runs > strong { display: block; color: var(--gold); margin-bottom: 8px; }
 .skill-chips span { display: inline-block; margin: 0 6px 6px 0; padding: 5px 8px; border-radius: 999px; background: rgba(55,246,255,.10); border: 1px solid rgba(55,246,255,.18); font-weight: 800; }
 .skill-choices { display: grid; gap: 10px; margin-top: 18px; }
-.skill-choice { text-align: left; display: grid; gap: 5px; padding: 12px; }
-.skill-choice.core { border-color: rgba(255,209,102,.66); box-shadow: 0 0 18px rgba(255,209,102,.16); }
+.skill-choice { text-align: left; display: grid; gap: 7px; padding: 12px; border-color: color-mix(in srgb, var(--skill-color, var(--cyan)) 36%, rgba(255,255,255,.16)); }
+.skill-choice.core { border-color: rgba(255,209,102,.78); box-shadow: 0 0 18px rgba(255,209,102,.16), inset 0 0 0 1px color-mix(in srgb, var(--skill-color, var(--gold)) 48%, transparent); }
 .skill-choice b { font-size: 16px; }
 .skill-choice small, .skill-choice em { color: rgba(238,247,255,.72); font-size: 12px; line-height: 1.35; font-style: normal; }
 .skill-choice em { color: var(--gold); font-weight: 850; }
 .skill-tag { font-size: 11px; font-weight: 950; letter-spacing: .06em; text-transform: uppercase; }
+.skill-meta { display: flex; justify-content: space-between; gap: 8px; color: rgba(238,247,255,.72); font-size: 11px; font-weight: 850; }
+.skill-score { height: 5px; border-radius: 999px; overflow: hidden; background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.08); }
+.skill-score i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, var(--skill-color, var(--cyan)), var(--gold)); box-shadow: 0 0 12px color-mix(in srgb, var(--skill-color, var(--cyan)) 72%, transparent); }
+.skill-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.skill-tags span { padding: 3px 7px; border-radius: 999px; color: #06101a; background: color-mix(in srgb, var(--skill-color, var(--cyan)) 78%, #ffffff); font-size: 10px; font-weight: 950; }
+.skill-coverage { color: rgba(238,247,255,.58) !important; }
 .diagnosis p { margin: 0; line-height: 1.45; }
 .next-challenges ul { margin: 0; padding-left: 18px; line-height: 1.55; }
 .post-run-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
@@ -587,7 +593,9 @@ body[data-control-mode="touch"] .hint { display: none; }
   .skill-choices { gap: 7px; margin-top: 12px; }
   .skill-choice { padding: 9px; }
   .skill-choice b { font-size: 13px; }
-  .skill-choice small, .skill-choice em, .skill-tag { font-size: 10px; }
+  .skill-choice small, .skill-choice em, .skill-tag, .skill-meta { font-size: 10px; }
+  .skill-tags span { font-size: 9px; padding: 2px 6px; }
+  .skill-score { height: 4px; }
   #how { max-height: 48dvh; overflow: auto; font-size: 12px; padding: 12px; }
   #toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 82px); max-width: 90vw; padding: 10px 12px; font-size: 12px; }
   .modal-backdrop { padding: 8px; align-items: end; }
