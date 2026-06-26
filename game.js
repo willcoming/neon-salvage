@@ -674,6 +674,11 @@
     return { id, score, def: buildDefs[id] || null };
   }
 
+  function currentBuildCore() {
+    const top = topBuild();
+    return top.def && top.score >= BUILD_CORE_SCORE ? top : { id: '', score: 0, def: null };
+  }
+
   function detectBuildName() {
     const top = topBuild();
     if (!top.def || top.score <= 0) return '未成形';
@@ -1954,6 +1959,9 @@
     shotSeq++;
     sfx('shoot');
     const angle = shotTarget();
+    const core = currentBuildCore();
+    const coreId = core.id;
+    const coreColor = core.def?.color || '#37f6ff';
     const split = Math.min(2, upgradesRuntime.splitShot);
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
     const lance = upgradesRuntime.lanceRounds > 0;
@@ -1961,8 +1969,13 @@
     const crit = upgradesRuntime.critCore > 0 && Math.random() < Math.min(.34, .08 + upgradesRuntime.critCore * .055);
     const railBoost = rail ? 1 + upgradesRuntime.railOverload * .22 : 1;
     for (const s of spread) {
+      const bulletBuild = rail || lance ? 'rail' : upgradesRuntime.plasmaBurst > 0 ? 'plasma' : upgradesRuntime.burnRounds > 0 ? 'burn' : coreId || 'rapid';
+      const trailColor = rail || lance ? '#bdfcff' : bulletBuild === 'plasma' ? '#ff7a3d' : bulletBuild === 'burn' ? '#ff4d6d' : coreId ? coreColor : '#37f6ff';
       bullets.push({
         type: rail ? 'rail' : lance ? 'lance' : 'pulse', homing: false, target: null, turn: 0,
+        build: bulletBuild,
+        trailColor,
+        core: !!coreId,
         x: player.x + Math.cos(angle + s) * 23,
         y: player.y + Math.sin(angle + s) * 23,
         vx: Math.cos(angle + s) * (rail ? 940 : lance ? 820 : 690),
@@ -1975,12 +1988,13 @@
         crit,
         burn: upgradesRuntime.burnRounds
       });
+      if (coreId && particles.length < MAX_PARTICLES) particles.push({ x: player.x + Math.cos(angle + s) * 25, y: player.y + Math.sin(angle + s) * 25, vx: Math.cos(angle + s) * 120 + rand(-18, 18), vy: Math.sin(angle + s) * 120 + rand(-18, 18), life: .16, max: .16, r: 2.2, color: trailColor, ring: false, kind: 'spark', len: rail ? 26 : 13 });
     }
     if (upgradesRuntime.flakBurst > 0) {
       const count = 2 + Math.min(5, upgradesRuntime.flakBurst * 2);
       for (let i = 0; i < count; i++) {
         const off = (i - (count - 1) / 2) * .18 + rand(-.035, .035);
-        bullets.push({ type: 'flak', homing: false, target: null, turn: 0, x: player.x + Math.cos(angle + off) * 17, y: player.y + Math.sin(angle + off) * 17, vx: Math.cos(angle + off) * rand(520, 650), vy: Math.sin(angle + off) * rand(520, 650), life: .55, r: 3.8, dmg: damage() * (.26 + upgradesRuntime.flakBurst * .035), pierce: 0, blast: 18 + upgradesRuntime.flakBurst * 4, crit: false, burn: upgradesRuntime.burnRounds });
+        bullets.push({ type: 'flak', homing: false, target: null, turn: 0, build: 'flak', trailColor: '#ff9f1c', core: coreId === 'flak', x: player.x + Math.cos(angle + off) * 17, y: player.y + Math.sin(angle + off) * 17, vx: Math.cos(angle + off) * rand(520, 650), vy: Math.sin(angle + off) * rand(520, 650), life: .55, r: 3.8, dmg: damage() * (.26 + upgradesRuntime.flakBurst * .035), pierce: 0, blast: 18 + upgradesRuntime.flakBurst * 4, crit: false, burn: upgradesRuntime.burnRounds });
       }
       if (upgradesRuntime.flakRecoil > 0) {
         player.x -= Math.cos(angle) * (5 + upgradesRuntime.flakRecoil * 3);
@@ -1994,6 +2008,7 @@
         const off = count === 1 ? 0 : (i - (count - 1) / 2) * .18;
         bullets.push({
           type: 'seeker', homing: true, target, turn: 4.2 + upgradesRuntime.homingRounds * 1.1,
+          build: 'seeker', trailColor: '#ffd166', core: coreId === 'seeker',
           x: player.x + Math.cos(angle + off) * 18,
           y: player.y + Math.sin(angle + off) * 18,
           vx: Math.cos(angle + off) * 610,
@@ -2013,7 +2028,7 @@
       const count = Math.min(3, upgradesRuntime.droneWing);
       for (let i = 0; i < count; i++) {
         const off = (i - (count - 1) / 2) * .42;
-        bullets.push({ type: 'drone', homing: true, target, turn: 6.2, x: player.x + Math.cos(angle + off) * 20, y: player.y + Math.sin(angle + off) * 20, vx: Math.cos(angle + off) * 560, vy: Math.sin(angle + off) * 560, life: 1.1, r: 3.5, dmg: damage() * (.18 + upgradesRuntime.droneWing * .035), pierce: 0, blast: 0, crit: false, burn: 0 });
+        bullets.push({ type: 'drone', homing: true, target, turn: 6.2, build: 'drone', trailColor: '#7aa7ff', core: coreId === 'drone', x: player.x + Math.cos(angle + off) * 20, y: player.y + Math.sin(angle + off) * 20, vx: Math.cos(angle + off) * 560, vy: Math.sin(angle + off) * 560, life: 1.1, r: 3.5, dmg: damage() * (.18 + upgradesRuntime.droneWing * .035), pierce: 0, blast: 0, crit: false, burn: 0 });
       }
     }
   }
@@ -2530,6 +2545,7 @@
 
   function updateBullets(dt) {
     for (const b of bullets) {
+      const trailColor = b.trailColor || (b.homing ? '#ffd166' : '#37f6ff');
       if (b.homing) {
         if (!b.target || b.target.dead) b.target = nearestEnemy(activeEvent?.id === 'blackout' ? 520 : activeEvent?.id === 'empStorm' ? 620 : 860);
         if (b.target) {
@@ -2542,7 +2558,9 @@
           b.vx = Math.cos(next) * speed;
           b.vy = Math.sin(next) * speed;
         }
-        particles.push({ x: b.x - b.vx * .01, y: b.y - b.vy * .01, vx: rand(-10, 10), vy: rand(-10, 10), life: .14, max: .14, r: rand(1.2, 2.4), color: '#ffd166', ring: false });
+        if (particles.length < MAX_PARTICLES) particles.push({ x: b.x - b.vx * .01, y: b.y - b.vy * .01, vx: rand(-10, 10), vy: rand(-10, 10), life: .16, max: .16, r: rand(1.2, 2.4), color: trailColor, ring: false, kind: 'pickupTrail', len: b.type === 'drone' ? 18 : 13 });
+      } else if ((b.core || b.type === 'rail' || b.type === 'lance') && particles.length < MAX_PARTICLES && Math.random() < dt * (b.type === 'rail' ? 42 : 26)) {
+        particles.push({ x: b.x - b.vx * .012, y: b.y - b.vy * .012, vx: -b.vx * .035 + rand(-8, 8), vy: -b.vy * .035 + rand(-8, 8), life: .13, max: .13, r: 2, color: trailColor, ring: false, kind: 'spark', len: b.type === 'rail' ? 24 : 12 });
       }
       b.x += b.vx * dt; b.y += b.vy * dt; b.life -= dt;
     }
@@ -2565,7 +2583,7 @@
           e.hit = e.type === 'boss' ? .12 : .08;
           if (b.crit) addText(e.x, e.y - e.r - 14, 'CRIT', '#fff6c7');
           if (b.burn > 0) e.burn = Math.max(e.burn || 0, 1.6 + b.burn * .35);
-          impactFeedback(b.x, b.y, e.type === 'boss' ? '#ffffff' : b.homing ? '#ffd166' : '#37f6ff', e.type === 'boss' ? 1.2 : .78, e.type === 'boss' ? 'bossHit' : 'hit', Math.atan2(b.vy, b.vx));
+          impactFeedback(b.x, b.y, e.type === 'boss' ? '#ffffff' : b.trailColor || (b.homing ? '#ffd166' : '#37f6ff'), e.type === 'boss' ? 1.2 : .78, e.type === 'boss' ? 'bossHit' : 'hit', Math.atan2(b.vy, b.vx));
           if (b.blast > 0) {
             const blastDamage = b.dmg * (.35 + upgradesRuntime.plasmaBurst * .08);
             particles.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: .22, max: .22, r: b.blast * .32, color: '#ff7a3d', ring: true });
@@ -2866,6 +2884,7 @@
   }
 
   function chooseSkill(id, name) {
+    const before = currentBuildCore();
     upgradesRuntime[id]++;
     if (runStats) runStats.skills.push(name);
     skillChoosing = false;
@@ -2875,7 +2894,15 @@
     ui.howBtn.style.display = '';
     const box = document.getElementById('skillChoices');
     if (box) box.remove();
-    flash(`${name} Lv.${upgradesRuntime[id]}｜${detectBuildName()}`);
+    const after = currentBuildCore();
+    if (after.id && after.id !== before.id && player) {
+      particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: .58, max: .58, r: 22, color: after.def.color, ring: true, fastRing: true });
+      burst(player.x, player.y, after.def.color, 18, .75);
+      flash(`${after.def.core} 成形｜${after.def.name}`);
+      haptic(28);
+    } else {
+      flash(`${name} Lv.${upgradesRuntime[id]}｜${detectBuildName()}`);
+    }
     sfx('upgrade');
   }
 
@@ -3009,7 +3036,7 @@
     const shake = screenShakeOffset();
     ctx.save();
     ctx.translate(-c.x + shake.x, -c.y + shake.y);
-    drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawPlayer(); drawParticles();
+    drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawBuildAura(); drawPlayer(); drawParticles();
     ctx.restore();
     drawMission(); drawTargetGuide(); drawEventBanner(); drawBossAlert(); drawScreenEffects(); drawTouchDpad();
     if (paused && running && !ui.overlay.classList.contains('visible')) drawPause();
@@ -3137,8 +3164,10 @@
     ctx.rotate(a);
     ctx.scale(playerScale(), playerScale());
     const flicker = isPlayerProtected() && Math.sin(performance.now() * .05) > 0;
+    const core = currentBuildCore();
+    const coreColor = core.def?.color || '#37f6ff';
     ctx.globalAlpha = flicker ? .45 : 1;
-    ctx.shadowColor = playerDamageCue ? '#ff4d6d' : dashTime > 0 ? '#ffd166' : '#37f6ff'; ctx.shadowBlur = playerDamageCue ? 22 : 10;
+    ctx.shadowColor = playerDamageCue ? '#ff4d6d' : dashTime > 0 ? '#ffd166' : core.id ? coreColor : '#37f6ff'; ctx.shadowBlur = playerDamageCue ? 22 : core.id ? 18 : 10;
     if (upgradesRuntime.railCharge > 0) {
       const cadence = Math.max(3, 7 - upgradesRuntime.railCharge);
       const railReady = (shotSeq + 1) % cadence === 0;
@@ -3146,7 +3175,7 @@
       ctx.shadowBlur = railReady ? 26 : ctx.shadowBlur;
       if (railReady) { ctx.strokeStyle = '#bdfcff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(12, -9); ctx.lineTo(30, 0); ctx.lineTo(12, 9); ctx.stroke(); }
     }
-    const grad = ctx.createLinearGradient(-18, 0, 28, 0); grad.addColorStop(0, '#13213f'); grad.addColorStop(.45, '#37f6ff'); grad.addColorStop(1, '#ffffff');
+    const grad = ctx.createLinearGradient(-18, 0, 28, 0); grad.addColorStop(0, '#13213f'); grad.addColorStop(.45, core.id ? coreColor : '#37f6ff'); grad.addColorStop(1, '#ffffff');
     ctx.fillStyle = grad;
     ctx.beginPath(); ctx.moveTo(25, 0); ctx.lineTo(-22, -15); ctx.lineTo(-11, -4); ctx.lineTo(-24, 0); ctx.lineTo(-11, 4); ctx.lineTo(-22, 15); ctx.closePath(); ctx.fill();
     ctx.strokeStyle = '#eef7ff'; ctx.lineWidth = 2; ctx.stroke();
@@ -3155,6 +3184,69 @@
     ctx.fillStyle = '#ff3df2'; ctx.globalAlpha *= .82; ctx.beginPath(); ctx.moveTo(-23, -5); ctx.lineTo(-29 - Math.random() * 4, 0); ctx.lineTo(-23, 5); ctx.fill();
     ctx.restore();
 
+  }
+
+  function drawBuildAura() {
+    if (!player) return;
+    const top = topBuild();
+    if (!top.def || top.score <= 0) return;
+    const core = top.score >= BUILD_CORE_SCORE;
+    const color = top.def.color || '#37f6ff';
+    const t = performance.now() * .001;
+    const pulse = Math.sin(t * 5.2) * .5 + .5;
+    const r = 34 + Math.min(18, top.score * 1.8) + pulse * 2;
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.globalAlpha = core ? .72 : .24;
+    ctx.strokeStyle = color;
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = core ? 18 : 9;
+    ctx.lineWidth = core ? 2.2 : 1.2;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, TWO_PI);
+    ctx.stroke();
+    if (top.id === 'rapid') {
+      for (let i = 0; i < 6; i++) {
+        const a = t * 3.8 + i / 6 * TWO_PI;
+        ctx.beginPath(); ctx.arc(0, 0, r + 6, a, a + .28 + pulse * .08); ctx.stroke();
+      }
+    } else if (top.id === 'rail') {
+      const a = player.angle ?? mouseAimAngle();
+      ctx.rotate(a);
+      ctx.globalAlpha = core ? .82 : .32;
+      ctx.beginPath(); ctx.moveTo(20, -14); ctx.lineTo(58 + pulse * 12, 0); ctx.lineTo(20, 14); ctx.stroke();
+      ctx.globalAlpha *= .5;
+      ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(86 + pulse * 18, 0); ctx.stroke();
+    } else if (top.id === 'flak') {
+      for (let i = -2; i <= 2; i++) { const a = (player.angle ?? mouseAimAngle()) + i * .32; ctx.beginPath(); ctx.moveTo(Math.cos(a) * 26, Math.sin(a) * 26); ctx.lineTo(Math.cos(a) * (r + 20), Math.sin(a) * (r + 20)); ctx.stroke(); }
+    } else if (top.id === 'plasma') {
+      for (let i = 0; i < 4; i++) {
+        const a = t * 2.2 + i / 4 * TWO_PI;
+        const x = Math.cos(a) * (r + 4); const y = Math.sin(a) * (r + 4);
+        const x2 = Math.cos(a + 1.45) * (r + 2); const y2 = Math.sin(a + 1.45) * (r + 2);
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(0, 0, x2, y2); ctx.stroke();
+      }
+    } else if (top.id === 'seeker') {
+      for (let i = 0; i < 8; i++) { const a = -t * 2.7 + i / 8 * TWO_PI; ctx.beginPath(); ctx.arc(Math.cos(a) * (r + 3), Math.sin(a) * (r + 3), core ? 3.2 : 2.1, 0, TWO_PI); ctx.fill(); }
+    } else if (top.id === 'drone') {
+      for (let i = 0; i < 3; i++) {
+        const a = t * 2.9 + i / 3 * TWO_PI;
+        const x = Math.cos(a) * (r + 9); const y = Math.sin(a) * (r + 9);
+        ctx.beginPath(); ctx.roundRect(x - 5, y - 3.5, 10, 7, 3); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(Math.cos(a + .75) * (r + 3), Math.sin(a + .75) * (r + 3)); ctx.stroke();
+      }
+    } else if (top.id === 'burn') {
+      for (let i = 0; i < 3; i++) { const a = t * 1.8 + i / 3 * TWO_PI; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r - 12), Math.sin(a) * (r - 12)); ctx.lineTo(Math.cos(a) * (r + 14), Math.sin(a) * (r + 14)); ctx.stroke(); }
+    } else if (top.id === 'survival') {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) { const a = i / 6 * TWO_PI + Math.PI / 6; const rr = r + 6 + pulse * 2; ctx.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); }
+      ctx.closePath(); ctx.stroke();
+    } else if (top.id === 'economy') {
+      ctx.setLineDash([4, 7]); ctx.beginPath(); ctx.arc(0, 0, r + 11 + pulse * 4, 0, TWO_PI); ctx.stroke(); ctx.setLineDash([]);
+      for (let i = 0; i < 5; i++) { const a = t * 3 + i / 5 * TWO_PI; ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r + 2), Math.sin(a) * (r + 2)); ctx.lineTo(Math.cos(a) * (r + 13), Math.sin(a) * (r + 13)); ctx.stroke(); }
+    }
+    ctx.restore();
   }
 
   function drawOrbitals() {
@@ -3172,11 +3264,12 @@
     ctx.save();
     for (const b of bullets) {
       const a = Math.atan2(b.vy, b.vx);
+      const color = b.trailColor || (b.homing ? '#ffd166' : '#37f6ff');
       ctx.save();
       ctx.translate(b.x, b.y);
       ctx.rotate(a);
-      ctx.shadowColor = b.homing ? '#ffd166' : '#37f6ff';
-      ctx.shadowBlur = b.homing ? 20 : 15;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = b.core ? 24 : b.homing ? 20 : 15;
       if (b.type === 'rail') {
         ctx.fillStyle = '#ffffff';
         ctx.beginPath(); ctx.roundRect(-b.r * 2.4, -b.r * .42, b.r * 5.2, b.r * .84, b.r * .4); ctx.fill();
@@ -3189,11 +3282,12 @@
         ctx.beginPath(); ctx.roundRect(-b.r * 1.8, -b.r * .55, b.r * 3.9, b.r * 1.1, b.r * .5); ctx.fill();
         ctx.fillStyle = '#fff6c7'; ctx.beginPath(); ctx.arc(b.r * 1.3, 0, b.r * .45, 0, TWO_PI); ctx.fill();
       } else if (b.homing) {
-        ctx.fillStyle = '#ffd166';
+        ctx.fillStyle = color;
         ctx.beginPath(); ctx.moveTo(b.r + 3, 0); ctx.lineTo(0, b.r + 2); ctx.lineTo(-b.r - 3, 0); ctx.lineTo(0, -b.r - 2); ctx.closePath(); ctx.fill();
         ctx.fillStyle = '#fff6c7'; ctx.beginPath(); ctx.arc(2, 0, b.r * .42, 0, TWO_PI); ctx.fill();
       } else {
-        ctx.fillStyle = '#bdfcff'; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TWO_PI); ctx.fill();
+        ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0, 0, b.r, 0, TWO_PI); ctx.fill();
+        if (b.core) { ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.2; ctx.stroke(); }
       }
       ctx.restore();
     }
