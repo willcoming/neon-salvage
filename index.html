@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=4.8" />
+  <link rel="stylesheet" href="./styles.css?v=4.9" />
 </head>
 <body>
   <div id="app">
@@ -105,17 +105,17 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v4.8 地圖目標與事件連鎖版</strong>
+          <strong>v4.9 敵人戰術與反制提示版</strong>
           <ul>
-            <li>目標 HUD 與地圖標籤會預告「目標 → 事件 → Tempo Boost」。</li>
-            <li>不同目標完成後有不同即時效果：掃描標記、守點補給、晶礦噴發、裂隙清場、懸賞兌現。</li>
-            <li>結算報告新增目標連鎖，能回看每個目標導向了哪個事件與加成。</li>
+            <li>敵群戰術會顯示反制提示，例如先拆衛星、先殺治療者、橫向躲狙擊線。</li>
+            <li>擊破戰術關鍵單位會觸發短暫「戰術破解」加成：火力、射速、減傷與磁吸提升。</li>
+            <li>結算報告新增戰術破解，能回看本局破解了哪些敵群組合。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
           <span><b>10 波撤離</b>短局 roguelite 生存</span>
           <span><b>Build 流派</b>三選一技能組核心</span>
-          <span><b>事件 / 戰術</b>目標會接地圖壓力</span>
+          <span><b>事件 / 戰術</b>讀提示破解敵群</span>
           <span><b>手機可玩</b>單手觸控與自動瞄準</span>
         </div>
         <div id="offlineNotice" class="offline"></div>
@@ -131,7 +131,7 @@
 目標：
 - 完成地圖目標、撐過事件、組出技能流派。
 - 第 5 波是 Boss 檢查，第 10 波擊破「星環核心主宰」即可撤離成功。
-- 結算會給 C/B/A/S 評級，並列出 Build、壓力、目標路線、Boss 機制與下一局建議。
+- 結算會給 C/B/A/S 評級，並列出 Build、壓力、目標路線、Boss 機制、戰術破解與下一局建議。
 
 操作：
 - WASD / 方向鍵：移動。
@@ -149,7 +149,7 @@
 
 畫面閱讀：
 - 左上 P1：目前 run 節奏與本局異變任務，例如潮汐連撿、懸賞擊破、封印裂隙、護送補給。
-- 左上 P2：當前事件與敵群戰術。
+- 左上 P2：當前事件、敵群戰術、反制提示與破解加成。
 - 左上 P3：目前目標與副條件。
 - 地圖標籤：維修、新星、超頻、危險區、補給、資源。
 
@@ -175,7 +175,7 @@
 - 狙擊球會保持距離，看到粉色瞄準線要橫向移動。
 - 爆裂雷接近後會倒數，橘色爆炸圈是安全距離提示。
 - 受傷時紅色方向提示會指出傷害來源；碎晶被吸附時會有黃色拖尾。
-- 護盾衛星、治療者、加速單位要優先拆。
+- 護盾衛星、治療者、加速單位、狙擊球、折射吸能蟲是戰術關鍵；擊破後會觸發短暫戰術破解加成。
 - 第 9 波有終局整備補給；拿完再打第 10 波核心。
 - 失敗也會保存資源，可用艦載升級強化下一局。</pre>
       </div>
@@ -187,6 +187,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=4.8"></script>
+  <script src="./game.js?v=4.9"></script>
 </body>
 </html>
