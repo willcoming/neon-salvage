@@ -140,6 +140,8 @@
   let activeTempoBoost = null;
   let activeTacticBreak = null;
   let activeBossBreak = null;
+  let activeBossRhythm = null;
+  let hitStopTimer = 0;
   let tacticPulse = 0;
   let bossAlertTimer = 0;
   let bossAlert = null;
@@ -285,6 +287,8 @@
     else if (name === 'elite') { tone(360, .07, 'sawtooth', .03, .62); tone(900, .05, 'triangle', .018, 1.2); }
     else if (name === 'bossHit') tone(150, .06, 'sawtooth', .025, .82);
     else if (name === 'boss') { tone(90, .2, 'sawtooth', .035, .72); tone(180, .14, 'triangle', .025, .55); }
+    else if (name === 'bossTell') { tone(180, .11, 'sawtooth', .026, .72); setTimeout(() => tone(360, .08, 'triangle', .018, 1.18), 60); }
+    else if (name === 'counter') { tone(520, .055, 'triangle', .024, 1.35); setTimeout(() => tone(880, .075, 'sine', .018, 1.25), 55); }
     else if (name === 'bossDie') { tone(120, .18, 'sawtooth', .04, .5); setTimeout(() => tone(520, .12, 'triangle', .03, 1.6), 70); }
     else if (name === 'pickup') tone(960, .045, 'sine', .018, 1.35);
     else if (name === 'upgrade') { tone(520, .06, 'triangle', .025, 1.35); setTimeout(() => tone(760, .07, 'triangle', .022, 1.25), 55); }
@@ -312,6 +316,11 @@
     const t = clamp(shakeTime / Math.max(.001, shakeDuration), 0, 1);
     const amp = shakePower * t * t;
     return { x: rand(-amp, amp), y: rand(-amp, amp) };
+  }
+
+  function triggerHitStop(duration = .075) {
+    if (reduceMotion) return;
+    hitStopTimer = Math.max(hitStopTimer, duration);
   }
 
   function updateFeedbackTimers(dt) {
@@ -421,7 +430,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -465,7 +474,7 @@
     const anomalySig = `${anomalyState?.id || ''}:${anomalyState?.reward ? 1 : 0}:${anomalyState?.count || 0}`;
     const boss = currentBoss();
     const bossSig = boss ? `${boss.bossVariant}:${boss.phase2 ? 1 : 0}:${boss.breakWindow?.name || ''}:${Math.round((boss.breakWindow?.progress || 0) / Math.max(1, boss.breakWindow?.threshold || 1) * 10)}` : '';
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, bossSig].join('|');
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, bossSig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -699,6 +708,7 @@
     if ((runStats.tacticBreakCount || 0) >= 2) return '診斷：戰術破解穩定，能把敵群題目轉成短暫反攻窗口。';
     if ((runStats.tacticPressure || 0) >= 8) return '診斷：敵群戰術組合壓力偏高，先拆關鍵單位再清雜兵會更穩。';
     if ((runStats.bossBreakCount || 0) >= 2) return '診斷：Boss 讀題與破招掌握良好，能把終局招式轉成輸出窗口。';
+    if ((runStats.bossRhythmCount || 0) >= 2) return '診斷：Boss 節奏掌握良好，能利用安全縫換到反擊窗口。';
     if (runStats.bossPhase2 && !(runStats.bossBreakCount || 0)) return '診斷：Boss 進入二階段但未破招，下一局留火力在讀題窗口集中輸出。';
     if ((runStats.eventsSeen || []).includes('拾荒競速') && !runStats.salvageRushWins) return '診斷：拾荒競速未達標，磁吸場與安全路線會提高收益。';
     if (runObjectives <= 1 && wave >= 5) return '診斷：目標參與偏低，建議多跑目標點換事件獎勵。';
@@ -748,7 +758,8 @@
       if (record.grade !== 'S') list.push('衝到 S 評級');
       if ((record.bossTime || 0) > 60) list.push('Boss 擊殺壓到 60 秒內');
       if ((record.objectives || 0) < 4) list.push('完成至少 4 個目標');
-      if (!(record.bossBreakCount || 0)) list.push('Boss 戰至少破招 1 次');
+      if ((record.bossBreakCount || 0) < 1) list.push('Boss 戰至少破招 1 次');
+      if ((record.bossRhythmCount || 0) < 1) list.push('穿過一次 Boss 脈衝安全縫');
       if (!list.length) list.push('保持 S 評級並嘗試更高擊殺數');
     } else {
       list.push(`突破第 ${Math.min(SECTOR_CLEAR_WAVE, record.wave + 1)} 波`);
@@ -791,6 +802,8 @@
       bossMechanics: [...(runStats?.bossMechanics || [])].slice(-6),
       bossBreaks: [...(runStats?.bossBreaks || [])].slice(-6),
       bossBreakCount: runStats?.bossBreakCount || 0,
+      bossRhythms: [...(runStats?.bossRhythms || [])].slice(-6),
+      bossRhythmCount: runStats?.bossRhythmCount || 0,
       bossPhase2: !!runStats?.bossPhase2,
       bossPhase2Survival: Math.floor(runStats?.bossPhase2Survival || (runStats?.bossPhase2Start ? Math.max(0, runTime - runStats.bossPhase2Start) : 0)),
       skills: [...(runStats?.skills || [])].slice(-6),
@@ -900,6 +913,7 @@
     const tacticBreakHtml = record.tacticBreaks?.length ? record.tacticBreaks.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未破解戰術</span>';
     const bossHtml = record.bossMechanics?.length ? record.bossMechanics.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未遭遇 Boss 機制</span>';
     const bossBreakHtml = record.bossBreaks?.length ? record.bossBreaks.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未完成 Boss 破招</span>';
+    const bossRhythmHtml = record.bossRhythms?.length ? record.bossRhythms.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Boss 節奏反擊</span>';
     const unlock = nextAchievement();
     const unlockHtml = unlock ? `${escapeHtml(unlock.name)}｜${escapeHtml(unlock.progress?.() || '')}｜${escapeHtml(unlock.unlock || '')}` : '所有成就已解鎖';
     const summaryHtml = [
@@ -914,7 +928,7 @@
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
-        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
@@ -925,6 +939,7 @@
       <div class="skill-chips"><b>目標連鎖</b>${chainHtml}</div>
       <div class="skill-chips"><b>Boss 機制</b>${bossHtml}</div>
       <div class="skill-chips"><b>Boss 破招</b>${bossBreakHtml}</div>
+      <div class="skill-chips"><b>Boss 節奏</b>${bossRhythmHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
       <div class="skill-chips"><b>戰術破解</b>${tacticBreakHtml}</div>
       <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
@@ -1222,6 +1237,43 @@
     return activeBossBreak && activeBossBreak.timer > 0 ? activeBossBreak : null;
   }
 
+  function bossRhythmActive() {
+    return activeBossRhythm && activeBossRhythm.timer > 0 ? activeBossRhythm : null;
+  }
+
+  function applyBossRhythmBoost(source = '安全縫穿越') {
+    if (!player) return null;
+    if (activeBossRhythm && activeBossRhythm.timer > activeBossRhythm.duration * .62) return activeBossRhythm;
+    activeBossRhythm = { id: 'gapCounter', name: '穿縫反擊', source, color: '#4dff88', desc: '火力 +6%｜射速 +3%｜受傷 -6%', timer: 4.2, duration: 4.2, damageMult: 1.06, fireRateMult: .97, incomingMult: .94 };
+    if (runStats) {
+      runStats.bossRhythmCount = (runStats.bossRhythmCount || 0) + 1;
+      runStats.bossRhythms.push(`${source}→${activeBossRhythm.name}`);
+      runStats.bossRhythms = runStats.bossRhythms.slice(-6);
+      recordPaceNode(`Boss 節奏｜${source}→${activeBossRhythm.name}`);
+    }
+    addText(player.x, player.y - player.r - 44, activeBossRhythm.name, activeBossRhythm.color);
+    addBossTelegraph('counter', { x: player.x, y: player.y, r: player.r + 44, color: activeBossRhythm.color, duration: .7, label: activeBossRhythm.name });
+    burst(player.x, player.y, activeBossRhythm.color, 20, .92);
+    sfx('counter');
+    haptic(18);
+    wakeMissionHud(3.6);
+    return activeBossRhythm;
+  }
+
+  function checkBossPulseGap(t) {
+    if (!player || t.kind !== 'pulse' || t.rewarded) return;
+    const left = clamp(t.timer / t.duration, 0, 1);
+    const p = 1 - left;
+    const ringR = t.r * (.74 + p * .34);
+    const d = Math.hypot(player.x - t.x, player.y - t.y);
+    const angle = Math.atan2(player.y - t.y, player.x - t.x);
+    const diff = Math.abs(((angle - (t.gap || 0) + Math.PI * 3) % TWO_PI) - Math.PI);
+    if (d < ringR + 92 && d > Math.max(22, ringR - 92) && diff < (t.gapWidth || .5) * .62) {
+      t.rewarded = true;
+      applyBossRhythmBoost('脈衝安全縫');
+    }
+  }
+
   function tacticById(id) {
     return id && tacticDefs[id] ? { id, ...tacticDefs[id] } : null;
   }
@@ -1334,7 +1386,7 @@
 
   function addBossTelegraph(kind, opts = {}) {
     const duration = opts.duration || 1.1;
-    const t = { kind, x: opts.x || 0, y: opts.y || 0, r: opts.r || 80, color: opts.color || '#ff4d6d', timer: duration, duration, angle: opts.angle || 0, gap: opts.gap || 0, gapWidth: opts.gapWidth || .55, label: opts.label || '', targetX: opts.targetX, targetY: opts.targetY, seed: Math.random() * 99 };
+    const t = { kind, x: opts.x || 0, y: opts.y || 0, r: opts.r || 80, color: opts.color || '#ff4d6d', timer: duration, duration, angle: opts.angle || 0, gap: opts.gap || 0, gapWidth: opts.gapWidth || .55, label: opts.label || '', targetX: opts.targetX, targetY: opts.targetY, rewarded: false, seed: Math.random() * 99 };
     bossTelegraphs.push(t);
     return t;
   }
@@ -1363,7 +1415,10 @@
   }
 
   function updateBossTelegraphs(dt) {
-    for (const t of bossTelegraphs) t.timer -= dt;
+    for (const t of bossTelegraphs) {
+      checkBossPulseGap(t);
+      t.timer -= dt;
+    }
     bossTelegraphs = bossTelegraphs.filter(t => t.timer > 0);
   }
 
@@ -1381,6 +1436,9 @@
     bossAlertTimer = 3.0;
     recordBossMechanic(info.mechanic || info.title);
     flash(`${bossAlert.title}｜${bossAlert.desc}`);
+    addBossTelegraph('charge', { x: e.x, y: e.y, r: e.r + 64, color: info.color || e.color || '#ff4d6d', duration: .82, label: info.title || info.mechanic || '蓄力' });
+    sfx('bossTell');
+    haptic(10);
     armBossBreakWindow(e, info);
   }
 
@@ -1400,6 +1458,8 @@
     addText((boss || source).x, (boss || source).y - (boss || source).r - 32, breakName, color);
     flash(`Boss 破招：${label}→${breakName}｜${activeBossBreak.desc}`);
     addBossTelegraph('shatter', { x: (boss || source).x, y: (boss || source).y, r: (boss || source).r + 54, color: '#ffffff', duration: .72, label: breakName });
+    triggerHitStop(.085);
+    sfx('counter');
     burst((boss || source).x, (boss || source).y, color, 34, 1.45);
     addShake(4.2, .2);
     haptic(36);
@@ -1707,10 +1767,11 @@
     const tempo = tempoBoostActive()?.fireRateMult || 1;
     const tactic = tacticBreakActive()?.fireRateMult || 1;
     const boss = bossBreakActive()?.fireRateMult || 1;
-    return fireRate() * harvest * storm * tempo * tactic * boss;
+    const rhythm = bossRhythmActive()?.fireRateMult || 1;
+    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm;
   }
-  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1); }
-  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1); }
+  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1); }
+  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1); }
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
@@ -1934,7 +1995,7 @@
     runStats.zone = activeZone.name;
     runStats.anomaly = activeAnomaly.name;
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; bossTelegraphs = []; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -2831,6 +2892,11 @@
   function update(dt) {
     if (!running || paused || gameOver || skillChoosing) return;
     dt = Math.min(dt, .033);
+    if (hitStopTimer > 0) {
+      hitStopTimer = Math.max(0, hitStopTimer - dt);
+      updateUi();
+      return;
+    }
     runTime += dt;
     eventBannerTimer = Math.max(0, eventBannerTimer - dt);
     bossAlertTimer = Math.max(0, bossAlertTimer - dt);
@@ -2846,6 +2912,10 @@
     if (activeBossBreak) {
       activeBossBreak.timer -= dt;
       if (activeBossBreak.timer <= 0) activeBossBreak = null;
+    }
+    if (activeBossRhythm) {
+      activeBossRhythm.timer -= dt;
+      if (activeBossRhythm.timer <= 0) activeBossRhythm = null;
     }
     if (activeEvent) {
       eventTimer -= dt;
@@ -3715,7 +3785,21 @@
       ctx.fillStyle = color;
       ctx.shadowColor = color;
       ctx.shadowBlur = 18;
-      if (t.kind === 'meteor') {
+      if (t.kind === 'charge') {
+        const r = t.r * (.78 + p * .25 + pulse * .04);
+        ctx.globalAlpha = .24 + left * .52;
+        ctx.lineWidth = 3.2;
+        ctx.setLineDash([9, 7]);
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TWO_PI); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.lineWidth = 2;
+        for (let i = 0; i < 4; i++) {
+          const a = now * 2.4 + i / 4 * TWO_PI;
+          ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r - 18), Math.sin(a) * (r - 18)); ctx.lineTo(Math.cos(a) * (r + 18), Math.sin(a) * (r + 18)); ctx.stroke();
+        }
+        ctx.fillStyle = color; ctx.font = '900 10px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('蓄力', 0, -r - 16);
+      } else if (t.kind === 'meteor') {
         ctx.rotate(t.angle || 0);
         ctx.lineWidth = 2.2;
         ctx.setLineDash([11, 8]);
@@ -3752,6 +3836,14 @@
         ctx.stroke();
         ctx.fillStyle = '#4dff88'; ctx.font = '900 10px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
         ctx.fillText('安全縫', Math.cos(gap) * (r + 34), Math.sin(gap) * (r + 34));
+      } else if (t.kind === 'counter') {
+        const r = t.r * (.82 + p * .62);
+        ctx.strokeStyle = '#4dff88'; ctx.shadowColor = '#4dff88'; ctx.lineWidth = 3;
+        ctx.globalAlpha = left;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TWO_PI); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, r * .56, 0, TWO_PI); ctx.stroke();
+        ctx.fillStyle = '#4dff88'; ctx.font = '900 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('COUNTER', 0, -r - 12);
       } else if (t.kind === 'shatter') {
         const r = t.r * (.65 + p * .75);
         ctx.strokeStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.lineWidth = 3.2;
@@ -3964,6 +4056,7 @@
       let color = stage.color || '#bdfcff';
       if (activeEvent) { detail = `事件 ${activeEvent.name}｜${Math.ceil(eventTimer)}s`; color = activeEvent.color; }
       else if (activeBossBreak) { detail = `Boss破防 ${activeBossBreak.name}｜${Math.ceil(activeBossBreak.timer)}s`; color = activeBossBreak.color; }
+      else if (activeBossRhythm) { detail = `Boss節奏 ${activeBossRhythm.name}｜${Math.ceil(activeBossRhythm.timer)}s`; color = activeBossRhythm.color; }
       else if (bossWindow) { detail = `Boss讀題 ${bossWindow.source}｜破招 ${Math.ceil(bossWindow.timer)}s`; color = bossWindow.color; }
       else if (hasBoss) { detail = `Boss ${boss.label}${boss.phase2 ? '｜二階段' : ''}`; color = boss.color; }
       else if (activeTacticBreak) { detail = `破解 ${activeTacticBreak.name}｜${Math.ceil(activeTacticBreak.timer)}s`; color = activeTacticBreak.color; }
@@ -3990,6 +4083,8 @@
         ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(eventTimer / 30, 0, 1), 2);
       } else if (activeBossBreak) {
         ctx.fillStyle = activeBossBreak.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeBossBreak.timer / activeBossBreak.duration, 0, 1), 2);
+      } else if (activeBossRhythm) {
+        ctx.fillStyle = activeBossRhythm.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeBossRhythm.timer / activeBossRhythm.duration, 0, 1), 2);
       } else if (bossWindow) {
         ctx.fillStyle = bossWindow.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(bossWindow.progress / bossWindow.threshold, 0, 1), 2);
       } else if (activeTacticBreak) {
@@ -4005,7 +4100,7 @@
       return;
     }
     const x = 12; const y = 112; const w = 286;
-    const h = 106 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 106 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -4057,6 +4152,13 @@
       ctx.fillText(`P2 Boss破防｜${activeBossBreak.name} ${Math.ceil(activeBossBreak.timer)}s`, x + 10, lineY, w - 20);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
       ctx.fillStyle = activeBossBreak.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeBossBreak.timer / activeBossBreak.duration, 0, 1), 4);
+      lineY += 24;
+    }
+    if (activeBossRhythm) {
+      ctx.fillStyle = activeBossRhythm.color; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P2 Boss節奏｜${activeBossRhythm.name} ${Math.ceil(activeBossRhythm.timer)}s`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
+      ctx.fillStyle = activeBossRhythm.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeBossRhythm.timer / activeBossRhythm.duration, 0, 1), 4);
       lineY += 24;
     }
     if (hasBoss) {
