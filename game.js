@@ -136,6 +136,7 @@
   let activeTactic = null;
   let eventTimer = 0;
   let meteorTimer = 0;
+  let activeTempoBoost = null;
   let tacticPulse = 0;
   let bossAlertTimer = 0;
   let bossAlert = null;
@@ -417,7 +418,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], tacticsSeen: [], zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -459,7 +460,7 @@
   function currentMissionHudSignature() {
     const beaconSig = beacon ? `${beacon.kind}:${beacon.previewEvent}:${objectiveSideComplete(beacon) ? 1 : 0}` : '';
     const anomalySig = `${anomalyState?.id || ''}:${anomalyState?.reward ? 1 : 0}:${anomalyState?.count || 0}`;
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig].join('|');
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -788,6 +789,7 @@
       objectiveRoute: [...(runStats?.objectiveRoute || [])].slice(-6),
       objectiveBonuses: runStats?.objectiveBonuses || 0,
       eventsSeen: [...(runStats?.eventsSeen || [])].slice(-5),
+      eventBoosts: [...(runStats?.eventBoosts || [])].slice(-5),
       tacticsSeen: [...(runStats?.tacticsSeen || [])].slice(-5),
       tacticPressure: runStats?.tacticPressure || 0,
       shieldSatelliteKills: runStats?.shieldSatelliteKills || 0,
@@ -872,6 +874,7 @@
     const skillHtml = record.skills.length ? record.skills.map(s => `<span>${escapeHtml(s)}</span>`).join('') : '<span>尚未選擇技能</span>';
     const paceHtml = record.paceNodes?.length ? record.paceNodes.map(p => `<span>${escapeHtml(p)}</span>`).join('') : '<span>尚未記錄節奏節點</span>';
     const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
+    const boostHtml = record.eventBoosts?.length ? record.eventBoosts.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未取得事件加成</span>';
     const routeHtml = record.objectiveRoute?.length ? record.objectiveRoute.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成目標路線</span>';
     const anomalyHtml = record.anomalyTasks?.length ? record.anomalyTasks.map(a => `<span>${escapeHtml(a)}</span>`).join('') : '<span>尚未完成異變任務</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
@@ -894,6 +897,7 @@
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>競速</dt><dd>${escapeHtml(record.salvageRushWins || 0)} 成功</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
+      <div class="skill-chips"><b>事件加成</b>${boostHtml}</div>
       <div class="skill-chips"><b>異變任務</b>${anomalyHtml}</div>
       <div class="skill-chips"><b>節奏節點</b>${paceHtml}</div>
       <div class="skill-chips"><b>目標路線</b>${routeHtml}</div>
@@ -1132,6 +1136,59 @@
     empStorm: { name: 'EMP 風暴', desc: '自動鎖定距離縮短，但敵彈與敵機也會被拖慢。', color: '#7aa7ff' },
     salvageRush: { name: '拾荒競速', desc: '限時收集碎晶，達標會追加事件獎勵。', color: '#ffd166' }
   };
+
+  const tempoBoostDefs = {
+    meteor: { label: '高風險高獎勵', name: '流星破甲', desc: '火力 +18%', duration: 11, damageMult: 1.18 },
+    overclock: { label: '火力事件', name: '主砲超頻', desc: '射擊間隔 -24%', duration: 12, fireRateMult: .76 },
+    blackout: { label: '索敵干擾', name: '電磁鎖定', desc: '火力 +12%', duration: 10, damageMult: 1.12 },
+    rich: { label: '資源事件', name: '富礦磁吸', desc: '磁吸範圍 +120', duration: 13, magnetBonus: 120 },
+    hazard: { label: '高風險高獎勵', name: '裂隙抗性', desc: '受傷 -16%', duration: 11, incomingMult: .84 },
+    supply: { label: '救命補給', name: '護盾整備', desc: '短暫自修護盾', duration: 13, regenBonus: 5.2, incomingMult: .9 },
+    eliteStorm: { label: '獵殺事件', name: '菁英破甲', desc: '火力 +22%', duration: 12, damageMult: 1.22 },
+    droneSwarm: { label: '清群事件', name: '蜂群超頻', desc: '射擊間隔 -18%', duration: 11, fireRateMult: .82 },
+    gravityWell: { label: '走位事件', name: '重力牽引', desc: '磁吸範圍 +140', duration: 12, magnetBonus: 140 },
+    empStorm: { label: '控場事件', name: 'EMP 護層', desc: '受傷 -12%｜火力 +8%', duration: 12, incomingMult: .88, damageMult: 1.08 },
+    salvageRush: { label: '限時競速', name: '拾荒磁暴', desc: '磁吸範圍 +180', duration: 13, magnetBonus: 180 }
+  };
+
+  function tempoProfile(idOrEvent) {
+    const id = typeof idOrEvent === 'string' ? idOrEvent : idOrEvent?.id;
+    const event = eventDefs[id] || idOrEvent || {};
+    return { id, color: event.color || '#ffd166', ...(tempoBoostDefs[id] || { label: '事件加成', name: '戰術餘波', desc: '火力 +10%', duration: 10, damageMult: 1.1 }) };
+  }
+
+  function applyTempoBoost(eventRef, success = true) {
+    if (!eventRef || !player) return null;
+    const profile = tempoProfile(eventRef);
+    const scale = success ? 1 : .55;
+    activeTempoBoost = {
+      id: profile.id,
+      name: profile.name,
+      label: profile.label,
+      desc: profile.desc,
+      color: profile.color,
+      timer: Math.max(6, profile.duration * scale),
+      duration: Math.max(6, profile.duration * scale),
+      fireRateMult: profile.fireRateMult ? 1 + (profile.fireRateMult - 1) * scale : 1,
+      damageMult: profile.damageMult ? 1 + (profile.damageMult - 1) * scale : 1,
+      incomingMult: profile.incomingMult ? 1 + (profile.incomingMult - 1) * scale : 1,
+      magnetBonus: Math.round((profile.magnetBonus || 0) * scale),
+      regenBonus: (profile.regenBonus || 0) * scale
+    };
+    if (runStats) {
+      const mark = `${eventRef.name || profile.id}→${activeTempoBoost.name}${success ? '' : '弱化'}`;
+      if (!runStats.eventBoosts.includes(mark)) runStats.eventBoosts.push(mark);
+    }
+    addText(player.x, player.y - 72, `${activeTempoBoost.name} ${Math.ceil(activeTempoBoost.timer)}s`, profile.color);
+    particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: .45, max: .45, r: 20, color: profile.color, ring: true, fastRing: true });
+    burst(player.x, player.y, profile.color, 18, .78);
+    wakeMissionHud(3.2);
+    return activeTempoBoost;
+  }
+
+  function tempoBoostActive() {
+    return activeTempoBoost && activeTempoBoost.timer > 0 ? activeTempoBoost : null;
+  }
 
   const tacticDefs = {
     shieldWall: {
@@ -1461,11 +1518,12 @@
   function weaponFireRate() {
     const harvest = upgradesRuntime.harvestDrive > 0 ? Math.max(.72, 1 - Math.min(.28, (runKills % 10) * .028 * upgradesRuntime.harvestDrive)) : 1;
     const storm = activeEvent?.id === 'overclock' ? .78 : 1;
-    return fireRate() * harvest * storm;
+    const tempo = tempoBoostActive()?.fireRateMult || 1;
+    return fireRate() * harvest * storm * tempo;
   }
-  function damage() { return 15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15; }
-  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035); }
-  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28; }
+  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1); }
+  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1); }
+  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
   function shouldStartTutorial() {
@@ -1636,7 +1694,7 @@
     runStats.zone = activeZone.name;
     runStats.anomaly = activeAnomaly.name;
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -1762,14 +1820,20 @@
     const zoneBonus = currentZone().id === 'crystal' ? ['salvageRush'] : currentZone().id === 'scrapyard' ? ['empStorm'] : [];
     const anomalyBonus = currentAnomaly()?.events || [];
     const id = forcedId || choose([...ids, ...zoneBonus, ...anomalyBonus, ...anomalyBonus]);
-    activeEvent = { id, ...eventDefs[id], reward, rushStart: meta.scrap, rushGoal: id === 'salvageRush' ? 22 + wave * 3 : 0, rushDone: false };
+    const tempo = tempoProfile(id);
+    activeEvent = { id, ...eventDefs[id], reward, tempoLabel: tempo.label, tempoName: tempo.name, tempoDesc: tempo.desc, rushStart: meta.scrap, rushGoal: id === 'salvageRush' ? 22 + wave * 3 : 0, rushDone: false };
     runEvents++;
     if (runStats && !runStats.eventsSeen.includes(eventDefs[id].name)) runStats.eventsSeen.push(eventDefs[id].name);
     eventTimer = id === 'salvageRush' ? 20 : 18 + Math.min(12, wave * .8);
     meteorTimer = .8;
-    eventBannerTimer = 2.2;
+    eventBannerTimer = 2.8;
     wakeMissionHud(3.8);
-    if (player) burst(player.x, player.y, eventDefs[id].color, 18, .9);
+    if (runStats) recordPaceNode(`事件開始｜${eventDefs[id].name}｜${tempo.label}`);
+    if (player) {
+      burst(player.x, player.y, eventDefs[id].color, 22, 1.05);
+      particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: .5, max: .5, r: 28, color: eventDefs[id].color, ring: true, fastRing: true });
+      addText(player.x, player.y - 58, `${tempo.label}｜${tempo.name}`, eventDefs[id].color);
+    }
   }
 
   function finishEvent() {
@@ -1777,10 +1841,12 @@
     const reward = activeEvent.reward;
     const name = activeEvent.name;
     const color = activeEvent.color;
+    let eventSuccess = activeEvent.id !== 'salvageRush';
     if (activeEvent.id === 'salvageRush') {
       const collected = Math.max(0, Math.floor(meta.scrap - (activeEvent.rushStart || meta.scrap)));
       if (runStats) runStats.salvageRushShards += collected;
       if (collected >= (activeEvent.rushGoal || 0)) {
+        eventSuccess = true;
         const rushBonus = 24 + wave * 4;
         meta.scrap += rushBonus;
         if (runStats) runStats.salvageRushWins++;
@@ -1798,7 +1864,9 @@
       sfx('upgrade');
       save(false);
     }
-    flash(`${name} 結束${reward ? `｜獎勵 +${reward.scrap}` : ''}`);
+    const boost = applyTempoBoost(activeEvent, eventSuccess);
+    if (runStats && boost) recordPaceNode(`事件加成｜${boost.name} ${Math.ceil(boost.duration)}s`);
+    flash(`${name} 結束${reward ? `｜獎勵 +${reward.scrap}` : ''}${boost ? `｜${boost.name} ${Math.ceil(boost.duration)}s` : ''}`);
     activeEvent = null;
     wakeMissionHud(2.4);
   }
@@ -2516,6 +2584,10 @@
     eventBannerTimer = Math.max(0, eventBannerTimer - dt);
     bossAlertTimer = Math.max(0, bossAlertTimer - dt);
     damageFlash = Math.max(0, damageFlash - dt);
+    if (activeTempoBoost) {
+      activeTempoBoost.timer -= dt;
+      if (activeTempoBoost.timer <= 0) activeTempoBoost = null;
+    }
     if (activeEvent) {
       eventTimer -= dt;
       if (activeEvent.id === 'meteor') { meteorTimer -= dt; if (meteorTimer <= 0) { spawnMeteor(); meteorTimer = rand(.75, 1.35); } }
@@ -2558,10 +2630,11 @@
     updateWorldFeatures(dt);
     updateBeacon(dt);
 
-    if (upgradesRuntime.shieldRegen > 0 && player.hp < player.maxHp) {
+    const tempoRegen = tempoBoostActive()?.regenBonus || 0;
+    if ((upgradesRuntime.shieldRegen > 0 || tempoRegen > 0) && player.hp < player.maxHp) {
       player.regenClock += dt;
       if (player.regenClock >= .5) {
-        player.hp = Math.min(player.maxHp, player.hp + upgradesRuntime.shieldRegen * 1.7);
+        player.hp = Math.min(player.maxHp, player.hp + upgradesRuntime.shieldRegen * 1.7 + tempoRegen);
         player.regenClock = 0;
       }
     }
@@ -3521,6 +3594,7 @@
       let detail = `節奏 ${stage.name}`;
       let color = stage.color || '#bdfcff';
       if (activeEvent) { detail = `事件 ${activeEvent.name}｜${Math.ceil(eventTimer)}s`; color = activeEvent.color; }
+      else if (activeTempoBoost) { detail = `加成 ${activeTempoBoost.name}｜${Math.ceil(activeTempoBoost.timer)}s`; color = activeTempoBoost.color; }
       else if (beacon) {
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
         detail = `目標 ${def.name}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
@@ -3540,6 +3614,8 @@
       ctx.fillStyle = mission?.done ? '#4dff88' : '#37f6ff'; ctx.fillRect(x + 7, y + h - 6, (w - 14) * progress, 2);
       if (activeEvent) {
         ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(eventTimer / 30, 0, 1), 2);
+      } else if (activeTempoBoost) {
+        ctx.fillStyle = activeTempoBoost.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTempoBoost.timer / activeTempoBoost.duration, 0, 1), 2);
       } else if (beacon) {
         const sidePct = clamp(objectiveSideProgress(beacon) / objectiveSideGoal(beacon), 0, 1);
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
@@ -3549,7 +3625,7 @@
       return;
     }
     const x = 12; const y = 112; const w = 286;
-    const h = 106 + (activeEvent ? 24 : 0) + (hasTactic ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 106 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (hasTactic ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -3580,6 +3656,13 @@
       ctx.fillText(`P2 事件｜${activeEvent.name} ${Math.ceil(eventTimer)}s`, x + 10, lineY);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
       ctx.fillStyle = activeEvent.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(eventTimer / 30, 0, 1), 4);
+      lineY += 24;
+    }
+    if (activeTempoBoost) {
+      ctx.fillStyle = activeTempoBoost.color; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P2 加成｜${activeTempoBoost.name} ${Math.ceil(activeTempoBoost.timer)}s`, x + 10, lineY);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
+      ctx.fillStyle = activeTempoBoost.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeTempoBoost.timer / activeTempoBoost.duration, 0, 1), 4);
       lineY += 24;
     }
     if (hasTactic) {
@@ -3654,17 +3737,19 @@
 
   function drawEventBanner() {
     if (!activeEvent || eventBannerTimer <= 0) return;
-    const a = clamp(eventBannerTimer / 2.2, 0, 1);
+    const a = clamp(eventBannerTimer / 2.8, 0, 1);
     ctx.save();
     ctx.globalAlpha = Math.min(.95, a + .15);
-    const w = Math.min(430, W - 28), h = 56, x = (W - w) / 2, y = 86;
+    const w = Math.min(460, W - 28), h = 70, x = (W - w) / 2, y = 86;
     ctx.fillStyle = 'rgba(5,7,18,.78)'; ctx.strokeStyle = activeEvent.color; ctx.lineWidth = 2;
     ctx.shadowColor = activeEvent.color; ctx.shadowBlur = 16;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fill(); ctx.stroke();
     ctx.fillStyle = activeEvent.color; ctx.font = '900 15px system-ui'; ctx.textAlign = 'center';
-    ctx.fillText(activeEvent.name, W / 2, y + 24);
-    ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+    ctx.fillText(`${activeEvent.tempoLabel || '事件'}｜${activeEvent.name}`, W / 2, y + 23);
+    ctx.fillStyle = 'rgba(238,247,255,.86)'; ctx.font = '800 10px system-ui';
     ctx.fillText(activeEvent.desc, W / 2, y + 41);
+    ctx.fillStyle = activeEvent.color; ctx.font = '900 10px system-ui';
+    ctx.fillText(`完成後：${activeEvent.tempoName || '戰術餘波'}｜${activeEvent.tempoDesc || '短暫加成'}`, W / 2, y + 57);
     ctx.restore();
   }
 
@@ -3673,7 +3758,7 @@
     const a = clamp(bossAlertTimer / 3.4, 0, 1);
     ctx.save();
     ctx.globalAlpha = Math.min(.96, a + .18);
-    const w = Math.min(520, W - 28), h = 68, x = (W - w) / 2, y = activeEvent && eventBannerTimer > 0 ? 150 : 86;
+    const w = Math.min(520, W - 28), h = 68, x = (W - w) / 2, y = activeEvent && eventBannerTimer > 0 ? 164 : 86;
     ctx.fillStyle = 'rgba(5,7,18,.84)'; ctx.strokeStyle = bossAlert.color; ctx.lineWidth = 2.4;
     ctx.shadowColor = bossAlert.color; ctx.shadowBlur = 20;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 16); ctx.fill(); ctx.stroke();
