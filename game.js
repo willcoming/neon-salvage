@@ -418,7 +418,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossPhase2: false, objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -787,6 +787,7 @@
       paceNodes: [...(runStats?.paceNodes || [])].slice(-6),
       prepDrops: runStats?.prepDrops || 0,
       objectiveRoute: [...(runStats?.objectiveRoute || [])].slice(-6),
+      objectiveChains: [...(runStats?.objectiveChains || [])].slice(-6),
       objectiveBonuses: runStats?.objectiveBonuses || 0,
       eventsSeen: [...(runStats?.eventsSeen || [])].slice(-5),
       eventBoosts: [...(runStats?.eventBoosts || [])].slice(-5),
@@ -876,6 +877,7 @@
     const eventHtml = record.eventsSeen?.length ? record.eventsSeen.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未觸發事件</span>';
     const boostHtml = record.eventBoosts?.length ? record.eventBoosts.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未取得事件加成</span>';
     const routeHtml = record.objectiveRoute?.length ? record.objectiveRoute.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成目標路線</span>';
+    const chainHtml = record.objectiveChains?.length ? record.objectiveChains.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未形成目標連鎖</span>';
     const anomalyHtml = record.anomalyTasks?.length ? record.anomalyTasks.map(a => `<span>${escapeHtml(a)}</span>`).join('') : '<span>尚未完成異變任務</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
     const bossHtml = record.bossMechanics?.length ? record.bossMechanics.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未遭遇 Boss 機制</span>';
@@ -901,6 +903,7 @@
       <div class="skill-chips"><b>異變任務</b>${anomalyHtml}</div>
       <div class="skill-chips"><b>節奏節點</b>${paceHtml}</div>
       <div class="skill-chips"><b>目標路線</b>${routeHtml}</div>
+      <div class="skill-chips"><b>目標連鎖</b>${chainHtml}</div>
       <div class="skill-chips"><b>Boss 機制</b>${bossHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
       <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
@@ -1247,9 +1250,9 @@
   }
 
   const objectiveDefs = {
-    scan: { name: '掃描信標', color: '#bdfcff', event: ['droneSwarm', 'gravityWell', 'rich', 'empStorm'], routeBias: ['empStorm', 'rich'], reward: 1, charge: 2.4, sideLabel: '穩定掃描', sideGoal: 3, sideHint: '站在圈內完成 3 次掃描脈衝。' },
-    hold: { name: '守點核心', color: '#7aa7ff', event: ['droneSwarm', 'eliteStorm', 'empStorm'], routeBias: ['droneSwarm', 'eliteStorm'], reward: 1.35, charge: 6.2, sideLabel: '守住攻勢', sideGoal: 3, sideHint: '守點期間撐過 3 次敵群衝擊。' },
-    harvest: { name: '採集晶礦', color: '#ffd166', event: ['rich', 'droneSwarm', 'salvageRush'], routeBias: ['rich', 'salvageRush'], reward: 1.2, charge: 4.2, sideLabel: '採出晶礦', sideGoal: 6, sideHint: '採集期間噴出 6 批碎晶。' },
+    scan: { name: '掃描信標', color: '#bdfcff', event: ['overclock', 'empStorm', 'rich'], routeBias: ['overclock', 'empStorm', 'rich'], reward: 1, charge: 2.4, sideLabel: '穩定掃描', sideGoal: 3, sideHint: '站在圈內完成 3 次掃描脈衝。' },
+    hold: { name: '守點核心', color: '#7aa7ff', event: ['supply', 'empStorm', 'eliteStorm'], routeBias: ['supply', 'empStorm'], reward: 1.35, charge: 6.2, sideLabel: '守住攻勢', sideGoal: 3, sideHint: '守點期間撐過 3 次敵群衝擊。' },
+    harvest: { name: '採集晶礦', color: '#ffd166', event: ['rich', 'salvageRush'], routeBias: ['salvageRush', 'rich'], reward: 1.2, charge: 4.2, sideLabel: '採出晶礦', sideGoal: 6, sideHint: '採集期間噴出 6 批碎晶。' },
     rift: { name: '清除裂隙', color: '#ff4d6d', event: ['hazard', 'gravityWell', 'empStorm'], routeBias: ['hazard', 'gravityWell'], reward: 1.45, charge: 4.8, sideLabel: '封印裂隙', sideGoal: 3, sideHint: '在圈內壓制 3 次裂隙脈衝。' },
     hunt: { name: '獵殺菁英', color: '#ff3df2', event: ['eliteStorm', 'rich', 'salvageRush'], routeBias: ['eliteStorm', 'rich'], reward: 1.7, charge: 1, sideLabel: '擊破目標', sideGoal: 1, sideHint: '進入區域後擊破標記菁英。' }
   };
@@ -1672,12 +1675,63 @@
     return `${def.sideLabel || '副目標'} ${objectiveSideProgress(beaconRef)}/${objectiveSideGoal(beaconRef)}`;
   }
 
-  function recordObjectiveRoute(beaconRef, eventId, bonus) {
-    if (!runStats || !beaconRef) return;
+  function objectiveChainSummary(beaconRef, eventId, bonus = false) {
+    if (!beaconRef) return '';
     const def = objectiveDefs[beaconRef.kind] || objectiveDefs.scan;
     const eventName = eventDefs[eventId]?.name || '未知事件';
-    const label = `${def.name}→${eventName}${bonus ? '★' : ''}`;
+    const boost = tempoProfile(eventId).name || '戰術餘波';
+    return `${def.name}→${eventName}→${boost}${bonus ? '★' : ''}`;
+  }
+
+  function objectiveChainPreview(beaconRef = beacon) {
+    if (!beaconRef) return '';
+    const eventName = eventDefs[beaconRef.previewEvent]?.name || '未知事件';
+    const boost = tempoProfile(beaconRef.previewEvent).name || '戰術餘波';
+    return `${eventName}→${boost}`;
+  }
+
+  function applyObjectiveChainEffect(beaconRef, eventId, bonus) {
+    if (!beaconRef || !player) return '';
+    const def = objectiveDefs[beaconRef.kind] || objectiveDefs.scan;
+    let effect = '';
+    if (beaconRef.kind === 'scan') {
+      const xpGain = Math.ceil(xpNeed * (bonus ? .14 : .08));
+      xp += xpGain;
+      if (bonus) upgradesRuntime.weakScan = Math.max(upgradesRuntime.weakScan, 1);
+      effect = `弱點標記 XP+${xpGain}${bonus ? '｜弱點掃描' : ''}`;
+    } else if (beaconRef.kind === 'hold') {
+      const heal = bonus ? 22 : 12;
+      player.hp = Math.min(player.maxHp, player.hp + heal);
+      dropPowerup('heal', beaconRef.x + 44, beaconRef.y, 18);
+      effect = `防線補給 護盾+${heal}`;
+    } else if (beaconRef.kind === 'harvest') {
+      const count = bonus ? 9 : 5;
+      for (let i = 0; i < count; i++) dropShard(beaconRef.x + rand(-68, 68), beaconRef.y + rand(-68, 68), 1);
+      if (bonus) dropPowerup('rapid', beaconRef.x - 48, beaconRef.y + 24, 18);
+      effect = `晶礦噴發 ${count} 碎晶${bonus ? '｜超頻核心' : ''}`;
+    } else if (beaconRef.kind === 'rift') {
+      const before = worldFeatures.filter(f => f.type === 'hazard').length;
+      worldFeatures = worldFeatures.filter(f => f.type !== 'hazard' || Math.hypot(f.x - beaconRef.x, f.y - beaconRef.y) > (bonus ? 940 : 700));
+      const cleared = before - worldFeatures.filter(f => f.type === 'hazard').length;
+      if (bonus) dropPowerup('nova', beaconRef.x + 52, beaconRef.y - 18, 18);
+      effect = `封印裂隙 清除${cleared}危險區${bonus ? '｜新星炸彈' : ''}`;
+    } else if (beaconRef.kind === 'hunt') {
+      const bounty = Math.floor(12 + wave * 2.4 + (bonus ? 12 : 0));
+      meta.scrap += bounty;
+      xp += Math.ceil(xpNeed * (bonus ? .13 : .07));
+      dropPowerup(bonus ? 'nova' : 'rapid', beaconRef.x + rand(-42, 42), beaconRef.y + rand(-34, 34), 18);
+      effect = `懸賞兌現 +${bounty}`;
+    }
+    addText(beaconRef.x, beaconRef.y - beaconRef.r - 32, effect, def.color);
+    return effect;
+  }
+
+  function recordObjectiveRoute(beaconRef, eventId, bonus, effect = '') {
+    if (!runStats || !beaconRef) return;
+    const label = objectiveChainSummary(beaconRef, eventId, bonus);
     runStats.objectiveRoute.push(label);
+    if (effect) runStats.objectiveChains.push(`${label}｜${effect}`);
+    else runStats.objectiveChains.push(label);
     if (bonus) runStats.objectiveBonuses++;
   }
 
@@ -1815,13 +1869,13 @@
     showWaveGuide(wave, bossActive);
   }
 
-  function startEvent(forcedId = null, reward = null) {
+  function startEvent(forcedId = null, reward = null, source = null) {
     const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm', 'droneSwarm', 'gravityWell', 'empStorm', 'salvageRush'];
     const zoneBonus = currentZone().id === 'crystal' ? ['salvageRush'] : currentZone().id === 'scrapyard' ? ['empStorm'] : [];
     const anomalyBonus = currentAnomaly()?.events || [];
     const id = forcedId || choose([...ids, ...zoneBonus, ...anomalyBonus, ...anomalyBonus]);
     const tempo = tempoProfile(id);
-    activeEvent = { id, ...eventDefs[id], reward, tempoLabel: tempo.label, tempoName: tempo.name, tempoDesc: tempo.desc, rushStart: meta.scrap, rushGoal: id === 'salvageRush' ? 22 + wave * 3 : 0, rushDone: false };
+    activeEvent = { id, ...eventDefs[id], reward, sourceRoute: source?.route || '', sourceEffect: source?.effect || '', tempoLabel: tempo.label, tempoName: tempo.name, tempoDesc: tempo.desc, rushStart: meta.scrap, rushGoal: id === 'salvageRush' ? 22 + wave * 3 : 0, rushDone: false };
     runEvents++;
     if (runStats && !runStats.eventsSeen.includes(eventDefs[id].name)) runStats.eventsSeen.push(eventDefs[id].name);
     eventTimer = id === 'salvageRush' ? 20 : 18 + Math.min(12, wave * .8);
@@ -2438,17 +2492,19 @@
     if (bonus) reward.xp += Math.ceil(xpNeed * .08);
     meta.scrap += instant;
     xp += Math.ceil(xpNeed * (bonus ? .18 : .12));
-    if (beacon.kind === 'rift') worldFeatures = worldFeatures.filter(f => f.type !== 'hazard' || Math.hypot(f.x - beacon.x, f.y - beacon.y) > 620);
     addText(player.x, player.y - 50, `${def.name} +${instant}${bonus ? '★' : ''}`, def.color);
     burst(beacon.x, beacon.y, def.color, bonus ? 50 : 38, bonus ? 1.55 : 1.35);
     sfx('upgrade');
     addShake(bonus ? 2.2 : 1.6, .1);
     const eventId = beacon.previewEvent || chooseObjectiveEvent(beacon.kind, def);
-    recordObjectiveRoute(beacon, eventId, bonus);
-    startEvent(eventId, reward);
+    const effect = applyObjectiveChainEffect(beacon, eventId, bonus);
+    const route = objectiveChainSummary(beacon, eventId, bonus);
+    recordObjectiveRoute(beacon, eventId, bonus, effect);
+    startEvent(eventId, reward, { route, effect });
     const eventBurst = Math.max(3, Math.round((4 + Math.floor(wave / 3)) * lateGameScale()));
     for (let i = 0; i < eventBurst; i++) spawnEnemy(eventId === 'droneSwarm' ? choose(['sprinter', 'bomber']) : undefined);
-    flash(`${def.name}完成：${eventDefs[eventId].name}｜${bonus ? '副目標達成 ' : ''}+${instant} 碎晶`);
+    flash(`目標連鎖：${route}｜${effect}`);
+    recordPaceNode(`目標連鎖｜${route}`);
     beacon = makeBeacon();
     wakeMissionHud(3.2);
     save(false);
@@ -3280,6 +3336,7 @@
       else if (beacon.kind === 'hunt') { ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(21, 12); ctx.lineTo(-21, 12); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 7, 0, TWO_PI); ctx.fill(); }
       else { ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(18, 0); ctx.lineTo(0, 18); ctx.lineTo(-18, 0); ctx.closePath(); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, 5, 0, TWO_PI); ctx.fill(); }
       ctx.beginPath(); ctx.moveTo(-28, 0); ctx.lineTo(-21, 0); ctx.moveTo(21, 0); ctx.lineTo(28, 0); ctx.moveTo(0, -28); ctx.lineTo(0, -21); ctx.moveTo(0, 21); ctx.lineTo(0, 28); ctx.stroke(); if (charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 36, -Math.PI / 2, -Math.PI / 2 + TWO_PI * charge); ctx.stroke(); } ctx.restore();
+      drawMapLabel(`${def.name}→${objectiveChainPreview(beacon)}`, beacon.x, beacon.y - beacon.r - 38, def.color, .9);
     }
     ctx.restore();
   }
@@ -3597,7 +3654,7 @@
       else if (activeTempoBoost) { detail = `加成 ${activeTempoBoost.name}｜${Math.ceil(activeTempoBoost.timer)}s`; color = activeTempoBoost.color; }
       else if (beacon) {
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
-        detail = `目標 ${def.name}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
+        detail = `目標 ${def.name}→${objectiveChainPreview(beacon)}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
         color = def.color;
       } else if (hasTactic) { detail = `戰術 ${activeTactic.name}`; color = activeTactic.color || '#ffd166'; }
       if (hasTutorial && !activeEvent && !beacon) {
@@ -3675,9 +3732,10 @@
     if (beacon) {
       const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
       const preview = eventDefs[beacon.previewEvent]?.name || '未知事件';
+      const boost = tempoProfile(beacon.previewEvent).name || '戰術餘波';
       const sidePct = clamp(objectiveSideProgress(beacon) / objectiveSideGoal(beacon), 0, 1);
       ctx.fillStyle = def.color; ctx.font = '900 11px system-ui';
-      ctx.fillText(`P3 目標｜${def.name} → ${preview}`, x + 10, lineY, w - 20);
+      ctx.fillText(`P3 目標｜${def.name} → ${preview} → ${boost}`, x + 10, lineY, w - 20);
       ctx.fillStyle = objectiveSideComplete(beacon) ? '#4dff88' : 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
       ctx.fillText(`副條件：${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`, x + 10, lineY + 15, w - 20);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 21, w - 20, 3);
@@ -3745,9 +3803,9 @@
     ctx.shadowColor = activeEvent.color; ctx.shadowBlur = 16;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 14); ctx.fill(); ctx.stroke();
     ctx.fillStyle = activeEvent.color; ctx.font = '900 15px system-ui'; ctx.textAlign = 'center';
-    ctx.fillText(`${activeEvent.tempoLabel || '事件'}｜${activeEvent.name}`, W / 2, y + 23);
+    ctx.fillText(`${activeEvent.sourceRoute ? '目標連鎖' : activeEvent.tempoLabel || '事件'}｜${activeEvent.name}`, W / 2, y + 23);
     ctx.fillStyle = 'rgba(238,247,255,.86)'; ctx.font = '800 10px system-ui';
-    ctx.fillText(activeEvent.desc, W / 2, y + 41);
+    ctx.fillText(activeEvent.sourceEffect || activeEvent.desc, W / 2, y + 41);
     ctx.fillStyle = activeEvent.color; ctx.font = '900 10px system-ui';
     ctx.fillText(`完成後：${activeEvent.tempoName || '戰術餘波'}｜${activeEvent.tempoDesc || '短暫加成'}`, W / 2, y + 57);
     ctx.restore();

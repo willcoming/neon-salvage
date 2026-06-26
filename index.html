@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=4.7" />
+  <link rel="stylesheet" href="./styles.css?v=4.8" />
 </head>
 <body>
   <div id="app">
@@ -105,11 +105,11 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v4.7 局內節奏事件強化版</strong>
+          <strong>v4.8 地圖目標與事件連鎖版</strong>
           <ul>
-            <li>事件開始會標出高風險、救命補給、清群、資源等事件類型。</li>
-            <li>事件完成後會給 10 秒以上 Tempo Boost，例如主砲超頻、富礦磁吸、菁英破甲。</li>
-            <li>HUD 與結算報告會記錄事件加成，讓中段節奏更有記憶點。</li>
+            <li>目標 HUD 與地圖標籤會預告「目標 → 事件 → Tempo Boost」。</li>
+            <li>不同目標完成後有不同即時效果：掃描標記、守點補給、晶礦噴發、裂隙清場、懸賞兌現。</li>
+            <li>結算報告新增目標連鎖，能回看每個目標導向了哪個事件與加成。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -160,8 +160,9 @@
 - 補給航道：地圖會出現補給艙，靠近護送充能並避免敵人破壞。
 
 地圖與目標：
-- 藍色目標點會預告「目標 → 事件」。
+- 藍色目標點會預告「目標 → 事件 → 完成後加成」。
 - 副條件完成會標 ★，給額外獎勵。
+- 不同目標有不同連鎖效果：掃描給弱點標記、守點給補給、採集噴碎晶、裂隙清危險區、獵殺給懸賞。
 - 星域可選隨機、電磁殘骸帶、晶礦雲帶、裂隙邊界。
 
 戰鬥重點：
@@ -186,6 +187,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=4.7"></script>
+  <script src="./game.js?v=4.8"></script>
 </body>
 </html>
