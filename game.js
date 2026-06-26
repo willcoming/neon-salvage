@@ -113,6 +113,7 @@
   let floatText = [];
   let powerups = [];
   let enemyShots = [];
+  let bossTelegraphs = [];
   let stars = [];
   let nebula = [];
   let wave = 1;
@@ -1325,22 +1326,58 @@
       const moveNames = { meteor: '終局流星', summon: '核心召喚', rift: '核心裂隙', pulse: '核心脈衝' };
       const counters = { meteor: '看到橘色流星落點先橫移。', summon: '先清核心召喚物，避免被包夾。', rift: '離開紅色裂隙區，保持外圈走位。', pulse: '看環形缺口穿過，不要貼臉。' };
       const hints = { meteor: '流星落下後 4 秒內集火核心。', summon: '擊破核心召喚物會開破防。', rift: '裂隙展開時集火核心。', pulse: '脈衝讀條時集中火力。' };
-      return { ...base, title: moveNames[move] || base.mechanic, counter: counters[move] || base.counter, breakHint: hints[move] || base.breakHint, breakName: base.breakName, mechanic: base.mechanic };
+      const colors = { meteor: '#ff7a3d', summon: '#b66dff', rift: '#ff4d6d', pulse: '#bdfcff' };
+      return { ...base, title: moveNames[move] || base.mechanic, counter: counters[move] || base.counter, breakHint: hints[move] || base.breakHint, breakName: base.breakName, mechanic: base.mechanic, color: colors[move] || base.color };
     }
     return { ...base, title: base.mechanic, counter: base.counter || base.intro, breakHint: base.breakHint || 'Boss 出招讀條時集中火力。', breakName: base.breakName || 'Boss 破防' };
+  }
+
+  function addBossTelegraph(kind, opts = {}) {
+    const duration = opts.duration || 1.1;
+    const t = { kind, x: opts.x || 0, y: opts.y || 0, r: opts.r || 80, color: opts.color || '#ff4d6d', timer: duration, duration, angle: opts.angle || 0, gap: opts.gap || 0, gapWidth: opts.gapWidth || .55, label: opts.label || '', targetX: opts.targetX, targetY: opts.targetY, seed: Math.random() * 99 };
+    bossTelegraphs.push(t);
+    return t;
+  }
+
+  function addBossSummonTelegraph(add, info = {}) {
+    if (!add) return null;
+    add.spawnRift = 1.15;
+    add.spawnRiftMax = 1.15;
+    return addBossTelegraph('summon', { x: add.x, y: add.y, r: add.r + 42, color: info.color || '#b66dff', duration: 1.35, label: info.breakName || '召喚物' });
+  }
+
+  function firePulseRing(e, opts = {}) {
+    if (!e || !player) return;
+    const count = opts.count || (e.phase2 ? 18 : 12);
+    const spin = opts.spin ?? runTime * (e.phase2 ? .9 : .55);
+    const speed = (opts.speed || (e.phase2 ? 210 : 175)) * (activeEvent?.id === 'empStorm' ? .68 : 1);
+    const gap = opts.gap ?? Math.atan2(player.y - e.y, player.x - e.x) + rand(-.22, .22);
+    const gapWidth = opts.gapWidth || (e.phase2 ? .42 : .54);
+    addBossTelegraph('pulse', { x: e.x, y: e.y, r: e.r + (e.phase2 ? 104 : 86), color: opts.color || e.color || '#bdfcff', duration: .9, gap, gapWidth, label: '安全缺口' });
+    for (let i = 0; i < count; i++) {
+      const aa = spin + i / count * TWO_PI;
+      const diff = Math.abs(((aa - gap + Math.PI * 3) % TWO_PI) - Math.PI);
+      if (diff < gapWidth * .5) continue;
+      enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(aa) * speed, vy: Math.sin(aa) * speed, r: 4.8, life: 4.5, dmg: e.phase2 ? 13 : 10, color: opts.color || '#bdfcff' });
+    }
+  }
+
+  function updateBossTelegraphs(dt) {
+    for (const t of bossTelegraphs) t.timer -= dt;
+    bossTelegraphs = bossTelegraphs.filter(t => t.timer > 0);
   }
 
   function armBossBreakWindow(e, info = bossReadInfo(e)) {
     if (!e || e.type !== 'boss') return null;
     const threshold = Math.max(36, e.maxHp * (e.finalBoss ? .035 : .045));
-    e.breakWindow = { name: info.breakName || 'Boss 破防', source: info.title || info.mechanic || 'Boss 招式', counter: info.counter || '', threshold, progress: 0, timer: 4.2, duration: 4.2, color: e.color || info.color || '#ff4d6d' };
+    e.breakWindow = { name: info.breakName || 'Boss 破防', source: info.title || info.mechanic || 'Boss 招式', counter: info.counter || '', threshold, progress: 0, timer: 4.2, duration: 4.2, color: info.color || e.color || '#ff4d6d' };
     wakeMissionHud(4.6);
     return e.breakWindow;
   }
 
   function announceBossMove(e, info = bossReadInfo(e)) {
     if (!e || e.type !== 'boss') return;
-    bossAlert = { title: `Boss 讀題｜${info.title || info.mechanic}`, desc: `反制：${info.counter || info.intro}`, hint: `破招：${info.breakHint || '集中火力打開破防窗口。'}`, color: e.color || '#ff4d6d' };
+    bossAlert = { title: `Boss 讀題｜${info.title || info.mechanic}`, desc: `反制：${info.counter || info.intro}`, hint: `破招：${info.breakHint || '集中火力打開破防窗口。'}`, color: info.color || e.color || '#ff4d6d' };
     bossAlertTimer = 3.0;
     recordBossMechanic(info.mechanic || info.title);
     flash(`${bossAlert.title}｜${bossAlert.desc}`);
@@ -1362,6 +1399,7 @@
     if (boss) { boss.breakWindow = null; boss.abilityClock = Math.max(boss.abilityClock || 0, 1.4); boss.hit = Math.max(boss.hit || 0, .22); }
     addText((boss || source).x, (boss || source).y - (boss || source).r - 32, breakName, color);
     flash(`Boss 破招：${label}→${breakName}｜${activeBossBreak.desc}`);
+    addBossTelegraph('shatter', { x: (boss || source).x, y: (boss || source).y, r: (boss || source).r + 54, color: '#ffffff', duration: .72, label: breakName });
     burst((boss || source).x, (boss || source).y, color, 34, 1.45);
     addShake(4.2, .2);
     haptic(36);
@@ -1886,7 +1924,7 @@
   function hardResetRun() {
     clearMovementInput();
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
-    bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; worldFeatures = []; beacon = null; zoneTick = 0;
+    bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; bossTelegraphs = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set();
     activeZone = chooseZone();
@@ -1896,7 +1934,7 @@
     runStats.zone = activeZone.name;
     runStats.anomaly = activeAnomaly.name;
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; bossTelegraphs = []; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -2351,13 +2389,7 @@
   function enemyShoot(e) {
     const a = Math.atan2(player.y - e.y, player.x - e.x);
     if (e.type === 'boss' && e.bossVariant === 'pulse') {
-      const count = e.phase2 ? 18 : 12;
-      const spin = runTime * (e.phase2 ? .9 : .55);
-      for (let i = 0; i < count; i++) {
-        const aa = spin + i / count * TWO_PI;
-        const spd = (e.phase2 ? 210 : 175) * (activeEvent?.id === 'empStorm' ? .68 : 1);
-        enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(aa) * spd, vy: Math.sin(aa) * spd, r: 4.8, life: 4.6, dmg: e.phase2 ? 13 : 10, color: '#bdfcff' });
-      }
+      firePulseRing(e, { count: e.phase2 ? 18 : 12, speed: e.phase2 ? 210 : 175, color: '#bdfcff' });
       return;
     }
     const count = e.type === 'boss' ? (e.finalBoss ? (e.phase2 ? 17 : 11) : e.bossVariant === 'void' ? (e.phase2 ? 15 : 9) : e.phase2 ? 11 : 7) : 1;
@@ -2384,45 +2416,39 @@
     if (e.bossVariant === 'forge') {
       const info = bossReadInfo(e);
       announceBossMove(e, info);
-      spawnMeteor();
-      if (e.phase2 || Math.random() < .35) spawnMeteor();
+      spawnMeteor(info.color || e.color);
+      if (e.phase2 || Math.random() < .35) spawnMeteor(info.color || e.color);
       if (Math.random() < (e.phase2 ? .55 : .28)) addWorldFeature('hazard');
       addText(e.x, e.y - e.r - 14, info.title, e.color);
     } else if (e.bossVariant === 'void') {
       const info = bossReadInfo(e);
       announceBossMove(e, info);
       const add = markBossKeyAdd(spawnEnemy(choose(e.phase2 ? ['shieldSat', 'leech', 'sprinter'] : ['sprinter', 'chaser'])), info);
-      if (add) { add.x = e.x + rand(-80, 80); add.y = e.y + rand(-80, 80); }
+      if (add) { add.x = e.x + rand(-80, 80); add.y = e.y + rand(-80, 80); addBossSummonTelegraph(add, info); }
       addText(e.x, e.y - e.r - 14, info.title, e.color);
     } else if (e.bossVariant === 'brood') {
       const info = bossReadInfo(e);
       announceBossMove(e, info);
       const add = markBossKeyAdd(spawnEnemy(choose(e.phase2 ? ['leech', 'shieldSat', 'bomber'] : ['leech', 'chaser'])), info);
-      if (add) { add.x = e.x + rand(-84, 84); add.y = e.y + rand(-84, 84); }
+      if (add) { add.x = e.x + rand(-84, 84); add.y = e.y + rand(-84, 84); addBossSummonTelegraph(add, info); }
       addWorldFeature('hazard');
       addText(e.x, e.y - e.r - 14, info.title, e.color);
     } else if (e.bossVariant === 'pulse') {
       const info = bossReadInfo(e);
       announceBossMove(e, info);
-      const count = e.phase2 ? 22 : 14;
-      const spin = runTime * (e.phase2 ? 1.2 : .75);
-      for (let i = 0; i < count; i++) {
-        const aa = spin + i / count * TWO_PI;
-        const spd = (e.phase2 ? 235 : 190) * phaseBoost * (activeEvent?.id === 'empStorm' ? .68 : 1);
-        enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(aa) * spd, vy: Math.sin(aa) * spd, r: 4.8, life: 4.4, dmg: e.phase2 ? 13 : 10, color: '#bdfcff' });
-      }
+      firePulseRing(e, { count: e.phase2 ? 22 : 14, spin: runTime * (e.phase2 ? 1.2 : .75), speed: (e.phase2 ? 235 : 190) * phaseBoost, color: '#bdfcff', gapWidth: e.phase2 ? .38 : .52 });
       addText(e.x, e.y - e.r - 14, info.title, e.color);
     } else if (e.finalBoss) {
       const move = choose(['meteor', 'summon', 'rift', 'pulse']);
       const info = bossReadInfo(e, move);
       announceBossMove(e, info);
-      if (move === 'meteor') { spawnMeteor(); spawnMeteor(); }
+      if (move === 'meteor') { spawnMeteor(info.color); spawnMeteor(info.color); }
       if (move === 'summon') {
         const add = markBossKeyAdd(spawnEnemy(choose(e.phase2 ? ['shieldSat', 'bomber', 'leech'] : ['sprinter', 'chaser'])), info);
-        if (add) { add.x = e.x + rand(-96, 96); add.y = e.y + rand(-96, 96); }
+        if (add) { add.x = e.x + rand(-96, 96); add.y = e.y + rand(-96, 96); addBossSummonTelegraph(add, info); }
       }
-      if (move === 'rift') addWorldFeature('hazard');
-      if (move === 'pulse') enemyShoot(e);
+      if (move === 'rift') { addWorldFeature('hazard'); addBossTelegraph('rift', { x: player.x + rand(-140, 140), y: player.y + rand(-140, 140), r: 96, color: info.color || '#ff4d6d', duration: 1.4, label: '核心裂隙' }); }
+      if (move === 'pulse') firePulseRing(e, { count: e.phase2 ? 24 : 16, speed: e.phase2 ? 245 : 205, color: info.color || '#bdfcff', gapWidth: e.phase2 ? .38 : .52 });
       addText(e.x, e.y - e.r - 14, info.title, e.color);
     } else {
       const info = bossReadInfo(e);
@@ -2568,13 +2594,18 @@
     }
   }
 
-  function spawnMeteor() {
+  function spawnMeteor(color = '#ff7a3d') {
     const fromLeft = Math.random() < .5;
     const c = camera();
     const y = rand(c.y + 90, c.y + H - 40);
+    const x = fromLeft ? c.x - 35 : c.x + W + 35;
     const vx = (fromLeft ? 1 : -1) * rand(360, 520);
     const vy = rand(-60, 60);
-    enemyShots.push({ type: 'meteor', x: fromLeft ? c.x - 35 : c.x + W + 35, y, vx, vy, r: rand(10, 18), life: 3.2, dmg: 18 + wave * .5, color: '#ff7a3d' });
+    const targetT = .92;
+    const tx = clamp(x + vx * targetT, c.x + 92, c.x + W - 92);
+    const ty = clamp(y + vy * targetT, c.y + 76, c.y + H - 64);
+    addBossTelegraph('meteor', { x: tx, y: ty, r: 72, color, duration: 1.18, angle: Math.atan2(vy, vx), targetX: x, targetY: y, label: '流星落點' });
+    enemyShots.push({ type: 'meteor', x, y, vx, vy, r: rand(10, 18), life: 3.2, dmg: 18 + wave * .5, color });
   }
 
   function chainArc(x, y, amount) {
@@ -2878,7 +2909,7 @@
       spawnTimer = spawnIntervalForWave(wave);
     }
 
-    updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updatePickups(dt); updateParticles(dt);
+    updateBullets(dt); updateEnemies(dt); updateEnemyShots(dt); updateBossTelegraphs(dt); updatePickups(dt); updateParticles(dt);
     sampleRunStats();
     updateTutorial();
 
@@ -3408,7 +3439,7 @@
     const shake = screenShakeOffset();
     ctx.save();
     ctx.translate(-c.x + shake.x, -c.y + shake.y);
-    drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawBuildAura(); drawPlayer(); drawParticles();
+    drawWorldFeatures(); drawShards(); drawPowerups(); drawBullets(); drawBossTelegraphs(); drawEnemyShots(); drawEnemies(); drawOrbitals(); drawBuildAura(); drawPlayer(); drawParticles();
     ctx.restore();
     drawMission(); drawTargetGuide(); drawEventBanner(); drawBossAlert(); drawScreenEffects(); drawTouchDpad();
     if (paused && running && !ui.overlay.classList.contains('visible')) drawPause();
@@ -3667,6 +3698,74 @@
     ctx.restore();
   }
   function drawEnemyShots() { ctx.save(); for (const s of enemyShots) { const sr = Math.max(2.5, s.r * visualScale()); ctx.shadowColor = s.type === 'meteor' ? '#ff7a3d' : '#ff3df2'; ctx.shadowBlur = s.type === 'meteor' ? 14 : 8; ctx.fillStyle = s.type === 'meteor' ? '#ffb36b' : '#ff9af8'; ctx.beginPath(); ctx.arc(s.x, s.y, sr, 0, TWO_PI); ctx.fill(); if (s.type === 'meteor') { ctx.strokeStyle = '#ff7a3d'; ctx.lineWidth = 1.5; ctx.stroke(); } } ctx.restore(); }
+
+  function drawBossTelegraphs() {
+    if (!bossTelegraphs.length) return;
+    const now = performance.now() * .001;
+    ctx.save();
+    for (const t of bossTelegraphs) {
+      const left = clamp(t.timer / t.duration, 0, 1);
+      const p = 1 - left;
+      const pulse = Math.sin((now + t.seed) * 9) * .5 + .5;
+      const color = t.color || '#ff4d6d';
+      ctx.save();
+      ctx.translate(t.x, t.y);
+      ctx.globalAlpha = .18 + left * .58;
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 18;
+      if (t.kind === 'meteor') {
+        ctx.rotate(t.angle || 0);
+        ctx.lineWidth = 2.2;
+        ctx.setLineDash([11, 8]);
+        ctx.beginPath(); ctx.moveTo(-118, 0); ctx.lineTo(118, 0); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.globalAlpha = .25 + left * .46;
+        ctx.beginPath(); ctx.ellipse(0, 0, t.r * (1.08 - p * .28), t.r * .42, 0, 0, TWO_PI); ctx.stroke();
+        ctx.lineWidth = 3.4;
+        ctx.beginPath(); ctx.arc(0, 0, t.r * .46, -Math.PI / 2, -Math.PI / 2 + TWO_PI * left); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(18, 0); ctx.moveTo(0, -18); ctx.lineTo(0, 18); ctx.stroke();
+      } else if (t.kind === 'summon' || t.kind === 'rift') {
+        const r = t.r * (.72 + p * .34 + pulse * .05);
+        ctx.globalAlpha = .20 + left * .48;
+        ctx.lineWidth = t.kind === 'rift' ? 3.2 : 2.4;
+        ctx.beginPath(); ctx.ellipse(0, 0, r, r * .42, now * .8, 0, TWO_PI); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-r * .18, -r * .56); ctx.lineTo(r * .08, -r * .14); ctx.lineTo(-r * .06, r * .04); ctx.lineTo(r * .22, r * .52);
+        ctx.stroke();
+        ctx.globalAlpha *= .42;
+        ctx.beginPath(); ctx.arc(0, 0, r * .78, 0, TWO_PI); ctx.fill();
+      } else if (t.kind === 'pulse') {
+        const r = t.r * (.74 + p * .34);
+        const gap = t.gap || 0;
+        const half = (t.gapWidth || .5) * .5;
+        ctx.lineWidth = 4;
+        ctx.globalAlpha = .28 + left * .54;
+        ctx.beginPath(); ctx.arc(0, 0, r, gap + half, gap - half + TWO_PI); ctx.stroke();
+        ctx.strokeStyle = '#4dff88'; ctx.shadowColor = '#4dff88'; ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(Math.cos(gap - half) * (r - 14), Math.sin(gap - half) * (r - 14));
+        ctx.lineTo(Math.cos(gap - half) * (r + 22), Math.sin(gap - half) * (r + 22));
+        ctx.moveTo(Math.cos(gap + half) * (r - 14), Math.sin(gap + half) * (r - 14));
+        ctx.lineTo(Math.cos(gap + half) * (r + 22), Math.sin(gap + half) * (r + 22));
+        ctx.stroke();
+        ctx.fillStyle = '#4dff88'; ctx.font = '900 10px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('安全縫', Math.cos(gap) * (r + 34), Math.sin(gap) * (r + 34));
+      } else if (t.kind === 'shatter') {
+        const r = t.r * (.65 + p * .75);
+        ctx.strokeStyle = '#ffffff'; ctx.shadowColor = '#ffffff'; ctx.lineWidth = 3.2;
+        ctx.globalAlpha = left;
+        ctx.beginPath(); ctx.arc(0, 0, r, 0, TWO_PI); ctx.stroke();
+        for (let i = 0; i < 14; i++) {
+          const a = i / 14 * TWO_PI + now * .6;
+          ctx.beginPath(); ctx.moveTo(Math.cos(a) * (r * .62), Math.sin(a) * (r * .62)); ctx.lineTo(Math.cos(a) * (r + 24), Math.sin(a) * (r + 24)); ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
 
   function drawEnemies() {
     ctx.save();
