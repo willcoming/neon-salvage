@@ -137,6 +137,8 @@
   let activeRouteChoices = [];
   let routeChoiceOffer = null;
   let routeChoiceSerial = 0;
+  let activeRouteConsequences = [];
+  let routeConsequenceSerial = 0;
   let anomalyState = null;
   let activeTactic = null;
   let eventTimer = 0;
@@ -441,7 +443,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -536,6 +538,150 @@
     return activeRouteChoices.length ? activeRouteChoices.map(c => c.name).join(' + ') : '尚未抉擇';
   }
 
+  const routeConsequenceDefs = {
+    safeSupply: { id: 'supplyConvoy', title: '補給護送', mode: 'convoy', label: '補給護送', action: '靠近補給艙護送充能', tag: '完成後：護盾+22｜護盾整備', color: '#4dff88', chargeNeed: 3.6, hp: 3.2, tempo: 'supply', rewardScrap: 14, rewardXp: .16, powerup: 'heal' },
+    bountyRisk: { id: 'bountyMark', title: '懸賞目標', mode: 'bounty', label: '懸賞菁英', action: '擊破標記菁英', tag: '完成後：懸賞+36｜菁英破甲', color: '#ff3df2', tempo: 'eliteStorm', rewardScrap: 36, rewardXp: .22, powerup: 'nova' },
+    weakScan: { id: 'scanRelay', title: '掃描中繼', mode: 'relay', label: '掃描中繼', action: '靠近中繼站完成掃描', tag: '完成後：弱點資料+1｜EMP 護層', color: '#bdfcff', chargeNeed: 2.3, tempo: 'empStorm', rewardScrap: 18, rewardXp: .28, weakScan: true },
+    crystalDrill: { id: 'crystalDrill', title: '晶礦鑽探', mode: 'drill', label: '晶礦鑽探', action: '站在鑽探圈收集晶礦', tag: '完成後：碎晶雨｜拾荒磁暴', color: '#ffd166', chargeNeed: 2.9, tempo: 'salvageRush', rewardScrap: 24, rewardXp: .14, shards: 11 }
+  };
+
+  function routeConsequenceDef(choiceId) {
+    return routeConsequenceDefs[choiceId] || routeConsequenceDefs.safeSupply;
+  }
+
+  function activeRouteConsequenceTarget() {
+    const node = worldFeatures.find(f => f.type === 'routeConsequence' && !f.dead);
+    if (node) return node;
+    return enemies.find(e => e.routeConsequence && !e.dead) || null;
+  }
+
+  function activeRouteConsequenceLabel() {
+    const active = activeRouteConsequences.find(c => c.status === 'active');
+    if (!active) return '';
+    return `${active.choiceName}→${active.title}`;
+  }
+
+  function recordRouteConsequence(state, status, effect = '') {
+    if (!state || !runStats) return;
+    const label = `${state.choiceName}→${state.title}｜第 ${state.wave} 波`;
+    if (status === 'complete') {
+      runStats.routeConsequences.push(label);
+      if (effect) runStats.routeConsequenceEffects.push(`${label}｜${effect}`);
+    } else if (status === 'miss') {
+      runStats.routeConsequenceMisses.push(`${label}｜${effect || '錯過'}`);
+    }
+  }
+
+  function routeConsequenceEventRef(def, state) {
+    const tempo = tempoProfile(def.tempo || 'rich');
+    return { id: def.tempo || tempo.id, name: `路線後果：${state.title}`, color: def.color || tempo.color };
+  }
+
+  function completeRouteConsequence(state, source = null) {
+    if (!state || state.status !== 'active' || !player) return '';
+    const def = state.def || routeConsequenceDef(state.choiceId);
+    state.status = 'complete';
+    state.completedAt = runTime;
+    const effects = [];
+    if (def.rewardScrap) { meta.scrap += def.rewardScrap; effects.push(`碎晶+${def.rewardScrap}`); }
+    if (def.rewardXp) { const gain = Math.ceil(xpNeed * def.rewardXp); xp += gain; effects.push(`XP+${gain}`); }
+    if (def.shards) { for (let i = 0; i < def.shards; i++) dropShard((source?.x || player.x) + rand(-70, 70), (source?.y || player.y) + rand(-60, 60), 1); effects.push(`碎晶雨x${def.shards}`); }
+    if (def.weakScan) { upgradesRuntime.weakScan = (upgradesRuntime.weakScan || 0) + 1; effects.push('弱點資料+1'); }
+    if (def.powerup) { dropPowerup(def.powerup, source?.x || player.x, source?.y || player.y, 20); effects.push(def.powerup === 'nova' ? '新星炸彈' : '維修核心'); }
+    if (def.mode === 'convoy') { player.hp = Math.min(player.maxHp, player.hp + 22); effects.push('護盾+22'); }
+    const boost = applyTempoBoost(routeConsequenceEventRef(def, state), true);
+    if (boost) effects.push(`${boost.name} ${Math.ceil(boost.duration)}s`);
+    const text = effects.join('｜') || def.tag;
+    recordRouteConsequence(state, 'complete', text);
+    recordPaceNode(`路線後果完成｜${state.choiceName}→${state.title}`);
+    if (source) source.dead = true;
+    addText(source?.x || player.x, (source?.y || player.y) - 54, `${state.title} 完成`, def.color || '#bdfcff');
+    burst(source?.x || player.x, source?.y || player.y, def.color || '#bdfcff', 30, 1.2);
+    flash(`路線後果完成：${state.title}｜${text}`);
+    sfx('success');
+    haptic(34);
+    wakeMissionHud(4.2);
+    save(false);
+    return text;
+  }
+
+  function failRouteConsequence(state, reason = '錯過') {
+    if (!state || state.status !== 'active') return;
+    state.status = 'miss';
+    state.missedAt = runTime;
+    recordRouteConsequence(state, 'miss', reason);
+    recordPaceNode(`路線後果錯過｜${state.choiceName}→${state.title}：${reason}`);
+    worldFeatures.forEach(f => { if (f.consequenceId === state.id) f.dead = true; });
+    enemies.forEach(e => { if (e.routeConsequence?.id === state.id) e.routeConsequence = null; });
+    flash(`路線後果錯過：${state.title}｜${reason}`);
+    wakeMissionHud(2.4);
+  }
+
+  function spawnRouteConsequence(choice) {
+    if (!player || bossActive || tutorialRun || !choice || choice.consequenceSpawned) return null;
+    const def = routeConsequenceDef(choice.id);
+    const state = { id: `consequence-${++routeConsequenceSerial}`, choiceId: choice.id, choiceName: choice.name, title: def.title, mode: def.mode, color: def.color || choice.color, wave, status: 'active', def };
+    choice.consequenceSpawned = true;
+    activeRouteConsequences.push(state);
+    const a = rand(-Math.PI * .86, -Math.PI * .14);
+    const d = wave <= 3 ? 520 : 620;
+    if (def.mode === 'bounty') {
+      const e = spawnEnemy(choose(['tank', 'shooter', 'leech']), { elite: 'juggernaut' });
+      if (e) {
+        e.x = player.x + Math.cos(a) * d;
+        e.y = player.y + Math.sin(a) * d;
+        e.routeConsequence = { id: state.id, choiceId: choice.id, name: def.title, color: def.color };
+        e.objectiveTarget = true;
+        e.scrap += 8;
+        addText(e.x, e.y - e.r - 28, def.title, def.color);
+      }
+    } else {
+      worldFeatures.push({ type: 'routeConsequence', consequenceId: state.id, choiceId: choice.id, routeConsequence: state, x: player.x + Math.cos(a) * d, y: player.y + Math.sin(a) * d, r: def.mode === 'convoy' ? 68 : def.mode === 'drill' ? 76 : 62, spin: rand(-.4, .4), seed: Math.random() * 999, cool: 0, charge: 0, chargeNeed: def.chargeNeed || 2.6, hp: def.hp || 0, maxHp: def.hp || 0, color: def.color });
+    }
+    recordPaceNode(`路線後果開啟｜${choice.name}→${def.title}`);
+    flash(`路線後果：${choice.name}→${def.title}｜${def.action}`);
+    wakeMissionHud(5.2);
+    return state;
+  }
+
+  function spawnDueRouteConsequences(n = wave) {
+    for (const c of activeRouteChoices) {
+      if (!c.consequenceSpawned && (c.consequenceDue || c.wave + 1) <= n) spawnRouteConsequence(c);
+    }
+  }
+
+  function expireActiveRouteConsequences(reason = '錯過') {
+    for (const c of activeRouteConsequences) if (c.status === 'active') failRouteConsequence(c, reason);
+  }
+
+  function updateRouteConsequenceFeature(f, d, dt) {
+    const state = f.routeConsequence || activeRouteConsequences.find(c => c.id === f.consequenceId);
+    if (!state || state.status !== 'active') { f.dead = true; return; }
+    const def = state.def || routeConsequenceDef(state.choiceId);
+    const inside = d < f.r + player.r + 22;
+    if (inside) {
+      f.charge += dt;
+      f.sideTick = (f.sideTick || 0) + dt;
+      if (particles.length < MAX_PARTICLES) particles.push({ x: f.x + rand(-28, 28), y: f.y + rand(-28, 28), vx: rand(-10, 10), vy: rand(-10, 10), life: .22, max: .22, r: rand(1.5, 3.3), color: def.color || '#bdfcff', ring: false });
+      if (def.mode === 'drill' && f.sideTick >= .38) { f.sideTick = 0; dropShard(f.x + rand(-58, 58), f.y + rand(-58, 58), 1); }
+      if (def.mode === 'relay' && f.sideTick >= .72) { f.sideTick = 0; addText(f.x, f.y - f.r - 28, '掃描脈衝', def.color || '#bdfcff'); }
+      if (f.charge >= (f.chargeNeed || def.chargeNeed || 2.6)) completeRouteConsequence(state, f);
+      if (f.dead) return;
+    } else {
+      f.charge = Math.max(0, f.charge - dt * (def.mode === 'convoy' ? .32 : .45));
+      f.sideTick = Math.max(0, (f.sideTick || 0) - dt * .5);
+    }
+    if (def.mode === 'convoy') {
+      const attackers = enemies.filter(e => !e.dead && Math.hypot(e.x - f.x, e.y - f.y) < f.r + e.r + 96);
+      if (attackers.length && f.cool <= 0) {
+        f.hp -= .34;
+        f.cool = .85;
+        addText(f.x, f.y - f.r - 18, `補給艙 ${Math.max(0, Math.ceil(f.hp))}`, def.color || '#4dff88');
+        if (f.hp <= 0) { f.dead = true; failRouteConsequence(state, '補給艙被破壞'); }
+      }
+    }
+  }
+
   function missionHudNow() {
     return performance.now() / 1000;
   }
@@ -563,7 +709,8 @@
     const boss = currentBoss();
     const bossSig = boss ? `${boss.bossVariant}:${boss.phase2 ? 1 : 0}:${boss.breakWindow?.name || ''}:${Math.round((boss.breakWindow?.progress || 0) / Math.max(1, boss.breakWindow?.threshold || 1) * 10)}` : '';
     const routeSig = `${activeRouteChoices.map(c => c.id).join('+')}:${routeChoiceOffer?.id || ''}:${worldFeatures.filter(f => f.type === 'routeChoice').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}`).join(',')}`;
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, bossSig].join('|');
+    const consequenceSig = `${activeRouteConsequences.map(c => `${c.id}:${c.status}`).join(',')}:${worldFeatures.filter(f => f.type === 'routeConsequence').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}:${Math.ceil(f.hp || 0)}`).join(',')}:${enemies.filter(e => e.routeConsequence).map(e => `${e.routeConsequence.id}:${Math.round(e.hp)}`).join(',')}`;
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, bossSig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -810,7 +957,8 @@
 
   function combatReport() {
     const boss = runStats?.bossKillTime ? `｜Boss ${formatTime(runStats.bossKillTime)}` : '';
-    return `戰鬥報告｜${contractTitle()}｜路線 ${routeChoiceTitle()}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
+    const consequence = runStats?.routeConsequences?.length ? `｜後果 ${runStats.routeConsequences.length}` : '';
+    return `戰鬥報告｜${contractTitle()}｜路線 ${routeChoiceTitle()}${consequence}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
   }
 
   function escapeHtml(value) {
@@ -861,6 +1009,7 @@
     else if ((record.tacticsSeen || []).length) list.push('連續破解 2 次敵群戰術');
     if (record.bossPhase2 && !(record.bossBreakCount || 0)) list.push('Boss 二階段讀題後完成 1 次破招');
     if (!(record.routeChoices || []).length && record.wave >= 2) list.push('完成一次局內 2 選 1 抉擇');
+    if ((record.routeChoices || []).length && !(record.routeConsequences || []).length) list.push('完成一次局內路線後果任務');
     if ((record.eventsSeen || []).includes('拾荒競速') && !record.salvageRushWins) list.push('完成一次拾荒競速');
     if ((record.maxEnemies || 0) >= enemyCap() - 1) list.push('帶一個範圍技能進後期');
     return [...new Set(list)].slice(0, 3);
@@ -905,6 +1054,9 @@
       routeChoices: [...(runStats?.routeChoices || [])].slice(-4),
       routeChoiceTags: [...(runStats?.routeChoiceTags || [])].slice(-4),
       routeChoiceEffects: [...(runStats?.routeChoiceEffects || [])].slice(-4),
+      routeConsequences: [...(runStats?.routeConsequences || [])].slice(-5),
+      routeConsequenceEffects: [...(runStats?.routeConsequenceEffects || [])].slice(-5),
+      routeConsequenceMisses: [...(runStats?.routeConsequenceMisses || [])].slice(-5),
       zone: runStats?.zone || currentZone().name,
       anomaly: runStats?.anomaly || currentAnomaly().name,
       anomalyTasks: [...(runStats?.anomalyTasks || [])].slice(-5),
@@ -1007,6 +1159,9 @@
     const chainHtml = record.objectiveChains?.length ? record.objectiveChains.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未形成目標連鎖</span>';
     const routeChoiceHtml = record.routeChoices?.length ? record.routeChoices.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成局內抉擇</span>';
     const routeChoiceEffectHtml = record.routeChoiceEffects?.length ? record.routeChoiceEffects.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未取得抉擇效果</span>';
+    const routeConsequenceHtml = record.routeConsequences?.length ? record.routeConsequences.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成路線後果</span>';
+    const routeConsequenceEffectHtml = record.routeConsequenceEffects?.length ? record.routeConsequenceEffects.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未取得後果獎勵</span>';
+    const routeConsequenceMissHtml = record.routeConsequenceMisses?.length ? record.routeConsequenceMisses.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>沒有錯過後果任務</span>';
     const anomalyHtml = record.anomalyTasks?.length ? record.anomalyTasks.map(a => `<span>${escapeHtml(a)}</span>`).join('') : '<span>尚未完成異變任務</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
     const tacticBreakHtml = record.tacticBreaks?.length ? record.tacticBreaks.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未破解戰術</span>';
@@ -1021,6 +1176,7 @@
       ['Build', record.build || '未成形'],
       ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
       ['路線', record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇'],
+      ['後果', record.routeConsequences?.length ? `${record.routeConsequences.length} 完成` : record.routeConsequenceMisses?.length ? '已錯過' : '未觸發'],
       ['壓力', `${record.pressure || '-'}｜${(record.budget || '-').split('｜')[0]}`],
       ['下一步', record.challenges?.[0] || '自由挑戰']
     ].map(([k, v]) => `<span><b>${escapeHtml(k)}</b>${escapeHtml(v)}</span>`).join('');
@@ -1037,6 +1193,9 @@
       <div class="skill-chips"><b>Run 身份</b><span>${escapeHtml(record.contract || '標準委託')}</span><span>${escapeHtml(record.contractTag || '')}</span><span>${escapeHtml(record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇')}</span><span>${escapeHtml(record.bossModifier || '')}</span></div>
       <div class="skill-chips"><b>局內抉擇</b>${routeChoiceHtml}</div>
       <div class="skill-chips"><b>抉擇效果</b>${routeChoiceEffectHtml}</div>
+      <div class="skill-chips"><b>路線後果</b>${routeConsequenceHtml}</div>
+      <div class="skill-chips"><b>後果獎勵</b>${routeConsequenceEffectHtml}</div>
+      <div class="skill-chips"><b>錯過後果</b>${routeConsequenceMissHtml}</div>
       <div class="skill-chips"><b>事件加成</b>${boostHtml}</div>
       <div class="skill-chips"><b>異變任務</b>${anomalyHtml}</div>
       <div class="skill-chips"><b>節奏節點</b>${paceHtml}</div>
@@ -2208,6 +2367,7 @@
   function chooseRouteChoiceNode(f) {
     if (!f || f.dead || f.type !== 'routeChoice' || !routeChoiceOffer || routeChoiceOffer.id !== f.offerId) return;
     const choice = { ...(f.routeChoice || routeChoiceDefs[f.choiceId] || neutralRouteChoice), wave };
+    choice.consequenceDue = wave >= 4 ? wave : wave + 1;
     routeChoiceOffer.picked = choice.id;
     activeRouteChoices.push(choice);
     const effect = applyRouteChoiceReward(choice, f);
@@ -2225,6 +2385,8 @@
     sfx('success');
     haptic(32);
     routeChoiceOffer = null;
+    if ((choice.consequenceDue || wave + 1) <= wave) spawnRouteConsequence(choice);
+    else flash(`路線選擇：${choice.name}｜第 ${choice.consequenceDue} 波將出現後果任務`);
     wakeMissionHud(5.2);
   }
 
@@ -2234,7 +2396,7 @@
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; bossTelegraphs = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set();
-    activeRouteChoices = []; routeChoiceOffer = null; routeChoiceSerial = 0;
+    activeRouteChoices = []; routeChoiceOffer = null; routeChoiceSerial = 0; activeRouteConsequences = []; routeConsequenceSerial = 0;
     activeZone = chooseZone();
     activeAnomaly = chooseRunAnomaly();
     activeContract = chooseRunContract();
@@ -2366,8 +2528,8 @@
     const stageMsg = stageIntroForWave(wave, bossActive);
     if (stageMsg && !tutorialShown.has(`stage-${wave}`)) setTimeout(() => { if (running && !gameOver && !skillChoosing && wave === n) { tutorialShown.add(`stage-${wave}`); flash(stageMsg); } }, 520);
     if (!bossActive && routeChoiceOffer && wave > (routeChoiceOffer.wave || wave) + 1) expireRouteChoiceOffer('航線窗口關閉');
-    if (bossActive) expireRouteChoiceOffer('Boss 波來臨');
-    else if (shouldSpawnRouteChoiceOffer(wave)) spawnRouteChoiceOffer(wave);
+    if (bossActive) { expireRouteChoiceOffer('Boss 波來臨'); expireActiveRouteConsequences('Boss 波來臨'); }
+    else { spawnDueRouteConsequences(wave); if (shouldSpawnRouteChoiceOffer(wave)) spawnRouteChoiceOffer(wave); }
     showWaveGuide(wave, bossActive);
   }
 
@@ -2859,6 +3021,12 @@
       const charge = Math.round(clamp((f.charge || 0) / (f.chargeNeed || 1.75), 0, 1) * 100);
       return { text: `${choice.name}｜${choice.tag}${charge ? `｜${charge}%` : ''}`, color: choice.color || '#bdfcff', y: f.y - f.r - 22 };
     }
+    if (f.type === 'routeConsequence') {
+      const state = f.routeConsequence || activeRouteConsequences.find(c => c.id === f.consequenceId);
+      const def = state?.def || routeConsequenceDef(f.choiceId);
+      const charge = Math.round(clamp((f.charge || 0) / (f.chargeNeed || def.chargeNeed || 2.6), 0, 1) * 100);
+      return { text: `${state?.choiceName || '路線'}→${def.title}｜${def.action}${charge ? `｜${charge}%` : ''}`, color: def.color || '#bdfcff', y: f.y - f.r - 24 };
+    }
     if (f.type === 'riftSeal') return { text: '裂隙封印', color: '#b66dff', y: f.y - f.r - 18 };
     if (f.type === 'convoyPod') return { text: '補給艙', color: '#4dff88', y: f.y - f.r - 18 };
     return null;
@@ -2880,6 +3048,10 @@
     const tacticBreakCandidate = tacticById(e.tacticId) || activeTactic;
     xp += e.type === 'boss' ? 8 : e.elite ? 3 : e.type === 'tank' ? 2 : 1;
     if (e.elite) onEliteKilled(e);
+    if (e.routeConsequence) {
+      const state = activeRouteConsequences.find(c => c.id === e.routeConsequence.id);
+      completeRouteConsequence(state, e);
+    }
     if (e.elite?.id === 'splitter' && !e.splitDone) spawnSplinters(e);
     dropShard(e.x, e.y, e.scrap + Math.floor(wave / 5) + (activeEvent?.id === 'rich' ? 2 : 0));
     maybeDropPowerup(e.x, e.y);
@@ -3107,6 +3279,10 @@
         } else {
           f.charge = Math.max(0, f.charge - dt * .5);
         }
+        continue;
+      }
+      if (f.type === 'routeConsequence') {
+        updateRouteConsequenceFeature(f, d, dt);
         continue;
       }
       if (f.type === 'riftSeal') {
@@ -3745,6 +3921,7 @@
     recordWaveTime(wave);
     sampleRunStats();
     if (runStats) runStats.deathCause = lastDamageCause || 'unknown';
+    expireActiveRouteConsequences('本局結束');
     closeUpgradeModal();
     gameOver = true;
     sfx('hurt');
@@ -3885,7 +4062,7 @@
         }
         ctx.closePath(); ctx.fill(); ctx.stroke();
       } else {
-        const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' || f.type === 'convoyPod' ? '#4dff88' : f.type === 'riftSeal' ? '#b66dff' : f.type === 'routeChoice' ? (f.color || f.routeChoice?.color || '#bdfcff') : '#ffd166';
+        const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' || f.type === 'convoyPod' ? '#4dff88' : f.type === 'riftSeal' ? '#b66dff' : f.type === 'routeChoice' ? (f.color || f.routeChoice?.color || '#bdfcff') : f.type === 'routeConsequence' ? (f.color || f.routeConsequence?.color || '#ffd166') : '#ffd166';
         ctx.globalAlpha = .82 + Math.sin(performance.now() * .004 + f.seed) * .12;
         ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2;
         if (f.type === 'routeChoice') {
@@ -3902,6 +4079,29 @@
           ctx.beginPath(); ctx.arc(0, 0, 40, -Math.PI / 2, -Math.PI / 2 + TWO_PI * clamp((f.charge || 0) / (f.chargeNeed || 1.75), 0, 1)); ctx.stroke();
           ctx.globalAlpha = .78; ctx.strokeStyle = choice.color || color; ctx.lineWidth = 1.2; ctx.setLineDash([5, 7]);
           ctx.beginPath(); ctx.arc(0, 0, 52 + pulse * 6, 0, TWO_PI); ctx.stroke(); ctx.setLineDash([]);
+        } else if (f.type === 'routeConsequence') {
+          const state = f.routeConsequence || activeRouteConsequences.find(c => c.id === f.consequenceId);
+          const def = state?.def || routeConsequenceDef(f.choiceId);
+          const pulse = Math.sin(performance.now() * .006 + f.seed) * .5 + .5;
+          const pct = clamp((f.charge || 0) / (f.chargeNeed || def.chargeNeed || 2.6), 0, 1);
+          ctx.shadowColor = color; ctx.shadowBlur = 18;
+          ctx.globalAlpha = .62 + pulse * .22;
+          if (def.mode === 'convoy') {
+            ctx.beginPath(); ctx.roundRect(-29, -21, 58, 42, 12); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#050712'; ctx.fillRect(-5, -14, 10, 28); ctx.fillRect(-15, -4, 30, 8);
+            ctx.fillStyle = color; ctx.globalAlpha *= .92; ctx.fillRect(-23, 28, 46 * clamp((f.hp || 0) / Math.max(1, f.maxHp || 3), 0, 1), 4);
+          } else if (def.mode === 'relay') {
+            ctx.beginPath(); ctx.arc(0, 0, 25, 0, TWO_PI); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, -22); ctx.lineTo(22, 0); ctx.lineTo(0, 22); ctx.lineTo(-22, 0); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#050712'; ctx.beginPath(); ctx.arc(0, 0, 6, 0, TWO_PI); ctx.fill();
+            ctx.strokeStyle = color; ctx.globalAlpha *= .72; ctx.beginPath(); ctx.arc(0, 0, 43 + pulse * 6, -.2, Math.PI * 1.2); ctx.stroke();
+          } else {
+            ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(26, -8); ctx.lineTo(18, 26); ctx.lineTo(-18, 26); ctx.lineTo(-26, -8); ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = '#050712'; ctx.beginPath(); ctx.moveTo(-7, -12); ctx.lineTo(10, 0); ctx.lineTo(-4, 14); ctx.lineTo(2, 2); ctx.closePath(); ctx.fill();
+            ctx.globalAlpha *= .48; ctx.beginPath(); ctx.arc(0, 0, 52 + pulse * 8, 0, TWO_PI); ctx.stroke();
+          }
+          ctx.globalAlpha = .92; ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4;
+          ctx.beginPath(); ctx.arc(0, 0, 42, -Math.PI / 2, -Math.PI / 2 + TWO_PI * pct); ctx.stroke();
         } else if (f.type === 'riftSeal') {
           ctx.beginPath(); ctx.arc(0, 0, 24, 0, TWO_PI); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(-6, -26); ctx.lineTo(10, -8); ctx.lineTo(-4, 2); ctx.lineTo(12, 27); ctx.stroke();
@@ -4261,6 +4461,17 @@
         ctx.fillText('!', e.x, e.y - er - 14);
         ctx.restore();
       }
+      if (e.routeConsequence) {
+        ctx.save();
+        const rcColor = e.routeConsequence.color || '#ff3df2';
+        ctx.globalAlpha = .6 + Math.sin(performance.now() * .01) * .2;
+        ctx.strokeStyle = rcColor; ctx.lineWidth = 3; ctx.shadowColor = rcColor; ctx.shadowBlur = 18;
+        ctx.setLineDash([7, 5]);
+        ctx.beginPath(); ctx.arc(e.x, e.y, er + 16, 0, TWO_PI); ctx.stroke(); ctx.setLineDash([]);
+        ctx.fillStyle = rcColor; ctx.font = `900 ${Math.max(12, er * .82)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('賞', e.x, e.y - er - 16);
+        ctx.restore();
+      }
       ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(performance.now() * .001 * e.spin);
       ctx.shadowColor = e.color; ctx.shadowBlur = e.hit > 0 ? 20 : 9; ctx.fillStyle = e.hit > 0 ? '#fff' : e.color;
       if (e.type === 'bomber' && ed < 150) { ctx.shadowColor = '#ff7a3d'; ctx.shadowBlur = 22; ctx.globalAlpha = .62 + Math.sin(performance.now() * .024) * .28; }
@@ -4364,6 +4575,9 @@
     const hasObjective = !!beacon;
     const routeNodes = worldFeatures.filter(f => f.type === 'routeChoice' && !f.dead);
     const hasRouteChoice = routeNodes.length > 0;
+    const routeConsequenceTarget = activeRouteConsequenceTarget();
+    const routeConsequenceState = activeRouteConsequences.find(c => c.status === 'active');
+    const hasRouteConsequence = !!routeConsequenceTarget || !!routeConsequenceState;
     const boss = currentBoss();
     const bossWindow = boss?.breakWindow;
     const hasBoss = !!boss && bossActive;
@@ -4395,6 +4609,11 @@
         detail = `抉擇 ${names}｜靠近一個節點充能`;
         color = routeNodes[0].routeChoice?.color || '#bdfcff';
       }
+      else if (hasRouteConsequence) {
+        const state = routeConsequenceState || routeConsequenceTarget?.routeConsequence;
+        detail = `後果 ${state?.choiceName || '路線'}→${state?.title || routeConsequenceTarget?.routeConsequence?.name || '任務'}｜${state?.def?.action || '完成路線後果'}`;
+        color = state?.color || routeConsequenceTarget?.routeConsequence?.color || '#ffd166';
+      }
       else if (beacon) {
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
         detail = `目標 ${def.name}→${objectiveChainPreview(beacon)}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
@@ -4406,7 +4625,7 @@
         color = '#bdfcff';
       }
       const missionLabel = mission?.done ? '任務完成' : (mission?.text || '任務');
-      const routeLabel = activeRouteChoices.length ? `｜路線 ${currentRouteChoice().name}` : routeChoiceOffer ? '｜抉擇中' : '';
+      const routeLabel = hasRouteConsequence ? `｜後果 ${activeRouteConsequenceLabel()}` : activeRouteChoices.length ? `｜路線 ${currentRouteChoice().name}` : routeChoiceOffer ? '｜抉擇中' : '';
       ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '900 9px system-ui';
       ctx.fillText(`${missionLabel}｜${zone.name || '星環'}｜${currentContract().name}${routeLabel}`, x + 7, y + 15, w - 14);
       ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '800 9px system-ui';
@@ -4425,6 +4644,12 @@
         ctx.fillStyle = activeTacticBreak.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTacticBreak.timer / activeTacticBreak.duration, 0, 1), 2);
       } else if (activeTempoBoost) {
         ctx.fillStyle = activeTempoBoost.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTempoBoost.timer / activeTempoBoost.duration, 0, 1), 2);
+      } else if (hasRouteConsequence) {
+        const target = routeConsequenceTarget;
+        const state = routeConsequenceState || target?.routeConsequence;
+        const def = state?.def || routeConsequenceDef(target?.choiceId || target?.routeConsequence?.choiceId);
+        const pct = target?.type === 'routeConsequence' ? clamp((target.charge || 0) / (target.chargeNeed || def.chargeNeed || 2.6), 0, 1) : target?.routeConsequence ? 1 - clamp(target.hp / Math.max(1, target.maxHp || 1), 0, 1) : 0;
+        ctx.fillStyle = state?.color || def.color || '#ffd166'; ctx.fillRect(x + 7, y + h - 3, (w - 14) * pct, 2);
       } else if (beacon) {
         const sidePct = clamp(objectiveSideProgress(beacon) / objectiveSideGoal(beacon), 0, 1);
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
@@ -4434,7 +4659,7 @@
       return;
     }
     const x = 12; const y = 112; const w = Math.min(336, W - 24);
-    const h = 150 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -4453,26 +4678,40 @@
     ctx.fillText(`P1 節奏｜${stage.name} ${stage.waves}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(stage.desc || '星環節奏穩定。', x + 10, lineY + 15, w - 20);
-    lineY += 22;
+    lineY += 26;
     const anomaly = currentAnomaly();
     ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '900 11px system-ui';
     ctx.fillText(`P1 異變｜${anomaly.name}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(`${anomaly.tag || anomaly.desc || '本局規則'}｜${anomalyTaskText()}`, x + 10, lineY + 15, w - 20);
-    lineY += 22;
+    lineY += 26;
     const contract = currentContract();
     ctx.fillStyle = contract.color || '#bdfcff'; ctx.font = '900 11px system-ui';
     ctx.fillText(`P1 ${contract.kind}｜${contract.name}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(contract.tag || contract.desc || '本局委託', x + 10, lineY + 15, w - 20);
-    lineY += 22;
+    lineY += 26;
     const route = routeChoiceEffects();
     const routeStatus = routeChoiceOffer ? `抉擇中｜${routeChoiceOffer.pair.map(id => routeChoiceDefs[id]?.name).filter(Boolean).join(' vs ')}` : routeChoiceTitle();
     ctx.fillStyle = route.color || '#bdfcff'; ctx.font = '900 11px system-ui';
     ctx.fillText(`P1 路線｜${routeStatus}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(activeRouteChoices.length ? route.tag : '第 2/4 波靠近一個節點充能，另一個會消失。', x + 10, lineY + 15, w - 20);
-    lineY += 22;
+    lineY += 26;
+    if (hasRouteConsequence) {
+      const state = routeConsequenceState || routeConsequenceTarget?.routeConsequence;
+      const def = state?.def || routeConsequenceDef(routeConsequenceTarget?.choiceId || routeConsequenceTarget?.routeConsequence?.choiceId);
+      const pct = routeConsequenceTarget?.type === 'routeConsequence'
+        ? clamp((routeConsequenceTarget.charge || 0) / (routeConsequenceTarget.chargeNeed || def.chargeNeed || 2.6), 0, 1)
+        : routeConsequenceTarget?.routeConsequence ? 1 - clamp(routeConsequenceTarget.hp / Math.max(1, routeConsequenceTarget.maxHp || 1), 0, 1) : 0;
+      ctx.fillStyle = state?.color || def.color || '#ffd166'; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P1 後果｜${state?.choiceName || '路線'} → ${state?.title || def.title}`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+      ctx.fillText(def.action || def.tag || '完成後果任務', x + 10, lineY + 15, w - 20);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 21, w - 20, 3);
+      ctx.fillStyle = state?.color || def.color || '#ffd166'; ctx.fillRect(x + 10, lineY + 21, (w - 20) * pct, 3);
+      lineY += 36;
+    }
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
       ctx.fillText(`P2 事件｜${activeEvent.name} ${Math.ceil(eventTimer)}s`, x + 10, lineY);
@@ -4569,27 +4808,30 @@
   function drawTargetGuide() {
     if (!player || !running || gameOver) return;
     const routeTarget = worldFeatures.find(f => f.type === 'routeChoice' && !f.dead);
-    const target = routeTarget || beacon;
+    const consequenceTarget = activeRouteConsequenceTarget();
+    const target = routeTarget || consequenceTarget || beacon;
     if (!target) return;
     const isRoute = target.type === 'routeChoice';
+    const isConsequence = target.type === 'routeConsequence' || !!target.routeConsequence;
     const c = camera();
     const sx = target.x - c.x;
     const sy = target.y - c.y;
     const d = Math.hypot(target.x - player.x, target.y - player.y);
-    const def = isRoute ? (target.routeChoice || routeChoiceDefs[target.choiceId] || neutralRouteChoice) : (objectiveDefs[target.kind] || objectiveDefs.scan);
-    const color = def.color || '#bdfcff';
+    const state = isConsequence ? (target.routeConsequence?.def ? target.routeConsequence : activeRouteConsequences.find(rc => rc.id === (target.routeConsequence?.id || target.consequenceId))) : null;
+    const def = isRoute ? (target.routeChoice || routeChoiceDefs[target.choiceId] || neutralRouteChoice) : isConsequence ? (state?.def || routeConsequenceDef(target.choiceId || target.routeConsequence?.choiceId)) : (objectiveDefs[target.kind] || objectiveDefs.scan);
+    const color = def.color || target.routeConsequence?.color || '#bdfcff';
     const inside = sx > 46 && sx < W - 46 && sy > 92 && sy < H - 46;
     const pulse = .55 + Math.sin(performance.now() * .006) * .22;
-    const charge = isRoute ? clamp((target.charge || 0) / (target.chargeNeed || 1.75), 0, 1) : clamp((beacon.charge || 0) / def.charge, 0, 1);
+    const charge = isRoute ? clamp((target.charge || 0) / (target.chargeNeed || 1.75), 0, 1) : isConsequence ? clamp((target.charge || 0) / (target.chargeNeed || def.chargeNeed || 2.6), 0, 1) : clamp((beacon.charge || 0) / def.charge, 0, 1);
     ctx.save();
     ctx.shadowColor = color;
-    ctx.shadowBlur = isRoute ? 18 : 14;
+    ctx.shadowBlur = isRoute || isConsequence ? 18 : 14;
     if (inside) {
       ctx.globalAlpha = .42 + pulse * .36;
-      ctx.strokeStyle = color; ctx.lineWidth = isRoute ? 2.6 : 2;
-      ctx.beginPath(); ctx.arc(sx, sy, (isRoute ? 44 : 32) + pulse * 7, 0, TWO_PI); ctx.stroke();
-      if (isRoute) { ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.arc(sx, sy, 58 + pulse * 6, 0, TWO_PI); ctx.stroke(); ctx.setLineDash([]); }
-      if (charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, isRoute ? 62 : 44, -Math.PI / 2, -Math.PI / 2 + TWO_PI * charge); ctx.stroke(); }
+      ctx.strokeStyle = color; ctx.lineWidth = isRoute || isConsequence ? 2.6 : 2;
+      ctx.beginPath(); ctx.arc(sx, sy, (isRoute || isConsequence ? 44 : 32) + pulse * 7, 0, TWO_PI); ctx.stroke();
+      if (isRoute || isConsequence) { ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.arc(sx, sy, 58 + pulse * 6, 0, TWO_PI); ctx.stroke(); ctx.setLineDash([]); }
+      if (charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, isRoute || isConsequence ? 62 : 44, -Math.PI / 2, -Math.PI / 2 + TWO_PI * charge); ctx.stroke(); }
     } else {
       const a = Math.atan2(sy - H / 2, sx - W / 2);
       const x = clamp(W / 2 + Math.cos(a) * (Math.min(W, H) * .43), 36, W - 36);
@@ -4598,8 +4840,8 @@
       ctx.translate(x, y); ctx.rotate(a); ctx.scale(scale, scale);
       ctx.globalAlpha = .72 + pulse * .24;
       ctx.fillStyle = color; ctx.strokeStyle = '#050712'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(isRoute ? 21 : 17, 0); ctx.lineTo(-10, -11); ctx.lineTo(-5, 0); ctx.lineTo(-10, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, isRoute ? 27 : 22, -0.6, 0.6); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(isRoute || isConsequence ? 21 : 17, 0); ctx.lineTo(-10, -11); ctx.lineTo(-5, 0); ctx.lineTo(-10, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, isRoute || isConsequence ? 27 : 22, -0.6, 0.6); ctx.stroke();
     }
     ctx.restore();
   }
