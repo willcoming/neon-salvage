@@ -443,7 +443,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -539,14 +539,90 @@
   }
 
   const routeConsequenceDefs = {
-    safeSupply: { id: 'supplyConvoy', title: '補給護送', mode: 'convoy', label: '補給護送', action: '靠近補給艙護送充能', tag: '完成後：護盾+22｜護盾整備', color: '#4dff88', chargeNeed: 3.6, hp: 3.2, tempo: 'supply', rewardScrap: 14, rewardXp: .16, powerup: 'heal' },
-    bountyRisk: { id: 'bountyMark', title: '懸賞目標', mode: 'bounty', label: '懸賞菁英', action: '擊破標記菁英', tag: '完成後：懸賞+36｜菁英破甲', color: '#ff3df2', tempo: 'eliteStorm', rewardScrap: 36, rewardXp: .22, powerup: 'nova' },
-    weakScan: { id: 'scanRelay', title: '掃描中繼', mode: 'relay', label: '掃描中繼', action: '靠近中繼站完成掃描', tag: '完成後：弱點資料+1｜EMP 護層', color: '#bdfcff', chargeNeed: 2.3, tempo: 'empStorm', rewardScrap: 18, rewardXp: .28, weakScan: true },
-    crystalDrill: { id: 'crystalDrill', title: '晶礦鑽探', mode: 'drill', label: '晶礦鑽探', action: '站在鑽探圈收集晶礦', tag: '完成後：碎晶雨｜拾荒磁暴', color: '#ffd166', chargeNeed: 2.9, tempo: 'salvageRush', rewardScrap: 24, rewardXp: .14, shards: 11 }
+    safeSupply: { id: 'supplyConvoy', title: '補給護送', mode: 'convoy', label: '補給護送', action: '靠近補給艙護送充能', tag: '完成後：護盾+22｜護盾整備', color: '#4dff88', chargeNeed: 3.6, hp: 3.2, tempo: 'supply', rewardScrap: 14, rewardXp: .16, powerup: 'heal', bossPrep: { id: 'defenseCache', name: '防禦補給艙', tag: 'Boss前維修核心｜Boss彈幕-4%', color: '#4dff88', shotMult: .96, heal: 18, powerups: ['heal'] } },
+    bountyRisk: { id: 'bountyMark', title: '懸賞目標', mode: 'bounty', label: '懸賞菁英', action: '擊破標記菁英', tag: '完成後：懸賞+36｜菁英破甲', color: '#ff3df2', tempo: 'eliteStorm', rewardScrap: 36, rewardXp: .22, powerup: 'nova', bossPrep: { id: 'bountyWeakness', name: '懸賞弱點', tag: 'Boss生命-4%｜破招門檻-8%｜掉落+12', color: '#ff3df2', hpMult: .96, breakThresholdMult: .92, rewardBonus: 12, powerups: ['nova'] } },
+    weakScan: { id: 'scanRelay', title: '掃描中繼', mode: 'relay', label: '掃描中繼', action: '靠近中繼站完成掃描', tag: '完成後：弱點資料+1｜EMP 護層', color: '#bdfcff', chargeNeed: 2.3, tempo: 'empStorm', rewardScrap: 18, rewardXp: .28, weakScan: true, bossPrep: { id: 'readCalibration', name: '讀題校準', tag: '破招窗口+0.7s｜破招門檻-12%', color: '#bdfcff', abilityMult: 1.06, breakThresholdMult: .88, breakWindowBonus: .7 } },
+    crystalDrill: { id: 'crystalDrill', title: '晶礦鑽探', mode: 'drill', label: '晶礦鑽探', action: '站在鑽探圈收集晶礦', tag: '完成後：碎晶雨｜拾荒磁暴', color: '#ffd166', chargeNeed: 2.9, tempo: 'salvageRush', rewardScrap: 24, rewardXp: .14, shards: 11, bossPrep: { id: 'crystalStake', name: '晶礦賭注', tag: 'Boss掉落+22｜高速敵伏擊', color: '#ffd166', speedMult: 1.03, rewardBonus: 22, shards: 8, adds: ['sprinter', 'sprinter'] } }
   };
 
   function routeConsequenceDef(choiceId) {
     return routeConsequenceDefs[choiceId] || routeConsequenceDefs.safeSupply;
+  }
+
+  function completedRouteConsequences() {
+    return activeRouteConsequences.filter(c => c.status === 'complete');
+  }
+
+  function routeBossPrepEffects() {
+    const complete = completedRouteConsequences();
+    const acc = { count: 0, id: '', name: '', tag: '', names: [], tags: [], color: '', hpMult: 1, shotMult: 1, speedMult: 1, abilityMult: 1, rewardBonus: 0, breakThresholdMult: 1, breakWindowBonus: 0, heal: 0, powerups: [], shards: 0, adds: [] };
+    for (const state of complete) {
+      const def = state.def || routeConsequenceDef(state.choiceId);
+      const prep = def.bossPrep;
+      if (!prep) continue;
+      acc.count++;
+      acc.names.push(prep.name);
+      acc.tags.push(prep.tag);
+      acc.color = prep.color || state.color || acc.color;
+      acc.hpMult *= prep.hpMult || 1;
+      acc.shotMult *= prep.shotMult || 1;
+      acc.speedMult *= prep.speedMult || 1;
+      acc.abilityMult *= prep.abilityMult || 1;
+      acc.breakThresholdMult *= prep.breakThresholdMult || 1;
+      acc.breakWindowBonus += prep.breakWindowBonus || 0;
+      acc.rewardBonus += prep.rewardBonus || 0;
+      acc.heal += prep.heal || 0;
+      acc.shards += prep.shards || 0;
+      if (prep.powerups?.length) acc.powerups.push(...prep.powerups);
+      if (prep.adds?.length) acc.adds.push(...prep.adds);
+    }
+    acc.id = complete.map(c => c.choiceId).join('+') || 'none';
+    acc.name = acc.names.join('+');
+    acc.tag = acc.tags.join('｜');
+    return acc;
+  }
+
+  function routeBossPrepTitle() {
+    const prep = routeBossPrepEffects();
+    return prep.count ? prep.name : '尚未取得 Boss 前預備';
+  }
+
+  function recordRouteBossPrep(state) {
+    if (!state || !runStats) return;
+    const def = state.def || routeConsequenceDef(state.choiceId);
+    const prep = def.bossPrep;
+    if (!prep) return;
+    const label = `${state.choiceName}→${prep.name}｜${prep.tag}`;
+    if (!runStats.routeBossPreps.includes(label)) runStats.routeBossPreps.push(label);
+    recordPaceNode(`Boss前預備取得｜${label}`);
+  }
+
+  function applyBossPrepSupport(boss = currentBoss()) {
+    if (!player || !bossActive) return '';
+    const prep = routeBossPrepEffects();
+    if (!prep.count) return '';
+    const effects = [];
+    if (prep.heal) { player.hp = Math.min(player.maxHp, player.hp + prep.heal); effects.push(`護盾+${prep.heal}`); }
+    for (const kind of prep.powerups) { dropPowerup(kind, player.x + rand(-92, 92), player.y + rand(-70, 70), 22); effects.push(kind === 'nova' ? '新星炸彈' : '維修核心'); }
+    for (let i = 0; i < prep.shards; i++) dropShard(player.x + rand(-120, 120), player.y + rand(-88, 88), 1);
+    if (prep.shards) effects.push(`Boss前晶礦x${prep.shards}`);
+    for (const type of prep.adds) {
+      const add = spawnEnemy(type);
+      if (add) {
+        add.x = (boss?.x || player.x) + rand(-130, 130);
+        add.y = (boss?.y || player.y) + rand(90, 180);
+        add.telegraph = Math.max(add.telegraph || 0, .65);
+        add.objectiveTarget = true;
+        effects.push(`伏擊:${add.label || type}`);
+      }
+    }
+    const text = effects.join('｜') || prep.tag;
+    if (boss) addText(boss.x, boss.y - boss.r - 48, `Boss前預備：${prep.name}`, prep.color || boss.color || '#ffd166');
+    burst(player.x, player.y, prep.color || '#ffd166', 24, 1.05);
+    if (runStats) { runStats.prepDrops += prep.count; recordPaceNode(`Boss前預備啟動｜${prep.name}｜${text}`); }
+    flash(`Boss 前預備：${prep.name}｜${text}`);
+    wakeMissionHud(5.2);
+    return text;
   }
 
   function activeRouteConsequenceTarget() {
@@ -593,6 +669,7 @@
     if (boost) effects.push(`${boost.name} ${Math.ceil(boost.duration)}s`);
     const text = effects.join('｜') || def.tag;
     recordRouteConsequence(state, 'complete', text);
+    recordRouteBossPrep(state);
     recordPaceNode(`路線後果完成｜${state.choiceName}→${state.title}`);
     if (source) source.dead = true;
     addText(source?.x || player.x, (source?.y || player.y) - 54, `${state.title} 完成`, def.color || '#bdfcff');
@@ -710,7 +787,8 @@
     const bossSig = boss ? `${boss.bossVariant}:${boss.phase2 ? 1 : 0}:${boss.breakWindow?.name || ''}:${Math.round((boss.breakWindow?.progress || 0) / Math.max(1, boss.breakWindow?.threshold || 1) * 10)}` : '';
     const routeSig = `${activeRouteChoices.map(c => c.id).join('+')}:${routeChoiceOffer?.id || ''}:${worldFeatures.filter(f => f.type === 'routeChoice').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}`).join(',')}`;
     const consequenceSig = `${activeRouteConsequences.map(c => `${c.id}:${c.status}`).join(',')}:${worldFeatures.filter(f => f.type === 'routeConsequence').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}:${Math.ceil(f.hp || 0)}`).join(',')}:${enemies.filter(e => e.routeConsequence).map(e => `${e.routeConsequence.id}:${Math.round(e.hp)}`).join(',')}`;
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, bossSig].join('|');
+    const prepSig = routeBossPrepEffects().names.join('+');
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, prepSig, bossSig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -958,7 +1036,8 @@
   function combatReport() {
     const boss = runStats?.bossKillTime ? `｜Boss ${formatTime(runStats.bossKillTime)}` : '';
     const consequence = runStats?.routeConsequences?.length ? `｜後果 ${runStats.routeConsequences.length}` : '';
-    return `戰鬥報告｜${contractTitle()}｜路線 ${routeChoiceTitle()}${consequence}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
+    const prep = runStats?.routeBossPreps?.length ? `｜Boss預備 ${runStats.routeBossPreps.length}` : '';
+    return `戰鬥報告｜${contractTitle()}｜路線 ${routeChoiceTitle()}${consequence}${prep}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
   }
 
   function escapeHtml(value) {
@@ -1057,6 +1136,7 @@
       routeConsequences: [...(runStats?.routeConsequences || [])].slice(-5),
       routeConsequenceEffects: [...(runStats?.routeConsequenceEffects || [])].slice(-5),
       routeConsequenceMisses: [...(runStats?.routeConsequenceMisses || [])].slice(-5),
+      routeBossPreps: [...(runStats?.routeBossPreps || [])].slice(-5),
       zone: runStats?.zone || currentZone().name,
       anomaly: runStats?.anomaly || currentAnomaly().name,
       anomalyTasks: [...(runStats?.anomalyTasks || [])].slice(-5),
@@ -1162,6 +1242,7 @@
     const routeConsequenceHtml = record.routeConsequences?.length ? record.routeConsequences.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成路線後果</span>';
     const routeConsequenceEffectHtml = record.routeConsequenceEffects?.length ? record.routeConsequenceEffects.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未取得後果獎勵</span>';
     const routeConsequenceMissHtml = record.routeConsequenceMisses?.length ? record.routeConsequenceMisses.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>沒有錯過後果任務</span>';
+    const routeBossPrepHtml = record.routeBossPreps?.length ? record.routeBossPreps.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未取得 Boss 前預備</span>';
     const anomalyHtml = record.anomalyTasks?.length ? record.anomalyTasks.map(a => `<span>${escapeHtml(a)}</span>`).join('') : '<span>尚未完成異變任務</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
     const tacticBreakHtml = record.tacticBreaks?.length ? record.tacticBreaks.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未破解戰術</span>';
@@ -1177,6 +1258,7 @@
       ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
       ['路線', record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇'],
       ['後果', record.routeConsequences?.length ? `${record.routeConsequences.length} 完成` : record.routeConsequenceMisses?.length ? '已錯過' : '未觸發'],
+      ['Boss預備', record.routeBossPreps?.length ? `${record.routeBossPreps.length} 個` : '未取得'],
       ['壓力', `${record.pressure || '-'}｜${(record.budget || '-').split('｜')[0]}`],
       ['下一步', record.challenges?.[0] || '自由挑戰']
     ].map(([k, v]) => `<span><b>${escapeHtml(k)}</b>${escapeHtml(v)}</span>`).join('');
@@ -1195,6 +1277,7 @@
       <div class="skill-chips"><b>抉擇效果</b>${routeChoiceEffectHtml}</div>
       <div class="skill-chips"><b>路線後果</b>${routeConsequenceHtml}</div>
       <div class="skill-chips"><b>後果獎勵</b>${routeConsequenceEffectHtml}</div>
+      <div class="skill-chips"><b>Boss 前預備</b>${routeBossPrepHtml}</div>
       <div class="skill-chips"><b>錯過後果</b>${routeConsequenceMissHtml}</div>
       <div class="skill-chips"><b>事件加成</b>${boostHtml}</div>
       <div class="skill-chips"><b>異變任務</b>${anomalyHtml}</div>
@@ -1732,8 +1815,10 @@
 
   function armBossBreakWindow(e, info = bossReadInfo(e)) {
     if (!e || e.type !== 'boss') return null;
-    const threshold = Math.max(36, e.maxHp * (e.finalBoss ? .035 : .045));
-    e.breakWindow = { name: info.breakName || 'Boss 破防', source: info.title || info.mechanic || 'Boss 招式', counter: info.counter || '', threshold, progress: 0, timer: 4.2, duration: 4.2, color: info.color || e.color || '#ff4d6d' };
+    const modifier = e.bossModifier || currentBossModifier();
+    const threshold = Math.max(28, e.maxHp * (e.finalBoss ? .035 : .045) * (modifier.breakThresholdMult || 1));
+    const duration = 4.2 + (modifier.breakWindowBonus || 0);
+    e.breakWindow = { name: info.breakName || 'Boss 破防', source: info.title || info.mechanic || 'Boss 招式', counter: info.counter || '', threshold, progress: 0, timer: duration, duration, color: info.color || e.color || '#ff4d6d' };
     wakeMissionHud(4.6);
     return e.breakWindow;
   }
@@ -2156,22 +2241,30 @@
   }
 
   function currentBossModifier() {
-    const base = currentZone().bossMod || { id: 'standardCore', name: '標準核心', tag: '無額外 Boss modifier', color: currentZone().color || '#37f6ff', desc: '標準 Boss 規則。', hpMult: 1, shotMult: 1, speedMult: 1, abilityMult: 1, rewardBonus: 0 };
+    const base = currentZone().bossMod || { id: 'standardCore', name: '標準核心', tag: '無額外 Boss modifier', color: currentZone().color || '#37f6ff', desc: '標準 Boss 規則。', hpMult: 1, shotMult: 1, speedMult: 1, abilityMult: 1, rewardBonus: 0, breakThresholdMult: 1, breakWindowBonus: 0 };
     const route = routeChoiceEffects();
-    if (!activeRouteChoices.length) return base;
-    const routeBossTags = activeRouteChoices.map(c => c.bossTag || c.tag).filter(Boolean);
+    const prep = routeBossPrepEffects();
+    const hasRoute = activeRouteChoices.length > 0;
+    const hasPrep = prep.count > 0;
+    if (!hasRoute && !hasPrep) return base;
+    const routeBossTags = hasRoute ? activeRouteChoices.map(c => c.bossTag || c.tag).filter(Boolean) : [];
+    const nameParts = [base.name];
+    if (hasRoute) nameParts.push(currentRouteChoice().name);
+    if (hasPrep) nameParts.push(prep.name);
     return {
       ...base,
-      id: `${base.id}+${route.id}`,
-      name: `${base.name}+${currentRouteChoice().name}`,
-      tag: [base.tag, ...routeBossTags].filter(Boolean).join('｜'),
-      desc: `${base.desc || '標準 Boss 規則。'}｜局內路線：${route.name}`,
-      color: currentRouteChoice().color || base.color,
-      hpMult: (base.hpMult || 1) * (route.bossHpMult || 1),
-      shotMult: (base.shotMult || 1) * (route.bossShotMult || 1),
-      speedMult: (base.speedMult || 1) * (route.bossSpeedMult || 1),
-      abilityMult: (base.abilityMult || 1) * (route.bossAbilityMult || 1),
-      rewardBonus: (base.rewardBonus || 0) + (route.bossRewardBonus || 0)
+      id: [base.id, hasRoute ? route.id : '', hasPrep ? `prep-${prep.id}` : ''].filter(Boolean).join('+'),
+      name: nameParts.join('+'),
+      tag: [base.tag, ...routeBossTags, prep.tag].filter(Boolean).join('｜'),
+      desc: [base.desc || '標準 Boss 規則。', hasRoute ? `局內路線：${route.name}` : '', hasPrep ? `Boss前預備：${prep.name}` : ''].filter(Boolean).join('｜'),
+      color: prep.color || (hasRoute ? currentRouteChoice().color : '') || base.color,
+      hpMult: (base.hpMult || 1) * (hasRoute ? (route.bossHpMult || 1) : 1) * (prep.hpMult || 1),
+      shotMult: (base.shotMult || 1) * (hasRoute ? (route.bossShotMult || 1) : 1) * (prep.shotMult || 1),
+      speedMult: (base.speedMult || 1) * (hasRoute ? (route.bossSpeedMult || 1) : 1) * (prep.speedMult || 1),
+      abilityMult: (base.abilityMult || 1) * (hasRoute ? (route.bossAbilityMult || 1) : 1) * (prep.abilityMult || 1),
+      rewardBonus: (base.rewardBonus || 0) + (hasRoute ? (route.bossRewardBonus || 0) : 0) + (prep.rewardBonus || 0),
+      breakThresholdMult: (base.breakThresholdMult || 1) * (prep.breakThresholdMult || 1),
+      breakWindowBonus: (base.breakWindowBonus || 0) + (prep.breakWindowBonus || 0)
     };
   }
 
@@ -2518,12 +2611,15 @@
       setActiveTactic(chooseTacticForWave());
       if (activeTactic) spawnTacticPack(activeTactic, true);
     }
-    if (bossActive) spawnBoss();
+    const bossRef = bossActive ? spawnBoss() : null;
+    const bossPrepMsg = bossActive ? applyBossPrepSupport(bossRef) : '';
     const supportMsg = applyWavePaceSupport(wave, bossActive);
     if (runStats) { runStats.waveStart = runTime; if (bossActive) runStats.bossStart = runTime; }
     if (!bossActive) {
       const waveMsg = supportMsg || (activeTactic ? `戰術：${activeTactic.name}｜反制：${tacticCounterText(activeTactic)}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜${contractTitle()}｜異變：${currentAnomaly().name}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
       flash(waveMsg);
+    } else if (bossPrepMsg) {
+      setTimeout(() => { if (running && !gameOver && bossActive && currentBoss()) flash(`Boss 前預備啟動｜${routeBossPrepTitle()}｜${bossPrepMsg}`); }, 720);
     }
     const stageMsg = stageIntroForWave(wave, bossActive);
     if (stageMsg && !tutorialShown.has(`stage-${wave}`)) setTimeout(() => { if (running && !gameOver && !skillChoosing && wave === n) { tutorialShown.add(`stage-${wave}`); flash(stageMsg); } }, 520);
@@ -2702,6 +2798,7 @@
     announceBoss(e, 'intro');
     sfx('boss');
     addShake(v.final ? 6 : 4, .22);
+    return e;
   }
 
   function nearestEnemy(maxRange = Infinity) {
@@ -2888,7 +2985,7 @@
   }
 
   function bossAbilityDelay(e) {
-    const mult = e.phase2 ? .72 : 1;
+    const mult = (e.phase2 ? .72 : 1) * (e.bossModifier?.abilityMult || 1);
     if (e.finalBoss) return rand(2.0, 3.2) * mult;
     if (e.bossVariant === 'forge') return rand(2.2, 3.4) * mult;
     if (e.bossVariant === 'void') return rand(2.8, 4.0) * mult;
@@ -4578,6 +4675,8 @@
     const routeConsequenceTarget = activeRouteConsequenceTarget();
     const routeConsequenceState = activeRouteConsequences.find(c => c.status === 'active');
     const hasRouteConsequence = !!routeConsequenceTarget || !!routeConsequenceState;
+    const bossPrep = routeBossPrepEffects();
+    const hasBossPrep = bossPrep.count > 0;
     const boss = currentBoss();
     const bossWindow = boss?.breakWindow;
     const hasBoss = !!boss && bossActive;
@@ -4614,18 +4713,19 @@
         detail = `後果 ${state?.choiceName || '路線'}→${state?.title || routeConsequenceTarget?.routeConsequence?.name || '任務'}｜${state?.def?.action || '完成路線後果'}`;
         color = state?.color || routeConsequenceTarget?.routeConsequence?.color || '#ffd166';
       }
+      else if (hasBossPrep) { detail = `Boss預備 ${bossPrep.name}｜${bossPrep.tag}`; color = bossPrep.color || '#ffd166'; }
       else if (beacon) {
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
         detail = `目標 ${def.name}→${objectiveChainPreview(beacon)}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
         color = def.color;
       }
-      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeTempoBoost && !hasTactic && !beacon) {
+      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
         const tp = tutorialProgress(tutorialStep);
         detail = `教學 ${tutorialStep.label}｜${tp.value}/${tp.target}`;
         color = '#bdfcff';
       }
       const missionLabel = mission?.done ? '任務完成' : (mission?.text || '任務');
-      const routeLabel = hasRouteConsequence ? `｜後果 ${activeRouteConsequenceLabel()}` : activeRouteChoices.length ? `｜路線 ${currentRouteChoice().name}` : routeChoiceOffer ? '｜抉擇中' : '';
+      const routeLabel = hasRouteConsequence ? `｜後果 ${activeRouteConsequenceLabel()}` : hasBossPrep ? `｜Boss預備 ${bossPrep.name}` : activeRouteChoices.length ? `｜路線 ${currentRouteChoice().name}` : routeChoiceOffer ? '｜抉擇中' : '';
       ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '900 9px system-ui';
       ctx.fillText(`${missionLabel}｜${zone.name || '星環'}｜${currentContract().name}${routeLabel}`, x + 7, y + 15, w - 14);
       ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '800 9px system-ui';
@@ -4650,6 +4750,8 @@
         const def = state?.def || routeConsequenceDef(target?.choiceId || target?.routeConsequence?.choiceId);
         const pct = target?.type === 'routeConsequence' ? clamp((target.charge || 0) / (target.chargeNeed || def.chargeNeed || 2.6), 0, 1) : target?.routeConsequence ? 1 - clamp(target.hp / Math.max(1, target.maxHp || 1), 0, 1) : 0;
         ctx.fillStyle = state?.color || def.color || '#ffd166'; ctx.fillRect(x + 7, y + h - 3, (w - 14) * pct, 2);
+      } else if (hasBossPrep) {
+        ctx.fillStyle = bossPrep.color || '#ffd166'; ctx.fillRect(x + 7, y + h - 3, w - 14, 2);
       } else if (beacon) {
         const sidePct = clamp(objectiveSideProgress(beacon) / objectiveSideGoal(beacon), 0, 1);
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
@@ -4659,7 +4761,7 @@
       return;
     }
     const x = 12; const y = 112; const w = Math.min(336, W - 24);
-    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -4711,6 +4813,13 @@
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 21, w - 20, 3);
       ctx.fillStyle = state?.color || def.color || '#ffd166'; ctx.fillRect(x + 10, lineY + 21, (w - 20) * pct, 3);
       lineY += 36;
+    }
+    if (!hasRouteConsequence && hasBossPrep) {
+      ctx.fillStyle = bossPrep.color || '#ffd166'; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P1 Boss預備｜${bossPrep.name}`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+      ctx.fillText(bossPrep.tag || '完成後果後，下一個 Boss 會帶入預備收益。', x + 10, lineY + 15, w - 20);
+      lineY += 30;
     }
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
