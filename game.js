@@ -133,6 +133,7 @@
   let activeEvent = null;
   let activeZone = null;
   let activeAnomaly = null;
+  let activeContract = null;
   let anomalyState = null;
   let activeTactic = null;
   let eventTimer = 0;
@@ -218,7 +219,7 @@
     const base = budgets[n] || Math.round(34 + n * 3.2);
     const mobileEase = controlMode === 'touch' ? .92 : 1;
     const tutorialEase = tutorialRun && n <= 2 ? .72 : 1;
-    return Math.floor(base * mobileEase * tutorialEase * currentDifficulty().enemy * (currentAnomaly()?.enemyMult || 1));
+    return Math.floor(base * mobileEase * tutorialEase * currentDifficulty().enemy * (currentAnomaly()?.enemyMult || 1) * (currentContract()?.enemyMult || 1));
   }
 
   function eventChanceForWave(n = wave) {
@@ -437,7 +438,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -447,12 +448,44 @@
     convoy: { id: 'convoy', name: '補給航道', tag: '補給多｜節奏穩', color: '#4dff88', desc: '維修與補給事件更常見，前中期更容易整理 build。', events: ['supply', 'rich', 'overclock'], objectiveBias: ['scan', 'harvest'], support: true, rewardMult: 1.05 }
   };
 
+  const neutralContract = { id: 'standard', kind: '契約', name: '標準委託', tag: '無額外改變', color: '#bdfcff', desc: '標準星環委託。', damageMult: 1, fireRateMult: 1, incomingMult: 1, magnetBonus: 0, rewardMult: 1, enemyMult: 1, bossHpMult: 1 };
+
+  const runContractDefs = {
+    overdrive: { id: 'overdrive', kind: '契約', name: '過載合約', tag: '射速+8%｜敵量+6%', color: '#37f6ff', desc: '主砲節奏加快，但訊號會吸引更多敵群。', fireRateMult: .92, enemyMult: 1.06, startXp: .12 },
+    glass: { id: 'glass', kind: '詛咒', name: '玻璃核心', tag: '火力+16%｜受傷+14%', color: '#ff4d6d', desc: '輸出更高、錯誤更痛；適合追求快速擊破。', damageMult: 1.16, incomingMult: 1.14, rewardMult: 1.05 },
+    salvageBond: { id: 'salvageBond', kind: '契約', name: '拾荒債券', tag: '磁吸+90｜碎晶+8%｜Boss護甲+6%', color: '#ffd166', desc: '拾荒效率提升，但 Boss 攜帶加固外殼。', magnetBonus: 90, rewardMult: 1.08, bossHpMult: 1.06, startShards: 5 },
+    convoyPledge: { id: 'convoyPledge', kind: '契約', name: '護航協議', tag: '受傷-10%｜火力-4%', color: '#4dff88', desc: '護盾更穩，輸出略降；適合保守通關。', incomingMult: .9, damageMult: .96, startPowerup: 'heal' }
+  };
+
   function chooseRunAnomaly() {
     return { ...choose(Object.values(runAnomalyDefs)) };
   }
 
+  function chooseRunContract() {
+    return { ...choose(Object.values(runContractDefs)) };
+  }
+
   function currentAnomaly() {
     return activeAnomaly || runAnomalyDefs.salvage;
+  }
+
+  function currentContract() {
+    return activeContract || neutralContract;
+  }
+
+  function contractTitle(contract = currentContract()) {
+    return `${contract.kind || '契約'}｜${contract.name || '標準委託'}`;
+  }
+
+  function applyRunContractOpening() {
+    const contract = currentContract();
+    if (!player || contract.id === 'standard') return;
+    if (contract.startXp) xp += Math.ceil(xpNeed * contract.startXp);
+    if (contract.startShards) for (let i = 0; i < contract.startShards; i++) dropShard(player.x + rand(-70, 70), player.y + rand(-62, 62), 1);
+    if (contract.startPowerup) dropPowerup(contract.startPowerup, player.x + 72, player.y + 32, 18);
+    addText(player.x, player.y - 82, `${contract.kind}：${contract.name}`, contract.color || '#bdfcff');
+    burst(player.x, player.y, contract.color || '#bdfcff', 18, .8);
+    recordPaceNode(`開局${contract.kind}｜${contract.name}：${contract.tag}`);
   }
 
   function missionHudNow() {
@@ -481,7 +514,7 @@
     const anomalySig = `${anomalyState?.id || ''}:${anomalyState?.reward ? 1 : 0}:${anomalyState?.count || 0}`;
     const boss = currentBoss();
     const bossSig = boss ? `${boss.bossVariant}:${boss.phase2 ? 1 : 0}:${boss.breakWindow?.name || ''}:${Math.round((boss.breakWindow?.progress || 0) / Math.max(1, boss.breakWindow?.threshold || 1) * 10)}` : '';
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, bossSig].join('|');
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, bossSig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -728,7 +761,7 @@
 
   function combatReport() {
     const boss = runStats?.bossKillTime ? `｜Boss ${formatTime(runStats.bossKillTime)}` : '';
-    return `戰鬥報告｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
+    return `戰鬥報告｜${contractTitle()}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
   }
 
   function escapeHtml(value) {
@@ -812,10 +845,13 @@
       bossRhythms: [...(runStats?.bossRhythms || [])].slice(-6),
       bossRhythmCount: runStats?.bossRhythmCount || 0,
       bossHighlights: [...(runStats?.bossHighlights || [])].slice(-6),
+      bossModifier: runStats?.bossModifier || currentBossModifier().name,
       bossPhase2: !!runStats?.bossPhase2,
       bossPhase2Survival: Math.floor(runStats?.bossPhase2Survival || (runStats?.bossPhase2Start ? Math.max(0, runTime - runStats.bossPhase2Start) : 0)),
       skills: [...(runStats?.skills || [])].slice(-6),
       build: detectBuildName(),
+      contract: runStats?.contract || contractTitle(),
+      contractTag: runStats?.contractTag || currentContract().tag || '',
       zone: runStats?.zone || currentZone().name,
       anomaly: runStats?.anomaly || currentAnomaly().name,
       anomalyTasks: [...(runStats?.anomalyTasks || [])].slice(-5),
@@ -928,6 +964,7 @@
     const summaryHtml = [
       ['波次', `第 ${record.wave} 波`],
       ['Build', record.build || '未成形'],
+      ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
       ['壓力', `${record.pressure || '-'}｜${(record.budget || '-').split('｜')[0]}`],
       ['下一步', record.challenges?.[0] || '自由挑戰']
     ].map(([k, v]) => `<span><b>${escapeHtml(k)}</b>${escapeHtml(v)}</span>`).join('');
@@ -938,9 +975,10 @@
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
         <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
-        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>護盾衛星</dt><dd>${escapeHtml(record.shieldSatelliteKills || 0)} 擊破</dd></div><div><dt>衛星拖慢</dt><dd>${escapeHtml(record.shieldSatelliteTime || 0)}s</dd></div><div><dt>戰術壓力</dt><dd>${escapeHtml(record.tacticPressure || 0)}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
+        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>契約</dt><dd>${escapeHtml(record.contract || '-')}</dd></div><div><dt>契約效果</dt><dd>${escapeHtml(record.contractTag || '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>Boss改造</dt><dd>${escapeHtml(record.bossModifier || '-')}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
+      <div class="skill-chips"><b>Run 身份</b><span>${escapeHtml(record.contract || '標準委託')}</span><span>${escapeHtml(record.contractTag || '')}</span><span>${escapeHtml(record.bossModifier || '')}</span></div>
       <div class="skill-chips"><b>事件加成</b>${boostHtml}</div>
       <div class="skill-chips"><b>異變任務</b>${anomalyHtml}</div>
       <div class="skill-chips"><b>節奏節點</b>${paceHtml}</div>
@@ -1130,9 +1168,9 @@
   const enemyGlyphs = { leech: '⌁', bomber: '!', shieldSat: '⊞', shooter: '•', tank: '■', sprinter: '▸', chaser: '◆' };
 
   const zoneDefs = {
-    scrapyard: { name: '電磁殘骸帶', color: '#7aa7ff', desc: '殘骸密集、敵彈較慢，碎晶略多但戰場更擁擠。', featureBias: ['debris', 'debris', 'asteroid', 'resource', 'hazard'], scrapBonus: 1, enemyBias: ['shooter', 'shieldSat'] },
-    crystal: { name: '晶礦雲帶', color: '#ffd166', desc: '資源點更常見，晶礦會吸引高速敵人與拾荒競速事件。', featureBias: ['resource', 'resource', 'resource', 'repair', 'debris'], scrapBonus: 2, enemyBias: ['sprinter', 'sprinter', 'bomber'] },
-    rift: { name: '裂隙邊界', color: '#ff4d6d', desc: '危險裂隙較多，但目標獎勵更高。', featureBias: ['hazard', 'hazard', 'resource', 'debris', 'repair'], scrapBonus: 1, enemyBias: ['leech', 'shooter'] }
+    scrapyard: { name: '電磁殘骸帶', color: '#7aa7ff', desc: '殘骸密集、敵彈較慢，碎晶略多但戰場更擁擠。', featureBias: ['debris', 'debris', 'asteroid', 'resource', 'hazard'], scrapBonus: 1, enemyBias: ['shooter', 'shieldSat'], bossMod: { id: 'empShell', name: 'EMP 裝甲', tag: 'Boss護甲+8%｜彈幕-8%', color: '#7aa7ff', desc: 'Boss 攜帶電磁裝甲，較硬但射擊節奏略慢。', hpMult: 1.08, shotMult: .92, speedMult: .96, rewardBonus: 7 } },
+    crystal: { name: '晶礦雲帶', color: '#ffd166', desc: '資源點更常見，晶礦會吸引高速敵人與拾荒競速事件。', featureBias: ['resource', 'resource', 'resource', 'repair', 'debris'], scrapBonus: 2, enemyBias: ['sprinter', 'sprinter', 'bomber'], bossMod: { id: 'crystalCarapace', name: '晶礦外殼', tag: 'Boss護甲+5%｜掉落+16', color: '#ffd166', desc: 'Boss 外殼帶有晶礦，稍硬但擊破報酬提高。', hpMult: 1.05, shotMult: 1, speedMult: 1, rewardBonus: 16 } },
+    rift: { name: '裂隙邊界', color: '#ff4d6d', desc: '危險裂隙較多，但目標獎勵更高。', featureBias: ['hazard', 'hazard', 'resource', 'debris', 'repair'], scrapBonus: 1, enemyBias: ['leech', 'shooter'], bossMod: { id: 'riftOverload', name: '裂隙超載', tag: 'Boss招式+14%｜生命-4%', color: '#ff4d6d', desc: 'Boss 招式節奏更快，但核心更不穩定。', hpMult: .96, shotMult: 1.08, speedMult: 1.06, abilityMult: .86, rewardBonus: 10 } }
   };
 
   function zoneOptions() {
@@ -1165,7 +1203,8 @@
       btn.type = 'button';
       btn.className = `zone-card${z.id === current ? ' active' : ''}`;
       btn.style.setProperty('--zone-color', z.color || '#37f6ff');
-      btn.innerHTML = `<b style="color:${z.color || '#37f6ff'}">${z.name}</b><small>${z.desc}</small>`;
+      const bossLine = z.bossMod ? `Boss：${z.bossMod.name}｜${z.bossMod.tag}` : 'Boss：每局隨星域抽取 modifier';
+      btn.innerHTML = `<b style="color:${z.color || '#37f6ff'}">${z.name}</b><small>${z.desc}</small><small>${bossLine}</small>`;
       btn.addEventListener('click', () => setSelectedZone(z.id));
       grid.appendChild(btn);
     }
@@ -1537,10 +1576,11 @@
   function announceBoss(e, phase = 'intro') {
     if (!e || e.type !== 'boss') return;
     const info = bossMechanic(e.bossVariant);
-    const desc = phase === 'phase2' ? info.phase : info.intro;
-    bossAlert = { title: phase === 'phase2' ? `${e.label}｜二階段` : `${e.finalBoss ? '終局 Boss' : 'Boss'}：${e.label}`, desc, color: e.color || '#ff4d6d' };
+    const modifier = e.bossModifier || currentBossModifier();
+    const desc = phase === 'phase2' ? info.phase : `${info.intro}｜星域改造：${modifier.name}（${modifier.tag}）`;
+    bossAlert = { title: phase === 'phase2' ? `${e.label}｜二階段` : `${e.finalBoss ? '終局 Boss' : 'Boss'}：${e.label}`, desc, color: modifier.color || e.color || '#ff4d6d' };
     bossAlertTimer = phase === 'phase2' ? 2.8 : 3.4;
-    recordBossMechanic(phase === 'phase2' ? `${info.mechanic}｜二階段` : info.mechanic);
+    recordBossMechanic(phase === 'phase2' ? `${info.mechanic}｜二階段` : `${info.mechanic}｜${modifier.name}`);
     flash(`${bossAlert.title}｜${desc}`);
   }
 
@@ -1820,11 +1860,12 @@
     const tactic = tacticBreakActive()?.fireRateMult || 1;
     const boss = bossBreakActive()?.fireRateMult || 1;
     const rhythm = bossRhythmActive()?.fireRateMult || 1;
-    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm;
+    const contract = currentContract()?.fireRateMult || 1;
+    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract;
   }
-  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1); }
-  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1); }
-  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0); }
+  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (currentContract()?.damageMult || 1); }
+  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1); }
+  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
   function shouldStartTutorial() {
@@ -1893,7 +1934,11 @@
   }
 
   function currentZone() {
-    return activeZone || { id: 'default', name: '標準星環', color: '#37f6ff', desc: '標準星環航道。', featureBias: null, scrapBonus: 0, enemyBias: [] };
+    return activeZone || { id: 'default', name: '標準星環', color: '#37f6ff', desc: '標準星環航道。', featureBias: null, scrapBonus: 0, enemyBias: [], bossMod: { id: 'standardCore', name: '標準核心', tag: '無額外 Boss modifier', color: '#37f6ff', desc: '標準 Boss 規則。', hpMult: 1, shotMult: 1, speedMult: 1, abilityMult: 1, rewardBonus: 0 } };
+  }
+
+  function currentBossModifier() {
+    return currentZone().bossMod || { id: 'standardCore', name: '標準核心', tag: '無額外 Boss modifier', color: currentZone().color || '#37f6ff', desc: '標準 Boss 規則。', hpMult: 1, shotMult: 1, speedMult: 1, abilityMult: 1, rewardBonus: 0 };
   }
 
   function chooseTacticForWave() {
@@ -2042,11 +2087,15 @@
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set();
     activeZone = chooseZone();
     activeAnomaly = chooseRunAnomaly();
+    activeContract = chooseRunContract();
     anomalyState = makeAnomalyState(activeAnomaly);
     runStats = newRunStats();
     runStats.zone = activeZone.name;
     runStats.anomaly = activeAnomaly.name;
+    runStats.contract = contractTitle(activeContract);
+    runStats.contractTag = activeContract.tag || '';
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
+    applyRunContractOpening();
     upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
@@ -2160,7 +2209,7 @@
     const supportMsg = applyWavePaceSupport(wave, bossActive);
     if (runStats) { runStats.waveStart = runTime; if (bossActive) runStats.bossStart = runTime; }
     if (!bossActive) {
-      const waveMsg = supportMsg || (activeTactic ? `戰術：${activeTactic.name}｜反制：${tacticCounterText(activeTactic)}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜異變：${currentAnomaly().name}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
+      const waveMsg = supportMsg || (activeTactic ? `戰術：${activeTactic.name}｜反制：${tacticCounterText(activeTactic)}` : activeEvent ? `事件波：${activeEvent.name}` : wave === 1 ? `${activeZone?.name || '標準星環'}｜${contractTitle()}｜異變：${currentAnomaly().name}｜第 ${wave} 波來襲` : `第 ${wave} 波來襲`);
       flash(waveMsg);
     }
     const stageMsg = stageIntroForWave(wave, bossActive);
@@ -2321,9 +2370,16 @@
       { id: 'brood', label: '裂隙母巢', color: '#ff3df2', hp: 1.12, speed: .92, sides: 11, shot: .94 }
     ];
     const v = wave >= SECTOR_CLEAR_WAVE ? variants[0] : choose(variants);
-    const hp = (t.hp + wave * 75) * v.hp * currentDifficulty().enemy * (wave === 5 ? .78 : 1);
-    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed * currentDifficulty().speed, spin: .7, color: v.color, sides: v.sides, scrap: Math.floor((t.scrap + wave + (v.final ? 28 : 6)) * currentDifficulty().reward), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : v.id === 'brood' ? 2.2 : 0, pulseClock: v.id === 'pulse' ? 3.2 : 0, abilityClock: v.final ? 2.4 : v.id === 'forge' ? 2.1 : v.id === 'void' ? 2.8 : v.id === 'ring' ? 3.1 : v.id === 'brood' ? 2.9 : 3.4, shotMult: v.shot, phase2: false, elite: null };
-    if (runStats) runStats.bossName = v.label;
+    const bossMod = currentBossModifier();
+    const contract = currentContract();
+    const hp = (t.hp + wave * 75) * v.hp * (bossMod.hpMult || 1) * (contract.bossHpMult || 1) * currentDifficulty().enemy * (wave === 5 ? .78 : 1);
+    const baseAbility = v.final ? 2.4 : v.id === 'forge' ? 2.1 : v.id === 'void' ? 2.8 : v.id === 'ring' ? 3.1 : v.id === 'brood' ? 2.9 : 3.4;
+    const e = { type: 'boss', bossVariant: v.id, finalBoss: !!v.final, label: v.label, x: player.x, y: c.y - 80, r: (t.r + wave * (v.final ? 1.45 : .95)) * enemyScale(), hp, maxHp: hp, speed: (t.speed + wave) * v.speed * (bossMod.speedMult || 1) * currentDifficulty().speed, spin: .7, color: v.color, sides: v.sides, scrap: Math.floor((t.scrap + wave + (v.final ? 28 : 6) + (bossMod.rewardBonus || 0)) * currentDifficulty().reward), hit: 0, shootClock: v.final ? .72 : 1.1, summonClock: v.final ? 2.8 : v.id === 'brood' ? 2.2 : 0, pulseClock: v.id === 'pulse' ? 3.2 : 0, abilityClock: baseAbility * (bossMod.abilityMult || 1), shotMult: v.shot * (bossMod.shotMult || 1), phase2: false, elite: null, bossModifier: bossMod };
+    if (runStats) {
+      runStats.bossName = v.label;
+      runStats.bossModifier = `${bossMod.name}｜${bossMod.tag}`;
+      recordPaceNode(`星域Boss｜${bossMod.name}：${bossMod.tag}`);
+    }
     enemies.push(e);
     announceBoss(e, 'intro');
     sfx('boss');
@@ -2574,7 +2630,7 @@
 
   function dropShard(x, y, amount = 1) {
     const bonus = upgradesRuntime.shardMultiplier + (currentZone().scrapBonus || 0);
-    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1)));
+    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1) * (currentContract()?.rewardMult || 1)));
     for (let i = 0; i < total; i++) {
       const a = Math.random() * TWO_PI;
       shards.push({ x: x + rand(-12, 12), y: y + rand(-12, 12), vx: Math.cos(a) * rand(45, 145), vy: Math.sin(a) * rand(45, 145), r: rand(4, 7), value: 1, life: 20 });
@@ -4141,7 +4197,7 @@
       else if (activeBossBreak) { detail = `Boss破防 ${activeBossBreak.name}｜${Math.ceil(activeBossBreak.timer)}s`; color = activeBossBreak.color; }
       else if (activeBossRhythm) { detail = `Boss節奏 ${activeBossRhythm.name}｜${Math.ceil(activeBossRhythm.timer)}s`; color = activeBossRhythm.color; }
       else if (bossWindow) { detail = `Boss讀題 ${bossWindow.source}｜破招 ${Math.ceil(bossWindow.timer)}s`; color = bossWindow.color; }
-      else if (hasBoss) { detail = `Boss ${boss.label}${boss.phase2 ? '｜二階段' : ''}`; color = boss.color; }
+      else if (hasBoss) { detail = `Boss ${boss.label}${boss.phase2 ? '｜二階段' : ''}｜${(boss.bossModifier || currentBossModifier()).name}`; color = boss.color; }
       else if (activeTacticBreak) { detail = `破解 ${activeTacticBreak.name}｜${Math.ceil(activeTacticBreak.timer)}s`; color = activeTacticBreak.color; }
       else if (activeTempoBoost) { detail = `加成 ${activeTempoBoost.name}｜${Math.ceil(activeTempoBoost.timer)}s`; color = activeTempoBoost.color; }
       else if (hasTactic) { detail = `戰術 ${activeTactic.name}｜${tacticCounterText(activeTactic)}`; color = activeTactic.color || '#ffd166'; }
@@ -4157,7 +4213,7 @@
       }
       const missionLabel = mission?.done ? '任務完成' : (mission?.text || '任務');
       ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '900 9px system-ui';
-      ctx.fillText(`${missionLabel}｜${zone.name || '星環'}`, x + 7, y + 15, w - 14);
+      ctx.fillText(`${missionLabel}｜${zone.name || '星環'}｜${currentContract().name}`, x + 7, y + 15, w - 14);
       ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '800 9px system-ui';
       ctx.fillText(`異變 ${anomalyTaskText()}｜${detail}`, x + 7, y + 30, w - 14);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 7, y + h - 6, w - 14, 2);
@@ -4183,7 +4239,7 @@
       return;
     }
     const x = 12; const y = 112; const w = 286;
-    const h = 106 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 128 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -4208,6 +4264,12 @@
     ctx.fillText(`P1 異變｜${anomaly.name}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(`${anomaly.tag || anomaly.desc || '本局規則'}｜${anomalyTaskText()}`, x + 10, lineY + 15, w - 20);
+    lineY += 22;
+    const contract = currentContract();
+    ctx.fillStyle = contract.color || '#bdfcff'; ctx.font = '900 11px system-ui';
+    ctx.fillText(`P1 ${contract.kind}｜${contract.name}`, x + 10, lineY, w - 20);
+    ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+    ctx.fillText(contract.tag || contract.desc || '本局委託', x + 10, lineY + 15, w - 20);
     lineY += 22;
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
@@ -4246,8 +4308,9 @@
     }
     if (hasBoss) {
       const info = bossReadInfo(boss);
+      const modifier = boss.bossModifier || currentBossModifier();
       ctx.fillStyle = boss.color || '#ff4d6d'; ctx.font = '900 11px system-ui';
-      ctx.fillText(`P2 Boss｜${boss.label}${boss.phase2 ? '｜二階段' : ''}`, x + 10, lineY, w - 20);
+      ctx.fillText(`P2 Boss｜${boss.label}${boss.phase2 ? '｜二階段' : ''}｜${modifier.name}`, x + 10, lineY, w - 20);
       ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
       ctx.fillText(`反制：${bossWindow?.counter || info.counter || info.intro}`, x + 10, lineY + 15, w - 20);
       if (bossWindow) {
