@@ -134,6 +134,9 @@
   let activeZone = null;
   let activeAnomaly = null;
   let activeContract = null;
+  let activeRouteChoices = [];
+  let routeChoiceOffer = null;
+  let routeChoiceSerial = 0;
   let anomalyState = null;
   let activeTactic = null;
   let eventTimer = 0;
@@ -219,12 +222,12 @@
     const base = budgets[n] || Math.round(34 + n * 3.2);
     const mobileEase = controlMode === 'touch' ? .92 : 1;
     const tutorialEase = tutorialRun && n <= 2 ? .72 : 1;
-    return Math.floor(base * mobileEase * tutorialEase * currentDifficulty().enemy * (currentAnomaly()?.enemyMult || 1) * (currentContract()?.enemyMult || 1));
+    return Math.floor(base * mobileEase * tutorialEase * currentDifficulty().enemy * (currentAnomaly()?.enemyMult || 1) * (currentContract()?.enemyMult || 1) * (routeChoiceEffects().enemyMult || 1));
   }
 
   function eventChanceForWave(n = wave) {
     if (n <= 3 || n % 5 === 0) return 0;
-    const boost = currentAnomaly()?.eventBoost || 0;
+    const boost = (currentAnomaly()?.eventBoost || 0) + (routeChoiceEffects().eventBoost || 0);
     if (n <= 6) return (n === 6 ? .42 : .18) + boost;
     return (n === 9 ? .72 : .48) + boost;
   }
@@ -438,7 +441,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -488,6 +491,51 @@
     recordPaceNode(`開局${contract.kind}｜${contract.name}：${contract.tag}`);
   }
 
+  const neutralRouteChoice = { id: 'none', name: '未定路線', tag: '尚未選擇局內路線', color: '#bdfcff', eventBias: [], objectiveBias: [], enemyBias: [], damageMult: 1, fireRateMult: 1, incomingMult: 1, rewardMult: 1, enemyMult: 1, magnetBonus: 0, bossHpMult: 1, bossShotMult: 1, bossSpeedMult: 1, bossAbilityMult: 1, bossRewardBonus: 0, eventBoost: 0 };
+
+  const routeChoiceDefs = {
+    safeSupply: { id: 'safeSupply', name: '安全補給', tag: '立即維修｜補給事件↑｜Boss彈幕-4%', color: '#4dff88', desc: '偏穩定：補盾、補給事件與守點目標更常見，Boss 彈幕略慢。', eventBias: ['supply', 'rich', 'overclock'], objectiveBias: ['hold', 'scan'], incomingMult: .96, bossShotMult: .96, startHeal: 18, startPowerup: 'heal' },
+    bountyRisk: { id: 'bountyRisk', name: '高風險懸賞', tag: '火力+6%｜敵量+5%｜Boss掉落+14', color: '#ff3df2', desc: '偏進攻：吸引菁英與蜂群事件，清得快會帶來更高收益。', eventBias: ['eliteStorm', 'droneSwarm', 'meteor'], objectiveBias: ['hunt', 'hold'], enemyBias: ['sprinter', 'bomber'], damageMult: 1.06, enemyMult: 1.05, bossRewardBonus: 14, startScrap: 18, startElite: true },
+    weakScan: { id: 'weakScan', name: '弱點掃描', tag: '火力+4%｜Boss生命-6%｜掃描目標↑', color: '#bdfcff', desc: '偏技術：強化掃描路線，Boss 生命下降但事件更偏電磁/超頻。', eventBias: ['empStorm', 'overclock', 'droneSwarm'], objectiveBias: ['scan', 'hunt'], damageMult: 1.04, bossHpMult: .94, startXp: .18, weakScan: true },
+    crystalDrill: { id: 'crystalDrill', name: '晶礦開採', tag: '碎晶+10%｜磁吸+45｜Boss護甲+4%', color: '#ffd166', desc: '偏經濟：採集與拾荒競速更常見，但 Boss 外殼稍厚。', eventBias: ['salvageRush', 'rich', 'supply'], objectiveBias: ['harvest', 'scan'], rewardMult: 1.1, magnetBonus: 45, bossHpMult: 1.04, startShards: 7 }
+  };
+
+  function routeChoicePairsForWave(n = wave) {
+    return n <= 2 ? [['safeSupply', 'bountyRisk'], ['weakScan', 'crystalDrill']] : [['safeSupply', 'crystalDrill'], ['weakScan', 'bountyRisk']];
+  }
+
+  function currentRouteChoice() {
+    return activeRouteChoices[activeRouteChoices.length - 1] || neutralRouteChoice;
+  }
+
+  function routeChoiceEffects() {
+    const choices = activeRouteChoices.length ? activeRouteChoices : [];
+    const last = choices[choices.length - 1];
+    const acc = { ...neutralRouteChoice, id: choices.map(c => c.id).join('+') || 'none', name: choices.map(c => c.name).join(' + ') || neutralRouteChoice.name, tag: choices.map(c => c.tag).join('｜') || neutralRouteChoice.tag, color: last?.color || neutralRouteChoice.color, eventBias: [], objectiveBias: [], enemyBias: [] };
+    for (const c of choices) {
+      acc.damageMult *= c.damageMult || 1;
+      acc.fireRateMult *= c.fireRateMult || 1;
+      acc.incomingMult *= c.incomingMult || 1;
+      acc.rewardMult *= c.rewardMult || 1;
+      acc.enemyMult *= c.enemyMult || 1;
+      acc.bossHpMult *= c.bossHpMult || 1;
+      acc.bossShotMult *= c.bossShotMult || 1;
+      acc.bossSpeedMult *= c.bossSpeedMult || 1;
+      acc.bossAbilityMult *= c.bossAbilityMult || 1;
+      acc.magnetBonus += c.magnetBonus || 0;
+      acc.bossRewardBonus += c.bossRewardBonus || 0;
+      acc.eventBoost += c.eventBoost || 0;
+      acc.eventBias.push(...(c.eventBias || []));
+      acc.objectiveBias.push(...(c.objectiveBias || []));
+      acc.enemyBias.push(...(c.enemyBias || []));
+    }
+    return acc;
+  }
+
+  function routeChoiceTitle() {
+    return activeRouteChoices.length ? activeRouteChoices.map(c => c.name).join(' + ') : '尚未抉擇';
+  }
+
   function missionHudNow() {
     return performance.now() / 1000;
   }
@@ -514,7 +562,8 @@
     const anomalySig = `${anomalyState?.id || ''}:${anomalyState?.reward ? 1 : 0}:${anomalyState?.count || 0}`;
     const boss = currentBoss();
     const bossSig = boss ? `${boss.bossVariant}:${boss.phase2 ? 1 : 0}:${boss.breakWindow?.name || ''}:${Math.round((boss.breakWindow?.progress || 0) / Math.max(1, boss.breakWindow?.threshold || 1) * 10)}` : '';
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, bossSig].join('|');
+    const routeSig = `${activeRouteChoices.map(c => c.id).join('+')}:${routeChoiceOffer?.id || ''}:${worldFeatures.filter(f => f.type === 'routeChoice').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}`).join(',')}`;
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, bossSig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -761,7 +810,7 @@
 
   function combatReport() {
     const boss = runStats?.bossKillTime ? `｜Boss ${formatTime(runStats.bossKillTime)}` : '';
-    return `戰鬥報告｜${contractTitle()}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
+    return `戰鬥報告｜${contractTitle()}｜路線 ${routeChoiceTitle()}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
   }
 
   function escapeHtml(value) {
@@ -811,6 +860,7 @@
     if ((record.tacticsSeen || []).length && !(record.tacticBreakCount || 0)) list.push(`破解 ${record.tacticsSeen[0]} 戰術`);
     else if ((record.tacticsSeen || []).length) list.push('連續破解 2 次敵群戰術');
     if (record.bossPhase2 && !(record.bossBreakCount || 0)) list.push('Boss 二階段讀題後完成 1 次破招');
+    if (!(record.routeChoices || []).length && record.wave >= 2) list.push('完成一次局內 2 選 1 抉擇');
     if ((record.eventsSeen || []).includes('拾荒競速') && !record.salvageRushWins) list.push('完成一次拾荒競速');
     if ((record.maxEnemies || 0) >= enemyCap() - 1) list.push('帶一個範圍技能進後期');
     return [...new Set(list)].slice(0, 3);
@@ -852,6 +902,9 @@
       build: detectBuildName(),
       contract: runStats?.contract || contractTitle(),
       contractTag: runStats?.contractTag || currentContract().tag || '',
+      routeChoices: [...(runStats?.routeChoices || [])].slice(-4),
+      routeChoiceTags: [...(runStats?.routeChoiceTags || [])].slice(-4),
+      routeChoiceEffects: [...(runStats?.routeChoiceEffects || [])].slice(-4),
       zone: runStats?.zone || currentZone().name,
       anomaly: runStats?.anomaly || currentAnomaly().name,
       anomalyTasks: [...(runStats?.anomalyTasks || [])].slice(-5),
@@ -952,6 +1005,8 @@
     const boostHtml = record.eventBoosts?.length ? record.eventBoosts.map(e => `<span>${escapeHtml(e)}</span>`).join('') : '<span>尚未取得事件加成</span>';
     const routeHtml = record.objectiveRoute?.length ? record.objectiveRoute.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成目標路線</span>';
     const chainHtml = record.objectiveChains?.length ? record.objectiveChains.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未形成目標連鎖</span>';
+    const routeChoiceHtml = record.routeChoices?.length ? record.routeChoices.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未完成局內抉擇</span>';
+    const routeChoiceEffectHtml = record.routeChoiceEffects?.length ? record.routeChoiceEffects.map(r => `<span>${escapeHtml(r)}</span>`).join('') : '<span>尚未取得抉擇效果</span>';
     const anomalyHtml = record.anomalyTasks?.length ? record.anomalyTasks.map(a => `<span>${escapeHtml(a)}</span>`).join('') : '<span>尚未完成異變任務</span>';
     const tacticHtml = record.tacticsSeen?.length ? record.tacticsSeen.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未遇到戰術組合</span>';
     const tacticBreakHtml = record.tacticBreaks?.length ? record.tacticBreaks.map(t => `<span>${escapeHtml(t)}</span>`).join('') : '<span>尚未破解戰術</span>';
@@ -965,6 +1020,7 @@
       ['波次', `第 ${record.wave} 波`],
       ['Build', record.build || '未成形'],
       ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
+      ['路線', record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇'],
       ['壓力', `${record.pressure || '-'}｜${(record.budget || '-').split('｜')[0]}`],
       ['下一步', record.challenges?.[0] || '自由挑戰']
     ].map(([k, v]) => `<span><b>${escapeHtml(k)}</b>${escapeHtml(v)}</span>`).join('');
@@ -975,10 +1031,12 @@
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
         <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
-        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>契約</dt><dd>${escapeHtml(record.contract || '-')}</dd></div><div><dt>契約效果</dt><dd>${escapeHtml(record.contractTag || '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>Boss改造</dt><dd>${escapeHtml(record.bossModifier || '-')}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
+        <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>契約</dt><dd>${escapeHtml(record.contract || '-')}</dd></div><div><dt>局內路線</dt><dd>${escapeHtml(record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>Boss改造</dt><dd>${escapeHtml(record.bossModifier || '-')}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
-      <div class="skill-chips"><b>Run 身份</b><span>${escapeHtml(record.contract || '標準委託')}</span><span>${escapeHtml(record.contractTag || '')}</span><span>${escapeHtml(record.bossModifier || '')}</span></div>
+      <div class="skill-chips"><b>Run 身份</b><span>${escapeHtml(record.contract || '標準委託')}</span><span>${escapeHtml(record.contractTag || '')}</span><span>${escapeHtml(record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇')}</span><span>${escapeHtml(record.bossModifier || '')}</span></div>
+      <div class="skill-chips"><b>局內抉擇</b>${routeChoiceHtml}</div>
+      <div class="skill-chips"><b>抉擇效果</b>${routeChoiceEffectHtml}</div>
       <div class="skill-chips"><b>事件加成</b>${boostHtml}</div>
       <div class="skill-chips"><b>異變任務</b>${anomalyHtml}</div>
       <div class="skill-chips"><b>節奏節點</b>${paceHtml}</div>
@@ -1861,11 +1919,12 @@
     const boss = bossBreakActive()?.fireRateMult || 1;
     const rhythm = bossRhythmActive()?.fireRateMult || 1;
     const contract = currentContract()?.fireRateMult || 1;
-    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract;
+    const route = routeChoiceEffects()?.fireRateMult || 1;
+    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route;
   }
-  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (currentContract()?.damageMult || 1); }
-  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1); }
-  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0); }
+  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
+  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
+  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0) + (routeChoiceEffects()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
   function shouldStartTutorial() {
@@ -1938,7 +1997,23 @@
   }
 
   function currentBossModifier() {
-    return currentZone().bossMod || { id: 'standardCore', name: '標準核心', tag: '無額外 Boss modifier', color: currentZone().color || '#37f6ff', desc: '標準 Boss 規則。', hpMult: 1, shotMult: 1, speedMult: 1, abilityMult: 1, rewardBonus: 0 };
+    const base = currentZone().bossMod || { id: 'standardCore', name: '標準核心', tag: '無額外 Boss modifier', color: currentZone().color || '#37f6ff', desc: '標準 Boss 規則。', hpMult: 1, shotMult: 1, speedMult: 1, abilityMult: 1, rewardBonus: 0 };
+    const route = routeChoiceEffects();
+    if (!activeRouteChoices.length) return base;
+    const routeBossTags = activeRouteChoices.map(c => c.bossTag || c.tag).filter(Boolean);
+    return {
+      ...base,
+      id: `${base.id}+${route.id}`,
+      name: `${base.name}+${currentRouteChoice().name}`,
+      tag: [base.tag, ...routeBossTags].filter(Boolean).join('｜'),
+      desc: `${base.desc || '標準 Boss 規則。'}｜局內路線：${route.name}`,
+      color: currentRouteChoice().color || base.color,
+      hpMult: (base.hpMult || 1) * (route.bossHpMult || 1),
+      shotMult: (base.shotMult || 1) * (route.bossShotMult || 1),
+      speedMult: (base.speedMult || 1) * (route.bossSpeedMult || 1),
+      abilityMult: (base.abilityMult || 1) * (route.bossAbilityMult || 1),
+      rewardBonus: (base.rewardBonus || 0) + (route.bossRewardBonus || 0)
+    };
   }
 
   function chooseTacticForWave() {
@@ -1983,13 +2058,14 @@
   }
 
   function objectiveRewardMult() {
-    return ((currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1);
+    return ((currentZone().id === 'rift' ? 1.12 : 1) + (meta.upgrades.survey || 0) * .035) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1) * (routeChoiceEffects()?.rewardMult || 1);
   }
 
   function chooseObjectiveEvent(kind, def = objectiveDefs[kind] || objectiveDefs.scan) {
     const pool = [...(def.event || ['droneSwarm'])];
     if (def.routeBias?.length) pool.push(...def.routeBias);
     if (currentAnomaly()?.events?.length) pool.push(...currentAnomaly().events);
+    if (routeChoiceEffects()?.eventBias?.length) pool.push(...routeChoiceEffects().eventBias);
     const zoneId = currentZone().id;
     if (zoneId === 'crystal' && def.event?.includes('salvageRush')) pool.push('salvageRush', 'rich');
     if (zoneId === 'scrapyard' && def.event?.includes('empStorm')) pool.push('empStorm');
@@ -2079,12 +2155,86 @@
     if (bonus) runStats.objectiveBonuses++;
   }
 
+  function shouldSpawnRouteChoiceOffer(n = wave) {
+    if (!player || bossActive || tutorialRun || routeChoiceOffer) return false;
+    if (![2, 4].includes(n)) return false;
+    return !activeRouteChoices.some(c => c.wave === n);
+  }
+
+  function spawnRouteChoiceOffer(n = wave, forcedPair = null) {
+    if (!player || bossActive || tutorialRun) return null;
+    const pair = forcedPair || choose(routeChoicePairsForWave(n));
+    const offerId = `route-${++routeChoiceSerial}`;
+    routeChoiceOffer = { id: offerId, wave: n, pair: [...pair], picked: null };
+    const baseAngle = rand(-Math.PI * .82, -Math.PI * .18);
+    const dist = n <= 2 ? 430 : 560;
+    pair.forEach((choiceId, i) => {
+      const def = routeChoiceDefs[choiceId];
+      if (!def) return;
+      const a = baseAngle + (i === 0 ? -.46 : .46);
+      worldFeatures.push({ type: 'routeChoice', offerId, choiceId, routeChoice: { ...def, wave: n }, x: player.x + Math.cos(a) * dist, y: player.y + Math.sin(a) * dist, r: 72, spin: rand(-.4, .4), seed: Math.random() * 999, cool: 0, charge: 0, chargeNeed: 1.75, color: def.color });
+    });
+    flash(`局內抉擇：靠近一個節點充能｜${pair.map(id => routeChoiceDefs[id]?.name).filter(Boolean).join(' vs ')}`);
+    wakeMissionHud(5.4);
+    recordPaceNode(`局內抉擇開啟｜第 ${n} 波`);
+    return routeChoiceOffer;
+  }
+
+  function expireRouteChoiceOffer(reason = '未選擇') {
+    if (!routeChoiceOffer) return;
+    const offerId = routeChoiceOffer.id;
+    worldFeatures.forEach(f => { if (f.type === 'routeChoice' && f.offerId === offerId) f.dead = true; });
+    recordPaceNode(`局內抉擇錯過｜${reason}`);
+    routeChoiceOffer = null;
+    wakeMissionHud(2.5);
+  }
+
+  function applyRouteChoiceReward(choice, node = player) {
+    if (!choice || !player) return '';
+    const effects = [];
+    if (choice.startHeal) { player.hp = Math.min(player.maxHp, player.hp + choice.startHeal); effects.push(`護盾+${choice.startHeal}`); }
+    if (choice.startPowerup) { dropPowerup(choice.startPowerup, player.x + 58, player.y + 28, 18); effects.push('補給投放'); }
+    if (choice.startScrap) { meta.scrap += choice.startScrap; effects.push(`碎晶+${choice.startScrap}`); }
+    if (choice.startXp) { const gain = Math.ceil(xpNeed * choice.startXp); xp += gain; effects.push(`XP+${gain}`); }
+    if (choice.startShards) { for (let i = 0; i < choice.startShards; i++) dropShard((node?.x || player.x) + rand(-64, 64), (node?.y || player.y) + rand(-56, 56), 1); effects.push(`碎晶雨x${choice.startShards}`); }
+    if (choice.weakScan) { upgradesRuntime.weakScan = Math.max(upgradesRuntime.weakScan || 0, 1); effects.push('弱點掃描'); }
+    if (choice.startElite) {
+      const e = spawnEnemy(choose(['sprinter', 'shooter', 'tank']));
+      if (e) { applyEliteMod(e, 'berserk'); effects.push('懸賞菁英'); }
+    }
+    return effects.join('｜') || choice.tag || '路線已記錄';
+  }
+
+  function chooseRouteChoiceNode(f) {
+    if (!f || f.dead || f.type !== 'routeChoice' || !routeChoiceOffer || routeChoiceOffer.id !== f.offerId) return;
+    const choice = { ...(f.routeChoice || routeChoiceDefs[f.choiceId] || neutralRouteChoice), wave };
+    routeChoiceOffer.picked = choice.id;
+    activeRouteChoices.push(choice);
+    const effect = applyRouteChoiceReward(choice, f);
+    if (runStats) {
+      runStats.routeChoices.push(`${choice.name}｜第 ${choice.wave} 波`);
+      runStats.routeChoiceTags.push(choice.tag || choice.desc || '');
+      runStats.routeChoiceEffects.push(effect);
+    }
+    recordPaceNode(`局內抉擇｜${choice.name}：${choice.tag}`);
+    worldFeatures.forEach(w => { if (w.type === 'routeChoice' && w.offerId === f.offerId) w.dead = true; });
+    burst(f.x, f.y, choice.color || '#bdfcff', 34, 1.25);
+    particles.push({ x: f.x, y: f.y, vx: 0, vy: 0, life: .48, max: .48, r: 46, color: choice.color || '#bdfcff', ring: true, fastRing: true });
+    addText(f.x, f.y - f.r - 28, `選擇：${choice.name}`, choice.color || '#bdfcff');
+    flash(`路線選擇：${choice.name}｜${effect}`);
+    sfx('success');
+    haptic(32);
+    routeChoiceOffer = null;
+    wakeMissionHud(5.2);
+  }
+
   function hardResetRun() {
     clearMovementInput();
     player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: playerRadius(), hp: maxHp(), maxHp: maxHp(), invuln: 3.5, regenClock: 0, angle: -Math.PI / 2, bank: 0 };
     bullets = []; enemies = []; shards = []; particles = []; floatText = []; powerups = []; enemyShots = []; bossTelegraphs = []; worldFeatures = []; beacon = null; zoneTick = 0;
     Object.keys(upgradesRuntime).forEach(k => { upgradesRuntime[k] = 0; });
     wave = 1; xp = 0; xpNeed = 12; runKills = 0; totalKills = 0; runTime = 0; shotSeq = 0; runObjectives = 0; runEvents = 0; runStartScrap = meta.scrap; lastDamageCause = ''; tutorialShown = new Set();
+    activeRouteChoices = []; routeChoiceOffer = null; routeChoiceSerial = 0;
     activeZone = chooseZone();
     activeAnomaly = chooseRunAnomaly();
     activeContract = chooseRunContract();
@@ -2125,9 +2275,10 @@
 
   function chooseObjectiveKind() {
     const bias = currentAnomaly()?.objectiveBias || [];
-    if (wave <= 3) return choose(['scan', 'scan', 'harvest', ...bias]);
-    if (wave <= 6) return choose(['scan', 'harvest', 'hold', 'rift', ...bias]);
-    return choose(['hunt', 'hold', 'rift', 'harvest', 'scan', ...bias, ...bias]);
+    const routeBias = routeChoiceEffects()?.objectiveBias || [];
+    if (wave <= 3) return choose(['scan', 'scan', 'harvest', ...bias, ...routeBias]);
+    if (wave <= 6) return choose(['scan', 'harvest', 'hold', 'rift', ...bias, ...routeBias]);
+    return choose(['hunt', 'hold', 'rift', 'harvest', 'scan', ...bias, ...bias, ...routeBias]);
   }
 
   function stageIntroForWave(n, isBoss = false) {
@@ -2214,6 +2365,9 @@
     }
     const stageMsg = stageIntroForWave(wave, bossActive);
     if (stageMsg && !tutorialShown.has(`stage-${wave}`)) setTimeout(() => { if (running && !gameOver && !skillChoosing && wave === n) { tutorialShown.add(`stage-${wave}`); flash(stageMsg); } }, 520);
+    if (!bossActive && routeChoiceOffer && wave > (routeChoiceOffer.wave || wave) + 1) expireRouteChoiceOffer('航線窗口關閉');
+    if (bossActive) expireRouteChoiceOffer('Boss 波來臨');
+    else if (shouldSpawnRouteChoiceOffer(wave)) spawnRouteChoiceOffer(wave);
     showWaveGuide(wave, bossActive);
   }
 
@@ -2221,7 +2375,8 @@
     const ids = ['meteor', 'overclock', 'blackout', 'rich', 'hazard', 'supply', 'eliteStorm', 'droneSwarm', 'gravityWell', 'empStorm', 'salvageRush'];
     const zoneBonus = currentZone().id === 'crystal' ? ['salvageRush'] : currentZone().id === 'scrapyard' ? ['empStorm'] : [];
     const anomalyBonus = currentAnomaly()?.events || [];
-    const id = forcedId || choose([...ids, ...zoneBonus, ...anomalyBonus, ...anomalyBonus]);
+    const routeBonus = routeChoiceEffects()?.eventBias || [];
+    const id = forcedId || choose([...ids, ...zoneBonus, ...anomalyBonus, ...anomalyBonus, ...routeBonus, ...routeBonus]);
     const tempo = tempoProfile(id);
     activeEvent = { id, ...eventDefs[id], reward, sourceRoute: source?.route || '', sourceEffect: source?.effect || '', tempoLabel: tempo.label, tempoName: tempo.name, tempoDesc: tempo.desc, rushStart: meta.scrap, rushGoal: id === 'salvageRush' ? 22 + wave * 3 : 0, rushDone: false };
     runEvents++;
@@ -2329,6 +2484,7 @@
     if (activeEvent?.id === 'blackout') pool.push('shooter', 'shooter');
     if (activeEvent?.id === 'droneSwarm') pool.push('sprinter', 'sprinter', 'bomber');
     if (activeTactic?.bias?.length) pool.push(...activeTactic.bias);
+    if (routeChoiceEffects()?.enemyBias?.length) pool.push(...routeChoiceEffects().enemyBias);
     if (activeZone?.enemyBias?.length) pool.push(...activeZone.enemyBias);
     return choose(pool);
   }
@@ -2630,7 +2786,7 @@
 
   function dropShard(x, y, amount = 1) {
     const bonus = upgradesRuntime.shardMultiplier + (currentZone().scrapBonus || 0);
-    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1) * (currentContract()?.rewardMult || 1)));
+    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1) * (currentContract()?.rewardMult || 1) * (routeChoiceEffects()?.rewardMult || 1)));
     for (let i = 0; i < total; i++) {
       const a = Math.random() * TWO_PI;
       shards.push({ x: x + rand(-12, 12), y: y + rand(-12, 12), vx: Math.cos(a) * rand(45, 145), vy: Math.sin(a) * rand(45, 145), r: rand(4, 7), value: 1, life: 20 });
@@ -2698,6 +2854,11 @@
     if (f.type === 'hazard') return { text: '危險區', color: '#ff4d6d', y: f.y - f.r - 18 };
     if (f.type === 'repair') return { text: '補給', color: '#4dff88', y: f.y - f.r - 16 };
     if (f.type === 'resource') return { text: '資源', color: '#ffd166', y: f.y - f.r - 16 };
+    if (f.type === 'routeChoice') {
+      const choice = f.routeChoice || routeChoiceDefs[f.choiceId] || neutralRouteChoice;
+      const charge = Math.round(clamp((f.charge || 0) / (f.chargeNeed || 1.75), 0, 1) * 100);
+      return { text: `${choice.name}｜${choice.tag}${charge ? `｜${charge}%` : ''}`, color: choice.color || '#bdfcff', y: f.y - f.r - 22 };
+    }
     if (f.type === 'riftSeal') return { text: '裂隙封印', color: '#b66dff', y: f.y - f.r - 18 };
     if (f.type === 'convoyPod') return { text: '補給艙', color: '#4dff88', y: f.y - f.r - 18 };
     return null;
@@ -2936,6 +3097,18 @@
       f.cool = Math.max(0, f.cool - dt);
       f.spin += dt * .2;
       const d = Math.hypot(player.x - f.x, player.y - f.y);
+      if (f.type === 'routeChoice') {
+        const choice = f.routeChoice || routeChoiceDefs[f.choiceId] || neutralRouteChoice;
+        if (d < f.r + player.r + 18) {
+          f.charge += dt;
+          if (particles.length < MAX_PARTICLES) particles.push({ x: f.x + rand(-28, 28), y: f.y + rand(-28, 28), vx: rand(-10, 10), vy: rand(-10, 10), life: .22, max: .22, r: rand(1.5, 3.4), color: choice.color || '#bdfcff', ring: false });
+          if (f.charge >= (f.chargeNeed || 1.75)) chooseRouteChoiceNode(f);
+          if (f.dead) continue;
+        } else {
+          f.charge = Math.max(0, f.charge - dt * .5);
+        }
+        continue;
+      }
       if (f.type === 'riftSeal') {
         if (d < f.r + player.r + 18) {
           f.charge += dt;
@@ -3712,10 +3885,24 @@
         }
         ctx.closePath(); ctx.fill(); ctx.stroke();
       } else {
-        const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' || f.type === 'convoyPod' ? '#4dff88' : f.type === 'riftSeal' ? '#b66dff' : '#ffd166';
+        const color = f.type === 'hazard' ? '#ff4d6d' : f.type === 'repair' || f.type === 'convoyPod' ? '#4dff88' : f.type === 'riftSeal' ? '#b66dff' : f.type === 'routeChoice' ? (f.color || f.routeChoice?.color || '#bdfcff') : '#ffd166';
         ctx.globalAlpha = .82 + Math.sin(performance.now() * .004 + f.seed) * .12;
         ctx.fillStyle = color; ctx.strokeStyle = color; ctx.lineWidth = 2;
-        if (f.type === 'riftSeal') {
+        if (f.type === 'routeChoice') {
+          const choice = f.routeChoice || routeChoiceDefs[f.choiceId] || neutralRouteChoice;
+          const pulse = Math.sin(performance.now() * .006 + f.seed) * .5 + .5;
+          ctx.shadowColor = color; ctx.shadowBlur = 18;
+          ctx.globalAlpha = .62 + pulse * .24;
+          ctx.beginPath(); ctx.moveTo(0, -30); ctx.lineTo(30, 0); ctx.lineTo(0, 30); ctx.lineTo(-30, 0); ctx.closePath(); ctx.stroke();
+          ctx.globalAlpha *= .64;
+          ctx.beginPath(); ctx.moveTo(0, -18); ctx.lineTo(18, 0); ctx.lineTo(0, 18); ctx.lineTo(-18, 0); ctx.closePath(); ctx.fill();
+          ctx.fillStyle = '#050712'; ctx.globalAlpha = .92;
+          ctx.beginPath(); ctx.moveTo(-8, -7); ctx.lineTo(8, 0); ctx.lineTo(-8, 7); ctx.closePath(); ctx.fill();
+          ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.globalAlpha = .92;
+          ctx.beginPath(); ctx.arc(0, 0, 40, -Math.PI / 2, -Math.PI / 2 + TWO_PI * clamp((f.charge || 0) / (f.chargeNeed || 1.75), 0, 1)); ctx.stroke();
+          ctx.globalAlpha = .78; ctx.strokeStyle = choice.color || color; ctx.lineWidth = 1.2; ctx.setLineDash([5, 7]);
+          ctx.beginPath(); ctx.arc(0, 0, 52 + pulse * 6, 0, TWO_PI); ctx.stroke(); ctx.setLineDash([]);
+        } else if (f.type === 'riftSeal') {
           ctx.beginPath(); ctx.arc(0, 0, 24, 0, TWO_PI); ctx.stroke();
           ctx.beginPath(); ctx.moveTo(-6, -26); ctx.lineTo(10, -8); ctx.lineTo(-4, 2); ctx.lineTo(12, 27); ctx.stroke();
           ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 34, -Math.PI / 2, -Math.PI / 2 + TWO_PI * clamp((f.charge || 0) / 2.2, 0, 1)); ctx.stroke();
@@ -4175,6 +4362,8 @@
     const hasTutorial = !!tutorialStep;
     const hasTactic = !!activeTactic && !bossActive;
     const hasObjective = !!beacon;
+    const routeNodes = worldFeatures.filter(f => f.type === 'routeChoice' && !f.dead);
+    const hasRouteChoice = routeNodes.length > 0;
     const boss = currentBoss();
     const bossWindow = boss?.breakWindow;
     const hasBoss = !!boss && bossActive;
@@ -4201,6 +4390,11 @@
       else if (activeTacticBreak) { detail = `破解 ${activeTacticBreak.name}｜${Math.ceil(activeTacticBreak.timer)}s`; color = activeTacticBreak.color; }
       else if (activeTempoBoost) { detail = `加成 ${activeTempoBoost.name}｜${Math.ceil(activeTempoBoost.timer)}s`; color = activeTempoBoost.color; }
       else if (hasTactic) { detail = `戰術 ${activeTactic.name}｜${tacticCounterText(activeTactic)}`; color = activeTactic.color || '#ffd166'; }
+      else if (hasRouteChoice) {
+        const names = routeChoiceOffer?.pair?.map(id => routeChoiceDefs[id]?.name).filter(Boolean).join(' vs ') || '路線抉擇';
+        detail = `抉擇 ${names}｜靠近一個節點充能`;
+        color = routeNodes[0].routeChoice?.color || '#bdfcff';
+      }
       else if (beacon) {
         const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
         detail = `目標 ${def.name}→${objectiveChainPreview(beacon)}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
@@ -4212,8 +4406,9 @@
         color = '#bdfcff';
       }
       const missionLabel = mission?.done ? '任務完成' : (mission?.text || '任務');
+      const routeLabel = activeRouteChoices.length ? `｜路線 ${currentRouteChoice().name}` : routeChoiceOffer ? '｜抉擇中' : '';
       ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '900 9px system-ui';
-      ctx.fillText(`${missionLabel}｜${zone.name || '星環'}｜${currentContract().name}`, x + 7, y + 15, w - 14);
+      ctx.fillText(`${missionLabel}｜${zone.name || '星環'}｜${currentContract().name}${routeLabel}`, x + 7, y + 15, w - 14);
       ctx.fillStyle = anomaly.color || '#ffd166'; ctx.font = '800 9px system-ui';
       ctx.fillText(`異變 ${anomalyTaskText()}｜${detail}`, x + 7, y + 30, w - 14);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 7, y + h - 6, w - 14, 2);
@@ -4238,8 +4433,8 @@
       ctx.restore();
       return;
     }
-    const x = 12; const y = 112; const w = 286;
-    const h = 128 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const x = 12; const y = 112; const w = Math.min(336, W - 24);
+    const h = 150 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -4270,6 +4465,13 @@
     ctx.fillText(`P1 ${contract.kind}｜${contract.name}`, x + 10, lineY, w - 20);
     ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
     ctx.fillText(contract.tag || contract.desc || '本局委託', x + 10, lineY + 15, w - 20);
+    lineY += 22;
+    const route = routeChoiceEffects();
+    const routeStatus = routeChoiceOffer ? `抉擇中｜${routeChoiceOffer.pair.map(id => routeChoiceDefs[id]?.name).filter(Boolean).join(' vs ')}` : routeChoiceTitle();
+    ctx.fillStyle = route.color || '#bdfcff'; ctx.font = '900 11px system-ui';
+    ctx.fillText(`P1 路線｜${routeStatus}`, x + 10, lineY, w - 20);
+    ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+    ctx.fillText(activeRouteChoices.length ? route.tag : '第 2/4 波靠近一個節點充能，另一個會消失。', x + 10, lineY + 15, w - 20);
     lineY += 22;
     if (activeEvent) {
       ctx.fillStyle = activeEvent.color; ctx.font = '900 11px system-ui';
@@ -4365,23 +4567,29 @@
   }
 
   function drawTargetGuide() {
-    if (!beacon || !player || !running || gameOver) return;
+    if (!player || !running || gameOver) return;
+    const routeTarget = worldFeatures.find(f => f.type === 'routeChoice' && !f.dead);
+    const target = routeTarget || beacon;
+    if (!target) return;
+    const isRoute = target.type === 'routeChoice';
     const c = camera();
-    const sx = beacon.x - c.x;
-    const sy = beacon.y - c.y;
-    const d = Math.hypot(beacon.x - player.x, beacon.y - player.y);
-    const def = objectiveDefs[beacon.kind] || objectiveDefs.scan;
+    const sx = target.x - c.x;
+    const sy = target.y - c.y;
+    const d = Math.hypot(target.x - player.x, target.y - player.y);
+    const def = isRoute ? (target.routeChoice || routeChoiceDefs[target.choiceId] || neutralRouteChoice) : (objectiveDefs[target.kind] || objectiveDefs.scan);
+    const color = def.color || '#bdfcff';
     const inside = sx > 46 && sx < W - 46 && sy > 92 && sy < H - 46;
     const pulse = .55 + Math.sin(performance.now() * .006) * .22;
-    const charge = clamp((beacon.charge || 0) / def.charge, 0, 1);
+    const charge = isRoute ? clamp((target.charge || 0) / (target.chargeNeed || 1.75), 0, 1) : clamp((beacon.charge || 0) / def.charge, 0, 1);
     ctx.save();
-    ctx.shadowColor = def.color;
-    ctx.shadowBlur = 14;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = isRoute ? 18 : 14;
     if (inside) {
       ctx.globalAlpha = .42 + pulse * .36;
-      ctx.strokeStyle = def.color; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(sx, sy, 32 + pulse * 7, 0, TWO_PI); ctx.stroke();
-      if (charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, 44, -Math.PI / 2, -Math.PI / 2 + TWO_PI * charge); ctx.stroke(); }
+      ctx.strokeStyle = color; ctx.lineWidth = isRoute ? 2.6 : 2;
+      ctx.beginPath(); ctx.arc(sx, sy, (isRoute ? 44 : 32) + pulse * 7, 0, TWO_PI); ctx.stroke();
+      if (isRoute) { ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.arc(sx, sy, 58 + pulse * 6, 0, TWO_PI); ctx.stroke(); ctx.setLineDash([]); }
+      if (charge > 0) { ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(sx, sy, isRoute ? 62 : 44, -Math.PI / 2, -Math.PI / 2 + TWO_PI * charge); ctx.stroke(); }
     } else {
       const a = Math.atan2(sy - H / 2, sx - W / 2);
       const x = clamp(W / 2 + Math.cos(a) * (Math.min(W, H) * .43), 36, W - 36);
@@ -4389,9 +4597,9 @@
       const scale = clamp(1.25 - d / 1800, .68, 1.15);
       ctx.translate(x, y); ctx.rotate(a); ctx.scale(scale, scale);
       ctx.globalAlpha = .72 + pulse * .24;
-      ctx.fillStyle = def.color; ctx.strokeStyle = '#050712'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.moveTo(17, 0); ctx.lineTo(-10, -11); ctx.lineTo(-5, 0); ctx.lineTo(-10, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
-      ctx.strokeStyle = def.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, 22, -0.6, 0.6); ctx.stroke();
+      ctx.fillStyle = color; ctx.strokeStyle = '#050712'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(isRoute ? 21 : 17, 0); ctx.lineTo(-10, -11); ctx.lineTo(-5, 0); ctx.lineTo(-10, 11); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, 0, isRoute ? 27 : 22, -0.6, 0.6); ctx.stroke();
     }
     ctx.restore();
   }
