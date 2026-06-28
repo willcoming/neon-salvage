@@ -41,6 +41,14 @@ export const RUN_STAGE_DEFS = Object.freeze({
   final: { name: '終局考驗', waves: '10', color: '#ff4d6d', desc: '星環核心 Boss' }
 });
 
+export const SWARM_PRESSURE_DEF = Object.freeze({
+  budgetMult: Object.freeze({ warmup: 1.18, build: 1.24, pressure: 1.30, final: 1 }),
+  capBonus: Object.freeze({ warmup: 3, build: 5, pressure: 7, final: 4 }),
+  spawnIntervalMult: Object.freeze({ warmup: .92, build: .88, pressure: .84, final: .90 }),
+  touchBudgetMult: .94,
+  touchCapBonus: -1
+});
+
 export const CORE_RESONANCE_DEFS = Object.freeze({
   rapid: { name: '速射諧振', desc: '射擊間隔 -6%｜每4發追加微脈衝', fireRateMult: .94, extraPulseEvery: 4 },
   rail: { name: '穿透諧振', desc: '火力 +7%｜穿透 +1｜Boss傷害 +8%', damageMult: 1.07, pierceBonus: 1, bossDamageMult: 1.08 },
@@ -121,24 +129,36 @@ export function runStageForWaveValue(wave, sectorClearWave = 10) {
   return RUN_STAGE_DEFS[stageKeyForWave(wave, sectorClearWave)];
 }
 
+export function swarmPressureForWave({ wave = 1, controlMode = 'keyboard', def = SWARM_PRESSURE_DEF } = {}) {
+  const stageKey = stageKeyForWave(wave);
+  const touch = controlMode === 'touch';
+  return {
+    stageKey,
+    budgetMult: (def.budgetMult?.[stageKey] || 1) * (touch ? (def.touchBudgetMult || 1) : 1),
+    capBonus: (def.capBonus?.[stageKey] || 0) + (touch ? (def.touchCapBonus || 0) : 0),
+    spawnIntervalMult: def.spawnIntervalMult?.[stageKey] || 1
+  };
+}
+
 export function lateGameScaleForWave(wave) {
   return clamp(1 - Math.max(0, wave - 4) * .055, .64, 1);
 }
 
 export function enemyCapValue({ wave, controlMode = 'keyboard', difficulty = DIFFICULTY_DEFS.standard } = {}) {
   const base = controlMode === 'touch' ? 30 : 36;
-  const pressureCut = Math.max(0, wave - 7) * 1.35;
+  const pressureCut = Math.max(0, wave - 7) * 1.15;
   const stageKey = stageKeyForWave(wave);
+  const pressure = swarmPressureForWave({ wave, controlMode });
   const stageEase = stageKey === 'warmup' ? .88 : stageKey === 'final' ? .86 : stageKey === 'pressure' ? .94 : 1;
-  return Math.round(Math.max(controlMode === 'touch' ? 22 : 26, (base - pressureCut) * stageEase) * (difficulty.cap || 1));
+  return Math.round(Math.max(controlMode === 'touch' ? 24 : 28, (base + pressure.capBonus - pressureCut) * stageEase) * (difficulty.cap || 1));
 }
 
 export function waveEnemyBudgetValue({ wave, controlMode = 'keyboard', tutorial = false, difficulty = DIFFICULTY_DEFS.standard, anomaly = {}, contract = {}, route = {} } = {}) {
   if (wave % 5 === 0) return 0;
   const base = WAVE_ENEMY_BUDGETS[wave] || Math.round(34 + wave * 3.2);
-  const mobileEase = controlMode === 'touch' ? .92 : 1;
+  const pressure = swarmPressureForWave({ wave, controlMode });
   const tutorialEase = tutorial && wave <= 2 ? .72 : 1;
-  return Math.floor(base * mobileEase * tutorialEase * (difficulty.enemy || 1) * (anomaly.enemyMult || 1) * (contract.enemyMult || 1) * (route.enemyMult || 1));
+  return Math.floor(base * pressure.budgetMult * tutorialEase * (difficulty.enemy || 1) * (anomaly.enemyMult || 1) * (contract.enemyMult || 1) * (route.enemyMult || 1));
 }
 
 export function eventChanceForWaveValue({ wave, anomaly = {}, route = {} } = {}) {
@@ -150,8 +170,10 @@ export function eventChanceForWaveValue({ wave, anomaly = {}, route = {} } = {})
 
 export function spawnIntervalForWaveValue({ wave, controlMode = 'keyboard' } = {}) {
   const stageKey = stageKeyForWave(wave);
+  const pressure = swarmPressureForWave({ wave, controlMode });
   const base = stageKey === 'warmup' ? (wave === 1 ? .19 : .165) : stageKey === 'build' ? .135 : .118;
-  return Math.max(controlMode === 'touch' ? .085 : .068, base - Math.max(0, wave - 4) * .004 + (controlMode === 'touch' ? .012 : 0));
+  const raw = (base - Math.max(0, wave - 4) * .004 + (controlMode === 'touch' ? .012 : 0)) * pressure.spawnIntervalMult;
+  return Math.max(controlMode === 'touch' ? .076 : .056, raw);
 }
 
 export function compactWorldFeatureTargetValue({ wave } = {}) {

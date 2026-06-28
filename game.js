@@ -2429,12 +2429,12 @@ import { createDiagnostics } from './src/diagnostics.js';
     ui.scrap.textContent = Math.floor(meta.scrap).toString();
   }
 
-  function maxHp() { return 110 + (meta.upgrades.shield || 0) * 15 + (meta.upgrades.armor || 0) * 12; }
+  function maxHp() { return 122 + (meta.upgrades.shield || 0) * 16 + (meta.upgrades.armor || 0) * 13; }
   function playerScale() { return controlMode === 'touch' ? .46 : .72; }
   function playerRadius() { return 17 * playerScale(); }
   function enemyScale() { return controlMode === 'touch' ? .76 : .84; }
-  function speed() { return (282 + (meta.upgrades.engine || 0) * 18 + (meta.upgrades.armor || 0) * 2) * (controlMode === 'touch' ? .88 : 1) * (evasionSurgeActive()?.speedMult || 1); }
-  function fireRate() { return Math.max(.07, .215 - (meta.upgrades.cannon || 0) * .011 - (meta.upgrades.reactor || 0) * .004); }
+  function speed() { return (298 + (meta.upgrades.engine || 0) * 19 + (meta.upgrades.armor || 0) * 2.4) * (controlMode === 'touch' ? .91 : 1) * (evasionSurgeActive()?.speedMult || 1); }
+  function fireRate() { return Math.max(.066, .202 - (meta.upgrades.cannon || 0) * .012 - (meta.upgrades.reactor || 0) * .0045); }
   function weaponFireRate() {
     const harvest = upgradesRuntime.harvestDrive > 0 ? Math.max(.72, 1 - Math.min(.28, (runKills % 10) * .028 * upgradesRuntime.harvestDrive)) : 1;
     const storm = activeEvent?.id === 'overclock' ? .78 : 1;
@@ -2450,8 +2450,8 @@ import { createDiagnostics } from './src/diagnostics.js';
     const combat = combatSurgeActive()?.fireRateMult || 1;
     return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route * resonance * core * evasion * combat;
   }
-  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (currentCoreResonance()?.damageMult || 1) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (coreOverdriveActive()?.damageMult || 1) * (combatSurgeActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
-  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (currentCoreResonance()?.incomingMult || 1) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (coreOverdriveActive()?.incomingMult || 1) * (evasionSurgeActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
+  function damage() { return (17 + (meta.upgrades.cannon || 0) * 2.7 + (meta.upgrades.reactor || 0) * 2.35) * (currentCoreResonance()?.damageMult || 1) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (coreOverdriveActive()?.damageMult || 1) * (combatSurgeActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
+  function incomingDamage(amount) { return amount * Math.max(.74, 1 - (meta.upgrades.armor || 0) * .038) * (currentCoreResonance()?.incomingMult || 1) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (coreOverdriveActive()?.incomingMult || 1) * (evasionSurgeActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (currentCoreResonance()?.magnetBonus || 0) + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (coreOverdriveActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0) + (routeChoiceEffects()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=6.3" />
+  <link rel="stylesheet" href="./styles.css?v=6.4" />
 </head>
 <body>
   <div id="app">
@@ -19,7 +19,7 @@
       </div>
       <div class="stats">
         <div><b id="wave">1</b><span>波次</span></div>
-        <div><b id="hp">100</b><span>護盾</span></div>
+        <div><b id="hp">122</b><span>護盾</span></div>
         <div><b id="scrap">0</b><span>碎晶</span></div>
         <div><b id="score">0</b><span>分數</span></div>
       </div>
@@ -109,11 +109,11 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v6.3 擊破爆發版</strong>
+          <strong>v6.4 敵群平衡版</strong>
           <ul>
-            <li>新增「擊破爆發」：3.6 秒內 5 連殺會觸發金色衝擊波，順手把附近雜兵炸開。</li>
-            <li>爆發期間短暫提高射速與火力；一般擊殺、精英與 Boss 擊破也加上更明確 hit-stop、震動與音效層次。</li>
-            <li>HUD、任務 strip 與結算新增連殺 / 擊破爆發紀錄，讓清場節奏更有爽感與可追逐目標。</li>
+            <li>敵群密度全面提高：一般波次敵人預算、場上 cap 與生成節奏都上修，清場壓力更接近 swarm roguelite。</li>
+            <li>角色同步平衡：基礎護盾、移速、主砲射速與傷害上修，裝甲減傷也更有感，避免只是硬塞敵人。</li>
+            <li>保留「擊破爆發」；更多敵人會更容易接出 5 連殺衝擊波，但 mobile 仍保留較低密度係數。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -135,7 +135,7 @@
 目標：
 - 完成地圖目標、撐過事件、組出技能流派。
 - 第 5 波是 Boss 檢查，第 10 波擊破「星環核心主宰」即可撤離成功。
-- 結算會給 C/B/A/S 評級，並列出 Build、核心諧振、核心試煉、核心超載、擊破爆發、擦彈機動、契約 / 詛咒、局內抉擇、路線後果、Boss 前預備、Boss 改造、壓力、目標路線、戰術破解與下一局建議。
+- 結算會給 C/B/A/S 評級，並列出 Build、核心諧振、核心試煉、核心超載、擊破爆發、擦彈機動、敵群壓力、契約 / 詛咒、局內抉擇、路線後果、Boss 前預備、Boss 改造、目標路線、戰術破解與下一局建議。
 
 操作：
 - WASD / 方向鍵：移動。
@@ -154,7 +154,7 @@
 
 畫面閱讀：
 - 左上 P1：目前 run 節奏、本局異變任務、開局契約 / 詛咒、局內路線、路線後果與 Boss 前預備。
-- 左上 P2：當前事件、核心試煉、核心超載、核心諧振、擦彈機動、敵群戰術、Boss 讀題、反制提示與破解加成。
+- 左上 P2：當前事件、核心試煉、核心超載、擊破爆發、核心諧振、擦彈機動、敵群戰術、Boss 讀題、反制提示與破解加成。
 - 左上 P3：目前目標與副條件。
 - 地圖標籤：維修、新星、超頻、危險區、補給、資源。
 
@@ -177,6 +177,7 @@
 - 星域可選隨機、電磁殘骸帶、晶礦雲帶、裂隙邊界；每個星域會帶不同 Boss modifier。
 
 戰鬥重點：
+- 敵群比前版更密；角色基礎護盾、移速與主砲也同步上修，重點是主動清場而不是純逃跑。
 - 先撿碎晶、拿技能，盡快讓一個 Build 成形。
 - 3.6 秒內 5 連殺會觸發「擊破爆發」：金色衝擊波清附近敵人，並短暫提高射速與火力。
 - Build 核心成形後，船身光環、子彈尾焰與命中火花會變成該流派顏色；連續擊破會累積核心連殺並觸發短暫「核心超載」。
@@ -204,6 +205,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script type="module" src="./game.js?v=6.3"></script>
+  <script type="module" src="./game.js?v=6.4"></script>
 </body>
 </html>

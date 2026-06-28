@@ -8,6 +8,7 @@ import {
   COMBAT_SURGE_KILLS,
   COMBAT_SURGE_WINDOW,
   DIFFICULTY_DEFS,
+  SWARM_PRESSURE_DEF,
   EVASION_SURGE_DEF,
   combineRouteChoiceEffects,
   combatChainAfterKill,
@@ -22,6 +23,7 @@ import {
   scoreBuilds,
   spawnIntervalForWaveValue,
   stageKeyForWave,
+  swarmPressureForWave,
   topBuildFromScores,
   upgradeCostForLevel,
   waveEnemyBudgetValue
@@ -66,14 +68,25 @@ test('route choices combine multipliers, additive bonuses, and bias pools', () =
 });
 
 test('difficulty, touch mode, anomaly and route effects feed pacing helpers', () => {
-  assert.equal(waveEnemyBudgetValue({ wave: 1 }), 14);
-  assert.equal(waveEnemyBudgetValue({ wave: 1, controlMode: 'touch', tutorial: true }), Math.floor(14 * .92 * .72));
+  assert.equal(waveEnemyBudgetValue({ wave: 1 }), Math.floor(14 * SWARM_PRESSURE_DEF.budgetMult.warmup));
+  assert.equal(waveEnemyBudgetValue({ wave: 1, controlMode: 'touch', tutorial: true }), Math.floor(14 * swarmPressureForWave({ wave: 1, controlMode: 'touch' }).budgetMult * .72));
   assert.equal(waveEnemyBudgetValue({ wave: 5 }), 0);
-  assert.equal(waveEnemyBudgetValue({ wave: 7, difficulty: DIFFICULTY_DEFS.high, anomaly: { enemyMult: 1.04 }, route: { enemyMult: 1.05 } }), Math.floor(48 * 1.12 * 1.04 * 1.05));
+  assert.equal(waveEnemyBudgetValue({ wave: 7, difficulty: DIFFICULTY_DEFS.high, anomaly: { enemyMult: 1.04 }, route: { enemyMult: 1.05 } }), Math.floor(48 * swarmPressureForWave({ wave: 7 }).budgetMult * 1.12 * 1.04 * 1.05));
   assert.equal(eventChanceForWaveValue({ wave: 2 }), 0);
   assert.equal(eventChanceForWaveValue({ wave: 6, anomaly: { eventBoost: .12 }, route: { eventBoost: .05 } }), .42 + .17);
-  assert.equal(spawnIntervalForWaveValue({ wave: 1, controlMode: 'keyboard' }), .19);
-  assert.equal(enemyCapValue({ wave: 10, controlMode: 'touch', difficulty: DIFFICULTY_DEFS.standard }), Math.round(Math.max(22, (30 - 3 * 1.35) * .86)));
+  assert.equal(spawnIntervalForWaveValue({ wave: 1, controlMode: 'keyboard' }), .19 * SWARM_PRESSURE_DEF.spawnIntervalMult.warmup);
+  assert.equal(enemyCapValue({ wave: 10, controlMode: 'touch', difficulty: DIFFICULTY_DEFS.standard }), Math.round(Math.max(24, (30 + 3 - 3 * 1.15) * .86)));
+});
+
+test('swarm pressure helper raises enemy density while preserving mobile easing', () => {
+  const warmup = swarmPressureForWave({ wave: 1 });
+  const pressure = swarmPressureForWave({ wave: 8 });
+  const mobilePressure = swarmPressureForWave({ wave: 8, controlMode: 'touch' });
+  assert.equal(warmup.budgetMult, SWARM_PRESSURE_DEF.budgetMult.warmup);
+  assert.ok(pressure.budgetMult > warmup.budgetMult);
+  assert.equal(mobilePressure.budgetMult, SWARM_PRESSURE_DEF.budgetMult.pressure * SWARM_PRESSURE_DEF.touchBudgetMult);
+  assert.ok(mobilePressure.capBonus < pressure.capBonus);
+  assert.ok(pressure.spawnIntervalMult < warmup.spawnIntervalMult);
 });
 
 test('build scoring identifies core candidates without touching runtime', () => {
@@ -113,7 +126,7 @@ test('combat surge helper advances kill chains and shockwave damage', () => {
   assert.equal(combatSurgeShockwaveDamage({ wave: 5, combo: 10 }), Math.round(10 + 5 * 1.2 + 5 * .85));
 });
 
- test('core resonance stays inactive before core threshold and exposes build-specific effects after core', () => {
+test('core resonance stays inactive before core threshold and exposes build-specific effects after core', () => {
   const def = { name: '軌砲穿透流', color: '#bdfcff', core: '穿透過載核心' };
   assert.equal(coreResonanceForCore({ id: 'rail', score: BUILD_CORE_SCORE - 1, def }), null);
   const resonance = coreResonanceForCore({ id: 'rail', score: BUILD_CORE_SCORE + 4, def });
