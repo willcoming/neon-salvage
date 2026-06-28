@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   BUILD_CORE_SCORE,
+  CORE_RESONANCE_DEFS,
   DIFFICULTY_DEFS,
   EVASION_SURGE_DEF,
   combineRouteChoiceEffects,
   compactWorldFeatureTargetValue,
+  coreResonanceForCore,
   difficultyFor,
   enemyCapValue,
   eventChanceForWaveValue,
@@ -86,4 +88,24 @@ test('evasion surge constants remain aligned with gameplay copy', () => {
   assert.equal(EVASION_SURGE_DEF.speedMult, 1.18);
   assert.equal(EVASION_SURGE_DEF.fireRateMult, .93);
   assert.equal(EVASION_SURGE_DEF.incomingMult, .92);
+});
+
+test('core resonance stays inactive before core threshold and exposes build-specific effects after core', () => {
+  const def = { name: '軌砲穿透流', color: '#bdfcff', core: '穿透過載核心' };
+  assert.equal(coreResonanceForCore({ id: 'rail', score: BUILD_CORE_SCORE - 1, def }), null);
+  const resonance = coreResonanceForCore({ id: 'rail', score: BUILD_CORE_SCORE + 4, def });
+  assert.equal(resonance.name, CORE_RESONANCE_DEFS.rail.name);
+  assert.equal(resonance.buildName, def.name);
+  assert.equal(resonance.coreName, def.core);
+  assert.equal(resonance.pierceBonus, 1);
+  assert.equal(resonance.bossDamageMult, 1.08);
+  assert.equal(resonance.tier, 1.5);
+});
+
+test('unknown core resonance falls back to a safe damage-only profile', () => {
+  const resonance = coreResonanceForCore({ id: 'custom', score: BUILD_CORE_SCORE, def: { name: '自訂流', color: '#fff', core: '自訂核心' } }, {});
+  assert.equal(resonance.name, '自訂流諧振');
+  assert.equal(resonance.damageMult, 1.04);
+  assert.equal(resonance.fireRateMult, 1);
+  assert.equal(resonance.rewardMult, 1);
 });

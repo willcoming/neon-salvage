@@ -26,6 +26,18 @@ export const RUN_STAGE_DEFS = Object.freeze({
   final: { name: '終局考驗', waves: '10', color: '#ff4d6d', desc: '星環核心 Boss' }
 });
 
+export const CORE_RESONANCE_DEFS = Object.freeze({
+  rapid: { name: '速射諧振', desc: '射擊間隔 -6%｜每4發追加微脈衝', fireRateMult: .94, extraPulseEvery: 4 },
+  rail: { name: '穿透諧振', desc: '火力 +7%｜穿透 +1｜Boss傷害 +8%', damageMult: 1.07, pierceBonus: 1, bossDamageMult: 1.08 },
+  flak: { name: '近爆諧振', desc: '受傷 -4%｜爆裂半徑 +8', incomingMult: .96, blastBonus: 8 },
+  plasma: { name: '電漿諧振', desc: '爆裂半徑 +12｜爆裂傷害 +10%', blastBonus: 12, blastDamageMult: 1.1 },
+  seeker: { name: '索敵諧振', desc: '追蹤轉向 +18%｜磁吸 +55', homingTurnMult: 1.18, magnetBonus: 55 },
+  drone: { name: '蜂群諧振', desc: '射擊間隔 -5%｜無人機傷害 +12%', fireRateMult: .95, droneDamageMult: 1.12 },
+  burn: { name: '熔毀諧振', desc: '暴擊率 +6%｜灼燒 +0.45s', critChanceBonus: .06, burnBonus: .45 },
+  survival: { name: '護盾諧振', desc: '受傷 -6%｜每半秒自修 +0.8', incomingMult: .94, regenBonus: .8 },
+  economy: { name: '拾荒諧振', desc: '磁吸 +85｜碎晶收益 +8%', magnetBonus: 85, rewardMult: 1.08 }
+});
+
 export const NEUTRAL_ROUTE_CHOICE = Object.freeze({
   id: 'none',
   name: '未定路線',
@@ -156,4 +168,35 @@ export function topBuildFromScores(scores = {}, buildDefs = {}) {
   if (!entries.length) return { id: '', score: 0, def: null };
   const [id, score] = entries[0];
   return { id, score, def: buildDefs[id] || null };
+}
+
+export function coreResonanceForCore(core = {}, resonanceDefs = CORE_RESONANCE_DEFS) {
+  if (!core?.id || !core?.def || (core.score || 0) < BUILD_CORE_SCORE) return null;
+  const def = core.def;
+  const resonance = resonanceDefs[core.id] || { name: `${def.name || 'Build'}諧振`, desc: '火力 +4%', damageMult: 1.04 };
+  const bonusScore = Math.max(0, (core.score || 0) - BUILD_CORE_SCORE);
+  return {
+    id: core.id,
+    score: core.score || 0,
+    buildName: def.name || core.id,
+    coreName: def.core || 'Build 核心',
+    color: def.color || '#37f6ff',
+    tier: 1 + Math.min(2, Math.floor(bonusScore / 4)) * .5,
+    damageMult: 1,
+    fireRateMult: 1,
+    incomingMult: 1,
+    rewardMult: 1,
+    magnetBonus: 0,
+    regenBonus: 0,
+    pierceBonus: 0,
+    blastBonus: 0,
+    blastDamageMult: 1,
+    bossDamageMult: 1,
+    critChanceBonus: 0,
+    burnBonus: 0,
+    homingTurnMult: 1,
+    droneDamageMult: 1,
+    extraPulseEvery: 0,
+    ...resonance
+  };
 }

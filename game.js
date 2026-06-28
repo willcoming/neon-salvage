@@ -4,6 +4,7 @@ import {
   DIFFICULTY_DEFS as difficultyDefs,
   DIFFICULTY_ORDER as difficultyOrder,
   RUN_STAGE_DEFS as runStageDefs,
+  CORE_RESONANCE_DEFS as coreResonanceDefs,
   EVASION_SURGE_GRAZES,
   EVASION_SURGE_WINDOW,
   EVASION_SURGE_DEF as evasionSurgeDef,
@@ -18,7 +19,8 @@ import {
   compactWorldFeatureTargetValue,
   upgradeCostForLevel,
   scoreBuilds,
-  topBuildFromScores
+  topBuildFromScores,
+  coreResonanceForCore
 } from './src/balance.js';
 import { createDiagnostics } from './src/diagnostics.js';
 
@@ -157,6 +159,7 @@ import { createDiagnostics } from './src/diagnostics.js';
   let activeCoreOverdrive = null;
   let coreStreak = 0;
   let coreStreakTimer = 0;
+  let lastCoreResonanceId = '';
   let activeEvasionSurge = null;
   let evasionStreak = 0;
   let evasionStreakTimer = 0;
@@ -435,7 +438,7 @@ import { createDiagnostics } from './src/diagnostics.js';
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, evasiveSurges: [], evasionSurgeCount: 0, evasionBestStreak: 0, grazes: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreResonances: [], coreResonance: '', coreResonanceHits: 0, coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, evasiveSurges: [], evasionSurgeCount: 0, evasionBestStreak: 0, grazes: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -962,6 +965,33 @@ import { createDiagnostics } from './src/diagnostics.js';
     return top.def && top.score >= BUILD_CORE_SCORE ? top : { id: '', score: 0, def: null };
   }
 
+  function currentCoreResonance() {
+    return coreResonanceForCore(currentBuildCore(), coreResonanceDefs);
+  }
+
+  function coreResonanceLabel(resonance = currentCoreResonance()) {
+    return resonance ? `${resonance.buildName}→${resonance.name}｜${resonance.desc}` : '';
+  }
+
+  function announceCoreResonanceIfNeeded() {
+    const resonance = currentCoreResonance();
+    const id = resonance ? `${resonance.id}:${resonance.score}` : '';
+    if (!resonance || id === lastCoreResonanceId) return;
+    lastCoreResonanceId = id;
+    const label = coreResonanceLabel(resonance);
+    if (runStats) {
+      runStats.coreResonance = label;
+      runStats.coreResonances.push(label);
+      runStats.coreResonances = runStats.coreResonances.slice(-6);
+      recordPaceNode(`Build核心諧振｜${label}`);
+    }
+    if (player) {
+      addText(player.x, player.y - player.r - 70, resonance.name, resonance.color);
+      particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: .48, max: .48, r: 24, color: resonance.color, ring: true, fastRing: true });
+      wakeMissionHud(3.2);
+    }
+  }
+
   function coreOverdriveActive() {
     return activeCoreOverdrive && activeCoreOverdrive.timer > 0 ? activeCoreOverdrive : null;
   }
@@ -1065,7 +1095,8 @@ import { createDiagnostics } from './src/diagnostics.js';
   function detectBuildName() {
     const top = topBuild();
     if (!top.def || top.score <= 0) return '未成形';
-    return `${top.def.name}${top.score >= BUILD_CORE_SCORE ? '｜核心成形' : '｜成形中'}`;
+    const resonance = coreResonanceForCore(top, coreResonanceDefs);
+    return `${top.def.name}${top.score >= BUILD_CORE_SCORE ? `｜核心成形${resonance ? `｜${resonance.name}` : ''}` : '｜成形中'}`;
   }
 
   function balanceHint() {
@@ -1186,6 +1217,9 @@ import { createDiagnostics } from './src/diagnostics.js';
       bossPhase2Survival: Math.floor(runStats?.bossPhase2Survival || (runStats?.bossPhase2Start ? Math.max(0, runTime - runStats.bossPhase2Start) : 0)),
       skills: [...(runStats?.skills || [])].slice(-6),
       build: detectBuildName(),
+      coreResonance: runStats?.coreResonance || coreResonanceLabel() || '',
+      coreResonances: [...(runStats?.coreResonances || [])].slice(-6),
+      coreResonanceHits: runStats?.coreResonanceHits || 0,
       coreOverdrives: [...(runStats?.coreOverdrives || [])].slice(-8),
       coreOverdriveCount: runStats?.coreOverdriveCount || 0,
       coreStreakBest: runStats?.coreStreakBest || 0,
@@ -1315,6 +1349,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     const bossBreakHtml = record.bossBreaks?.length ? record.bossBreaks.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未完成 Boss 破招</span>';
     const bossRhythmHtml = record.bossRhythms?.length ? record.bossRhythms.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Boss 節奏反擊</span>';
     const bossHighlightHtml = record.bossHighlights?.length ? record.bossHighlights.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未記錄 Boss 擊破亮點</span>';
+    const coreResonanceHtml = record.coreResonances?.length ? record.coreResonances.map(b => `<span>${escapeHtml(b)}</span>`).join('') : record.coreResonance ? `<span>${escapeHtml(record.coreResonance)}</span>` : '<span>尚未形成 Build 核心諧振</span>';
     const coreOverdriveHtml = record.coreOverdrives?.length ? record.coreOverdrives.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Build 核心超載</span>';
     const evasionSurgeHtml = record.evasiveSurges?.length ? record.evasiveSurges.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發擦彈機動</span>';
     const unlock = nextAchievement();
@@ -1322,6 +1357,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     const summaryHtml = [
       ['波次', `第 ${record.wave} 波`],
       ['Build', record.build || '未成形'],
+      ['諧振', record.coreResonance ? `${record.coreResonance.split('｜')[0]}｜命中${record.coreResonanceHits || 0}` : '未成形'],
       ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
       ['路線', record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇'],
       ['超載', record.coreOverdriveCount ? `${record.coreOverdriveCount} 次｜連殺${record.coreStreakBest || 0}` : '未觸發'],
@@ -1357,6 +1393,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       <div class="skill-chips"><b>Boss 破招</b>${bossBreakHtml}</div>
       <div class="skill-chips"><b>Boss 節奏</b>${bossRhythmHtml}</div>
       <div class="skill-chips"><b>Boss 擊破亮點</b>${bossHighlightHtml}</div>
+      <div class="skill-chips"><b>Build 核心諧振</b>${coreResonanceHtml}</div>
       <div class="skill-chips"><b>Build 核心超載</b>${coreOverdriveHtml}</div>
       <div class="skill-chips"><b>擦彈機動</b>${evasionSurgeHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
@@ -1499,7 +1536,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     if (!tags.length) tags.push('流派起手');
 
     let reason = `${def.name} ${current} → ${next} / ${BUILD_CORE_SCORE}`;
-    if (tags.includes('核心候選')) reason += `，選下去會啟動「${def.core}」。`;
+    if (tags.includes('核心候選')) reason += `，選下去會啟動「${def.core}」與「${coreResonanceDefs[skill.build]?.name || '核心諧振'}」。`;
     else if (tags.includes('主流派強化')) reason += '，穩定推高目前主軸。';
     else if (tags.includes('生存補強')) reason += '，目前護盾偏低，能降低暴斃風險。';
     else if (tags.includes('Boss 火力')) reason += '，適合準備 Boss 檢查。';
@@ -2244,13 +2281,14 @@ import { createDiagnostics } from './src/diagnostics.js';
     const rhythm = bossRhythmActive()?.fireRateMult || 1;
     const contract = currentContract()?.fireRateMult || 1;
     const route = routeChoiceEffects()?.fireRateMult || 1;
+    const resonance = currentCoreResonance()?.fireRateMult || 1;
     const core = coreOverdriveActive()?.fireRateMult || 1;
     const evasion = evasionSurgeActive()?.fireRateMult || 1;
-    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route * core * evasion;
+    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route * resonance * core * evasion;
   }
-  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (coreOverdriveActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
-  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (coreOverdriveActive()?.incomingMult || 1) * (evasionSurgeActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
-  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (coreOverdriveActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0) + (routeChoiceEffects()?.magnetBonus || 0); }
+  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (currentCoreResonance()?.damageMult || 1) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (coreOverdriveActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
+  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (currentCoreResonance()?.incomingMult || 1) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (coreOverdriveActive()?.incomingMult || 1) * (evasionSurgeActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
+  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (currentCoreResonance()?.magnetBonus || 0) + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (coreOverdriveActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0) + (routeChoiceEffects()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
   function shouldStartTutorial() {
@@ -2583,7 +2621,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     runStats.contractTag = activeContract.tag || '';
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
     applyRunContractOpening();
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; coreStreak = 0; coreStreakTimer = 0; activeEvasionSurge = null; evasionStreak = 0; evasionStreakTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; coreStreak = 0; coreStreakTimer = 0; lastCoreResonanceId = ''; activeEvasionSurge = null; evasionStreak = 0; evasionStreakTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -2990,13 +3028,15 @@ import { createDiagnostics } from './src/diagnostics.js';
     sfx('shoot');
     const angle = shotTarget();
     const core = currentBuildCore();
+    const resonance = currentCoreResonance();
     const coreId = core.id;
     const coreColor = core.def?.color || '#37f6ff';
     const split = Math.min(2, upgradesRuntime.splitShot);
     const spread = split === 0 ? [0] : split === 1 ? [-.11, 0, .11] : [-.18, -.07, .07, .18];
     const lance = upgradesRuntime.lanceRounds > 0;
     const rail = upgradesRuntime.railCharge > 0 && shotSeq % Math.max(3, 7 - upgradesRuntime.railCharge) === 0;
-    const crit = upgradesRuntime.critCore > 0 && Math.random() < Math.min(.34, .08 + upgradesRuntime.critCore * .055);
+    const critChance = Math.min(.42, (upgradesRuntime.critCore > 0 ? .08 + upgradesRuntime.critCore * .055 : 0) + (resonance?.critChanceBonus || 0));
+    const crit = critChance > 0 && Math.random() < critChance;
     const railBoost = rail ? 1 + upgradesRuntime.railOverload * .22 : 1;
     for (const s of spread) {
       const bulletBuild = rail || lance ? 'rail' : upgradesRuntime.plasmaBurst > 0 ? 'plasma' : upgradesRuntime.burnRounds > 0 ? 'burn' : coreId || 'rapid';
@@ -3006,6 +3046,9 @@ import { createDiagnostics } from './src/diagnostics.js';
         build: bulletBuild,
         trailColor,
         core: !!coreId,
+        resonance: resonance?.id || '',
+        bossDamageMult: resonance?.bossDamageMult || 1,
+        blastDamageMult: resonance?.blastDamageMult || 1,
         x: player.x + Math.cos(angle + s) * 23,
         y: player.y + Math.sin(angle + s) * 23,
         vx: Math.cos(angle + s) * (rail ? 940 : lance ? 820 : 690),
@@ -3013,12 +3056,29 @@ import { createDiagnostics } from './src/diagnostics.js';
         life: rail ? .98 : lance ? 1.18 : 1.05,
         r: rail ? 7.2 : lance ? 5.8 : 4.5,
         dmg: damage() * (spread.length > 1 ? .76 : 1) * (crit ? 1.75 : 1) * (rail ? (1.85 + upgradesRuntime.railCharge * .18) * railBoost : lance ? .88 + upgradesRuntime.lanceRounds * .08 : 1),
-        pierce: (upgradesRuntime.chain > 1 ? 1 : 0) + (rail ? 5 + upgradesRuntime.railOverload : lance ? Math.min(3, upgradesRuntime.lanceRounds) : 0),
-        blast: upgradesRuntime.plasmaBurst > 0 ? 42 + upgradesRuntime.plasmaBurst * 18 : rail && upgradesRuntime.railOverload > 0 ? 22 + upgradesRuntime.railOverload * 9 : 0,
+        pierce: (upgradesRuntime.chain > 1 ? 1 : 0) + (rail ? 5 + upgradesRuntime.railOverload : lance ? Math.min(3, upgradesRuntime.lanceRounds) : 0) + (resonance?.pierceBonus || 0),
+        blast: (upgradesRuntime.plasmaBurst > 0 ? 42 + upgradesRuntime.plasmaBurst * 18 : rail && upgradesRuntime.railOverload > 0 ? 22 + upgradesRuntime.railOverload * 9 : 0) + (resonance?.blastBonus || 0),
         crit,
-        burn: upgradesRuntime.burnRounds
+        burn: upgradesRuntime.burnRounds + (resonance?.burnBonus || 0)
       });
       if (coreId && particles.length < MAX_PARTICLES) particles.push({ x: player.x + Math.cos(angle + s) * 25, y: player.y + Math.sin(angle + s) * 25, vx: Math.cos(angle + s) * 120 + rand(-18, 18), vy: Math.sin(angle + s) * 120 + rand(-18, 18), life: .16, max: .16, r: 2.2, color: trailColor, ring: false, kind: 'spark', len: rail ? 26 : 13 });
+    }
+    if (resonance?.extraPulseEvery && shotSeq % resonance.extraPulseEvery === 0) {
+      for (const off of [-.1, .1]) {
+        bullets.push({
+          type: 'resonance', homing: false, target: null, turn: 0,
+          build: resonance.id, trailColor: resonance.color, core: true, resonance: resonance.id,
+          bossDamageMult: 1, blastDamageMult: 1,
+          x: player.x + Math.cos(angle + off) * 18,
+          y: player.y + Math.sin(angle + off) * 18,
+          vx: Math.cos(angle + off) * 760,
+          vy: Math.sin(angle + off) * 760,
+          life: .72, r: 3.2,
+          dmg: damage() * .34,
+          pierce: 0, blast: 0, crit: false, burn: 0
+        });
+      }
+      if (runStats) runStats.coreResonanceHits += 1;
     }
     if (upgradesRuntime.flakBurst > 0) {
       const count = 2 + Math.min(5, upgradesRuntime.flakBurst * 2);
@@ -3037,8 +3097,8 @@ import { createDiagnostics } from './src/diagnostics.js';
       for (let i = 0; i < count; i++) {
         const off = count === 1 ? 0 : (i - (count - 1) / 2) * .18;
         bullets.push({
-          type: 'seeker', homing: true, target, turn: 4.2 + upgradesRuntime.homingRounds * 1.1,
-          build: 'seeker', trailColor: '#ffd166', core: coreId === 'seeker',
+          type: 'seeker', homing: true, target, turn: (4.2 + upgradesRuntime.homingRounds * 1.1) * (resonance?.homingTurnMult || 1),
+          build: 'seeker', trailColor: '#ffd166', core: coreId === 'seeker', resonance: resonance?.id === 'seeker' ? resonance.id : '',
           x: player.x + Math.cos(angle + off) * 18,
           y: player.y + Math.sin(angle + off) * 18,
           vx: Math.cos(angle + off) * 610,
@@ -3058,7 +3118,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       const count = Math.min(3, upgradesRuntime.droneWing);
       for (let i = 0; i < count; i++) {
         const off = (i - (count - 1) / 2) * .42;
-        bullets.push({ type: 'drone', homing: true, target, turn: 6.2, build: 'drone', trailColor: '#7aa7ff', core: coreId === 'drone', x: player.x + Math.cos(angle + off) * 20, y: player.y + Math.sin(angle + off) * 20, vx: Math.cos(angle + off) * 560, vy: Math.sin(angle + off) * 560, life: 1.1, r: 3.5, dmg: damage() * (.18 + upgradesRuntime.droneWing * .035), pierce: 0, blast: 0, crit: false, burn: 0 });
+        bullets.push({ type: 'drone', homing: true, target, turn: 6.2, build: 'drone', trailColor: '#7aa7ff', core: coreId === 'drone', resonance: resonance?.id === 'drone' ? resonance.id : '', x: player.x + Math.cos(angle + off) * 20, y: player.y + Math.sin(angle + off) * 20, vx: Math.cos(angle + off) * 560, vy: Math.sin(angle + off) * 560, life: 1.1, r: 3.5, dmg: damage() * (.18 + upgradesRuntime.droneWing * .035) * (resonance?.droneDamageMult || 1), pierce: 0, blast: 0, crit: false, burn: 0 });
       }
     }
   }
@@ -3138,7 +3198,7 @@ import { createDiagnostics } from './src/diagnostics.js';
 
   function dropShard(x, y, amount = 1) {
     const bonus = upgradesRuntime.shardMultiplier + (currentZone().scrapBonus || 0);
-    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1) * (currentContract()?.rewardMult || 1) * (routeChoiceEffects()?.rewardMult || 1)));
+    const total = Math.max(1, Math.floor((amount + bonus + (Math.random() < .25 + bonus * .08 + (meta.upgrades.survey || 0) * .025 ? 1 : 0)) * currentDifficulty().reward * (currentAnomaly()?.rewardMult || 1) * (currentContract()?.rewardMult || 1) * (routeChoiceEffects()?.rewardMult || 1) * (currentCoreResonance()?.rewardMult || 1)));
     for (let i = 0; i < total; i++) {
       const a = Math.random() * TWO_PI;
       shards.push({ x: x + rand(-12, 12), y: y + rand(-12, 12), vx: Math.cos(a) * rand(45, 145), vy: Math.sin(a) * rand(45, 145), r: rand(4, 7), value: 1, life: 20 });
@@ -3624,7 +3684,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     updateWorldFeatures(dt);
     updateBeacon(dt);
 
-    const tempoRegen = (tempoBoostActive()?.regenBonus || 0) + (coreOverdriveActive()?.regenBonus || 0);
+    const tempoRegen = (tempoBoostActive()?.regenBonus || 0) + (coreOverdriveActive()?.regenBonus || 0) + (currentCoreResonance()?.regenBonus || 0);
     if ((upgradesRuntime.shieldRegen > 0 || tempoRegen > 0) && player.hp < player.maxHp) {
       player.regenClock += dt;
       if (player.regenClock >= .5) {
@@ -3683,7 +3743,8 @@ import { createDiagnostics } from './src/diagnostics.js';
         const rr = b.r + e.r;
         if (dist2(b, e) < rr * rr) {
           const weakMult = (upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1;
-          let hitDamage = b.dmg * weakMult;
+          let hitDamage = b.dmg * weakMult * (e.type === 'boss' ? (b.bossDamageMult || 1) : 1);
+          if (b.resonance && runStats) runStats.coreResonanceHits += 1;
           if (e.elite?.id === 'refractor' && (Math.floor(runTime * 2) % 2 === 0)) hitDamage *= .62;
           if (e.shield > 0) {
             const blocked = Math.min(e.shield, hitDamage * .85);
@@ -3698,7 +3759,7 @@ import { createDiagnostics } from './src/diagnostics.js';
           if (b.burn > 0) e.burn = Math.max(e.burn || 0, 1.6 + b.burn * .35);
           impactFeedback(b.x, b.y, e.type === 'boss' ? '#ffffff' : b.trailColor || (b.homing ? '#ffd166' : '#37f6ff'), e.type === 'boss' ? 1.2 : .78, e.type === 'boss' ? 'bossHit' : 'hit', Math.atan2(b.vy, b.vx));
           if (b.blast > 0) {
-            const blastDamage = b.dmg * (.35 + upgradesRuntime.plasmaBurst * .08);
+            const blastDamage = b.dmg * (.35 + upgradesRuntime.plasmaBurst * .08) * (b.blastDamageMult || 1);
             particles.push({ x: b.x, y: b.y, vx: 0, vy: 0, life: .22, max: .22, r: b.blast * .32, color: '#ff7a3d', ring: true });
             for (const other of enemies) {
               if (other.dead || other === e) continue;
@@ -4046,6 +4107,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     } else {
       flash(`${name} Lv.${upgradesRuntime[id]}｜${detectBuildName()}`);
     }
+    announceCoreResonanceIfNeeded();
     sfx('upgrade');
   }
 
@@ -4403,8 +4465,9 @@ import { createDiagnostics } from './src/diagnostics.js';
     const top = topBuild();
     if (!top.def || top.score <= 0) return;
     const core = top.score >= BUILD_CORE_SCORE;
+    const resonance = coreResonanceForCore(top, coreResonanceDefs);
     const overdrive = coreOverdriveActive();
-    const color = overdrive?.color || top.def.color || '#37f6ff';
+    const color = overdrive?.color || resonance?.color || top.def.color || '#37f6ff';
     const t = performance.now() * .001;
     const pulse = Math.sin(t * 5.2) * .5 + .5;
     const r = 34 + Math.min(18, top.score * 1.8) + pulse * 2;
@@ -4425,6 +4488,9 @@ import { createDiagnostics } from './src/diagnostics.js';
       ctx.setLineDash([]);
       ctx.font = '900 10px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText('OVERDRIVE', 0, -r - 24);
+    } else if (resonance) {
+      ctx.font = '900 9px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(resonance.name, 0, -r - 18);
     }
     if (top.id === 'rapid') {
       for (let i = 0; i < 6; i++) {
@@ -4814,6 +4880,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     const bossWindow = boss?.breakWindow;
     const hasBoss = !!boss && bossActive;
     const stage = runStageForWave(wave);
+    const resonance = currentCoreResonance();
     const compactMission = controlMode === 'touch' || W < 640;
     if (compactMission) {
       const x = 8; const y = 104; const w = Math.min(W - 16, 330);
@@ -4835,6 +4902,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       else if (hasBoss) { detail = `Boss ${boss.label}${boss.phase2 ? '｜二階段' : ''}｜${(boss.bossModifier || currentBossModifier()).name}`; color = boss.color; }
       else if (activeTacticBreak) { detail = `破解 ${activeTacticBreak.name}｜${Math.ceil(activeTacticBreak.timer)}s`; color = activeTacticBreak.color; }
       else if (activeCoreOverdrive) { detail = `核心超載 ${activeCoreOverdrive.name}｜${Math.ceil(activeCoreOverdrive.timer)}s`; color = activeCoreOverdrive.color; }
+      else if (resonance) { detail = `核心諧振 ${resonance.name}｜${resonance.desc}`; color = resonance.color; }
       else if (activeEvasionSurge) { detail = `擦彈機動 ${activeEvasionSurge.name}｜${Math.ceil(activeEvasionSurge.timer)}s`; color = activeEvasionSurge.color; }
       else if (activeTempoBoost) { detail = `加成 ${activeTempoBoost.name}｜${Math.ceil(activeTempoBoost.timer)}s`; color = activeTempoBoost.color; }
       else if (hasTactic) { detail = `戰術 ${activeTactic.name}｜${tacticCounterText(activeTactic)}`; color = activeTactic.color || '#ffd166'; }
@@ -4854,7 +4922,7 @@ import { createDiagnostics } from './src/diagnostics.js';
         detail = `目標 ${def.name}→${objectiveChainPreview(beacon)}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
         color = def.color;
       }
-      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeCoreOverdrive && !activeEvasionSurge && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
+      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeCoreOverdrive && !resonance && !activeEvasionSurge && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
         const tp = tutorialProgress(tutorialStep);
         detail = `教學 ${tutorialStep.label}｜${tp.value}/${tp.target}`;
         color = '#bdfcff';
@@ -4879,6 +4947,8 @@ import { createDiagnostics } from './src/diagnostics.js';
         ctx.fillStyle = activeTacticBreak.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTacticBreak.timer / activeTacticBreak.duration, 0, 1), 2);
       } else if (activeCoreOverdrive) {
         ctx.fillStyle = activeCoreOverdrive.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeCoreOverdrive.timer / activeCoreOverdrive.duration, 0, 1), 2);
+      } else if (resonance) {
+        ctx.fillStyle = resonance.color; ctx.fillRect(x + 7, y + h - 3, w - 14, 2);
       } else if (activeEvasionSurge) {
         ctx.fillStyle = activeEvasionSurge.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeEvasionSurge.timer / activeEvasionSurge.duration, 0, 1), 2);
       } else if (activeTempoBoost) {
@@ -4900,7 +4970,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       return;
     }
     const x = 12; const y = 112; const w = Math.min(336, W - 24);
-    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (activeEvasionSurge ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (!activeCoreOverdrive && resonance ? 24 : 0) + (activeEvasionSurge ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -4979,6 +5049,12 @@ import { createDiagnostics } from './src/diagnostics.js';
       ctx.fillText(`P2 核心超載｜${activeCoreOverdrive.name} ${Math.ceil(activeCoreOverdrive.timer)}s`, x + 10, lineY, w - 20);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
       ctx.fillStyle = activeCoreOverdrive.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeCoreOverdrive.timer / activeCoreOverdrive.duration, 0, 1), 4);
+      lineY += 24;
+    } else if (resonance) {
+      ctx.fillStyle = resonance.color; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P2 核心諧振｜${resonance.name}`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
+      ctx.fillText(resonance.desc, x + 10, lineY + 15, w - 20);
       lineY += 24;
     }
     if (activeEvasionSurge) {
