@@ -150,6 +150,9 @@
   let activeCoreOverdrive = null;
   let coreStreak = 0;
   let coreStreakTimer = 0;
+  let activeEvasionSurge = null;
+  let evasionStreak = 0;
+  let evasionStreakTimer = 0;
   let bossCinematic = null;
   let victoryRainTimer = 0;
   let hitStopTimer = 0;
@@ -446,7 +449,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, evasiveSurges: [], evasionSurgeCount: 0, evasionBestStreak: 0, grazes: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -791,7 +794,7 @@
     const routeSig = `${activeRouteChoices.map(c => c.id).join('+')}:${routeChoiceOffer?.id || ''}:${worldFeatures.filter(f => f.type === 'routeChoice').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}`).join(',')}`;
     const consequenceSig = `${activeRouteConsequences.map(c => `${c.id}:${c.status}`).join(',')}:${worldFeatures.filter(f => f.type === 'routeConsequence').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}:${Math.ceil(f.hp || 0)}`).join(',')}:${enemies.filter(e => e.routeConsequence).map(e => `${e.routeConsequence.id}:${Math.round(e.hp)}`).join(',')}`;
     const prepSig = routeBossPrepEffects().names.join('+');
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeCoreOverdrive?.id || '', Math.ceil(activeCoreOverdrive?.timer || 0), activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, prepSig, bossSig].join('|');
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeCoreOverdrive?.id || '', Math.ceil(activeCoreOverdrive?.timer || 0), activeEvasionSurge?.id || '', Math.ceil(activeEvasionSurge?.timer || 0), evasionStreak || 0, activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, prepSig, bossSig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -1069,6 +1072,48 @@
     }
   }
 
+  function evasionSurgeActive() {
+    return activeEvasionSurge && activeEvasionSurge.timer > 0 ? activeEvasionSurge : null;
+  }
+
+  function triggerEvasionSurge(source = '擦彈連段') {
+    if (!player) return null;
+    activeEvasionSurge = { ...evasionSurgeDef, timer: evasionSurgeDef.duration, source };
+    evasionStreak = 0;
+    evasionStreakTimer = 0;
+    if (runStats) {
+      runStats.evasionSurgeCount = (runStats.evasionSurgeCount || 0) + 1;
+      const label = `${evasionSurgeDef.name}｜${evasionSurgeDef.desc}`;
+      runStats.evasiveSurges.push(label);
+      runStats.evasiveSurges = runStats.evasiveSurges.slice(-8);
+      recordPaceNode(`擦彈機動｜${label}`);
+    }
+    addText(player.x, player.y - player.r - 54, `${evasionSurgeDef.name} ${Math.ceil(evasionSurgeDef.duration)}s`, evasionSurgeDef.color);
+    particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: .42, max: .42, r: 24, color: evasionSurgeDef.color, ring: true, fastRing: true });
+    burst(player.x, player.y, evasionSurgeDef.color, 18, .92);
+    flash(`擦彈機動：${evasionSurgeDef.desc}`);
+    sfx('counter');
+    haptic(18);
+    wakeMissionHud(3.4);
+    return activeEvasionSurge;
+  }
+
+  function recordEvasionGraze(s) {
+    if (!player || !s || s.grazed || isPlayerProtected()) return;
+    s.grazed = true;
+    evasionStreak = evasionStreakTimer > 0 ? evasionStreak + 1 : 1;
+    evasionStreakTimer = EVASION_SURGE_WINDOW;
+    if (runStats) {
+      runStats.grazes = (runStats.grazes || 0) + 1;
+      runStats.evasionBestStreak = Math.max(runStats.evasionBestStreak || 0, evasionStreak);
+    }
+    const need = EVASION_SURGE_GRAZES;
+    addText(player.x, player.y - player.r - 36, `擦彈 ${Math.min(evasionStreak, need)}/${need}`, evasionSurgeDef.color);
+    particles.push({ x: s.x, y: s.y, vx: -s.vx * .06 + rand(-20, 20), vy: -s.vy * .06 + rand(-20, 20), life: .18, max: .18, r: 2.2, color: evasionSurgeDef.color, ring: false, kind: 'spark', len: 18 });
+    if (evasionStreak >= need && (!activeEvasionSurge || activeEvasionSurge.timer < 1.6)) triggerEvasionSurge(`${need} 擦彈`);
+    else wakeMissionHud(1.2);
+  }
+
   function detectBuildName() {
     const top = topBuild();
     if (!top.def || top.score <= 0) return '未成形';
@@ -1145,6 +1190,8 @@
     }
     if ((record.shieldSatelliteTime || 0) > 0 && (record.shieldSatelliteKills || 0) < 2) list.push('優先擊破 2 台護盾衛星');
     if ((record.objectiveBonuses || 0) < 2 && (record.objectives || 0) >= 2) list.push('完成 2 個帶 ★ 副條件目標');
+    if ((record.wave || 0) >= 2 && !(record.evasionSurgeCount || 0)) list.push('用 3 次擦彈啟動一次機動超載');
+    if ((record.evasionSurgeCount || 0) >= 1 && (record.evasionBestStreak || 0) < 6) list.push('挑戰 6 連擦彈維持機動超載');
     if ((record.build || '').includes('核心成形') && !(record.coreOverdriveCount || 0)) list.push('用核心流派打出一次連殺超載');
     if ((record.coreOverdriveCount || 0) >= 1 && (record.coreStreakBest || 0) < 14) list.push('挑戰 14 連殺延續核心超載');
     if ((record.tacticsSeen || []).length && !(record.tacticBreakCount || 0)) list.push(`破解 ${record.tacticsSeen[0]} 戰術`);
@@ -1194,6 +1241,10 @@
       coreOverdrives: [...(runStats?.coreOverdrives || [])].slice(-8),
       coreOverdriveCount: runStats?.coreOverdriveCount || 0,
       coreStreakBest: runStats?.coreStreakBest || 0,
+      evasiveSurges: [...(runStats?.evasiveSurges || [])].slice(-8),
+      evasionSurgeCount: runStats?.evasionSurgeCount || 0,
+      evasionBestStreak: runStats?.evasionBestStreak || 0,
+      grazes: runStats?.grazes || 0,
       contract: runStats?.contract || contractTitle(),
       contractTag: runStats?.contractTag || currentContract().tag || '',
       routeChoices: [...(runStats?.routeChoices || [])].slice(-4),
@@ -1317,6 +1368,7 @@
     const bossRhythmHtml = record.bossRhythms?.length ? record.bossRhythms.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Boss 節奏反擊</span>';
     const bossHighlightHtml = record.bossHighlights?.length ? record.bossHighlights.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未記錄 Boss 擊破亮點</span>';
     const coreOverdriveHtml = record.coreOverdrives?.length ? record.coreOverdrives.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Build 核心超載</span>';
+    const evasionSurgeHtml = record.evasiveSurges?.length ? record.evasiveSurges.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發擦彈機動</span>';
     const unlock = nextAchievement();
     const unlockHtml = unlock ? `${escapeHtml(unlock.name)}｜${escapeHtml(unlock.progress?.() || '')}｜${escapeHtml(unlock.unlock || '')}` : '所有成就已解鎖';
     const summaryHtml = [
@@ -1325,6 +1377,7 @@
       ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
       ['路線', record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇'],
       ['超載', record.coreOverdriveCount ? `${record.coreOverdriveCount} 次｜連殺${record.coreStreakBest || 0}` : '未觸發'],
+      ['擦彈', record.evasionSurgeCount ? `${record.evasionSurgeCount} 次｜連擦${record.evasionBestStreak || 0}` : `${record.grazes || 0} 擦`],
       ['後果', record.routeConsequences?.length ? `${record.routeConsequences.length} 完成` : record.routeConsequenceMisses?.length ? '已錯過' : '未觸發'],
       ['Boss預備', record.routeBossPreps?.length ? `${record.routeBossPreps.length} 個` : '未取得'],
       ['壓力', `${record.pressure || '-'}｜${(record.budget || '-').split('｜')[0]}`],
@@ -1336,7 +1389,7 @@
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
-        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>核心超載</dt><dd>${escapeHtml(record.coreOverdriveCount || 0)} 次｜連殺 ${escapeHtml(record.coreStreakBest || 0)}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>核心超載</dt><dd>${escapeHtml(record.coreOverdriveCount || 0)} 次｜連殺 ${escapeHtml(record.coreStreakBest || 0)}</dd></div><div><dt>擦彈機動</dt><dd>${escapeHtml(record.evasionSurgeCount || 0)} 次｜擦彈 ${escapeHtml(record.grazes || 0)}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>契約</dt><dd>${escapeHtml(record.contract || '-')}</dd></div><div><dt>局內路線</dt><dd>${escapeHtml(record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>Boss改造</dt><dd>${escapeHtml(record.bossModifier || '-')}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
@@ -1357,6 +1410,7 @@
       <div class="skill-chips"><b>Boss 節奏</b>${bossRhythmHtml}</div>
       <div class="skill-chips"><b>Boss 擊破亮點</b>${bossHighlightHtml}</div>
       <div class="skill-chips"><b>Build 核心超載</b>${coreOverdriveHtml}</div>
+      <div class="skill-chips"><b>擦彈機動</b>${evasionSurgeHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
       <div class="skill-chips"><b>戰術破解</b>${tacticBreakHtml}</div>
       <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
@@ -1428,6 +1482,10 @@
     survival: { name: '韌性護盾', desc: '受傷 -18%｜短暫自修', incomingMult: .82, regenBonus: 4.2 },
     economy: { name: '拾荒磁暴', desc: '磁吸 +160｜火力 +5%', magnetBonus: 160, damageMult: 1.05 }
   };
+
+  const EVASION_SURGE_GRAZES = 3;
+  const EVASION_SURGE_WINDOW = 3.2;
+  const evasionSurgeDef = { id: 'evasionSurge', name: '擦彈機動', desc: '移速 +18%｜射速 +7%｜受傷 -8%', color: '#bdfcff', duration: 5.5, speedMult: 1.18, fireRateMult: .93, incomingMult: .92 };
 
   const skillPool = [
     { id: 'splitShot', build: 'rapid', weight: 2, role: '多彈道', name: '三叉脈衝', desc: '主砲增加散射彈道。' },
@@ -2237,7 +2295,7 @@
   function playerScale() { return controlMode === 'touch' ? .46 : .72; }
   function playerRadius() { return 17 * playerScale(); }
   function enemyScale() { return controlMode === 'touch' ? .76 : .84; }
-  function speed() { return (282 + (meta.upgrades.engine || 0) * 18 + (meta.upgrades.armor || 0) * 2) * (controlMode === 'touch' ? .88 : 1); }
+  function speed() { return (282 + (meta.upgrades.engine || 0) * 18 + (meta.upgrades.armor || 0) * 2) * (controlMode === 'touch' ? .88 : 1) * (evasionSurgeActive()?.speedMult || 1); }
   function fireRate() { return Math.max(.07, .215 - (meta.upgrades.cannon || 0) * .011 - (meta.upgrades.reactor || 0) * .004); }
   function weaponFireRate() {
     const harvest = upgradesRuntime.harvestDrive > 0 ? Math.max(.72, 1 - Math.min(.28, (runKills % 10) * .028 * upgradesRuntime.harvestDrive)) : 1;
@@ -2249,10 +2307,11 @@
     const contract = currentContract()?.fireRateMult || 1;
     const route = routeChoiceEffects()?.fireRateMult || 1;
     const core = coreOverdriveActive()?.fireRateMult || 1;
-    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route * core;
+    const evasion = evasionSurgeActive()?.fireRateMult || 1;
+    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route * core * evasion;
   }
   function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (coreOverdriveActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
-  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (coreOverdriveActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
+  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (coreOverdriveActive()?.incomingMult || 1) * (evasionSurgeActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (coreOverdriveActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0) + (routeChoiceEffects()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
@@ -2586,7 +2645,7 @@
     runStats.contractTag = activeContract.tag || '';
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
     applyRunContractOpening();
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; coreStreak = 0; coreStreakTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; coreStreak = 0; coreStreakTimer = 0; activeEvasionSurge = null; evasionStreak = 0; evasionStreakTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -3550,6 +3609,14 @@
       activeCoreOverdrive.timer -= dt;
       if (activeCoreOverdrive.timer <= 0) activeCoreOverdrive = null;
     }
+    if (activeEvasionSurge) {
+      activeEvasionSurge.timer -= dt;
+      if (activeEvasionSurge.timer <= 0) activeEvasionSurge = null;
+    }
+    if (evasionStreakTimer > 0) {
+      evasionStreakTimer -= dt;
+      if (evasionStreakTimer <= 0) evasionStreak = 0;
+    }
     if (coreStreakTimer > 0) {
       coreStreakTimer -= dt;
       if (coreStreakTimer <= 0) coreStreak = 0;
@@ -3902,7 +3969,11 @@
         for (const e of enemies) if (!e.dead && dist2(s, e) < Math.pow(s.r + e.r, 2)) { e.hp -= s.dmg * 1.7; e.hit = .12; impactFeedback(s.x, s.y, '#ff7a3d', .8, 'hit'); if (e.hp <= 0) killEnemy(e); }
         particles.push({ x: s.x, y: s.y, vx: rand(-10, 10), vy: rand(-10, 10), life: .2, max: .2, r: 3, color: s.color || '#ff7a3d', ring: false });
       }
-      if (dist2(s, player) < Math.pow(s.r + player.r, 2) && !isPlayerProtected()) {
+      const hitR = s.r + player.r;
+      const shotD2 = dist2(s, player);
+      const grazeR = hitR + (s.type === 'meteor' ? 30 : 22);
+      if (!s.grazed && !isPlayerProtected() && shotD2 >= hitR * hitR && shotD2 < grazeR * grazeR) recordEvasionGraze(s);
+      if (shotD2 < hitR * hitR && !isPlayerProtected()) {
         playerImpact(s.type === 'meteor' ? 'meteor' : 'projectile', s.type === 'meteor' ? 4.5 : 3.4, s.type === 'meteor' ? 38 : 20, s.x, s.y); s.dead = true; player.hp -= incomingDamage(s.dmg); damageFlash = .3; player.invuln = .45; burst(player.x, player.y, '#ff4d6d', 10);
         if (player.hp <= 0) endRun();
       }
@@ -4362,6 +4433,17 @@
     ctx.strokeStyle = '#eef7ff'; ctx.lineWidth = 2; ctx.stroke();
     ctx.fillStyle = '#050712'; ctx.beginPath(); ctx.arc(0, 0, 5.2, 0, TWO_PI); ctx.fill();
     if (playerDamageCue) { ctx.strokeStyle = '#ff4d6d'; ctx.lineWidth = 3; ctx.globalAlpha *= .72; ctx.beginPath(); ctx.arc(0, 0, 31, 0, TWO_PI); ctx.stroke(); ctx.globalAlpha = flicker ? .45 : 1; }
+    const evasion = evasionSurgeActive();
+    if (evasion) {
+      const pulse = Math.sin(performance.now() * .012) * .5 + .5;
+      ctx.strokeStyle = evasion.color;
+      ctx.lineWidth = 2;
+      ctx.globalAlpha *= .74;
+      ctx.setLineDash([7, 6]);
+      ctx.beginPath(); ctx.arc(0, 0, 34 + pulse * 7, 0, TWO_PI); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.globalAlpha = flicker ? .45 : 1;
+    }
     ctx.fillStyle = '#ff3df2'; ctx.globalAlpha *= .82; ctx.beginPath(); ctx.moveTo(-23, -5); ctx.lineTo(-29 - Math.random() * 4, 0); ctx.lineTo(-23, 5); ctx.fill();
     ctx.restore();
 
@@ -4804,6 +4886,7 @@
       else if (hasBoss) { detail = `Boss ${boss.label}${boss.phase2 ? '｜二階段' : ''}｜${(boss.bossModifier || currentBossModifier()).name}`; color = boss.color; }
       else if (activeTacticBreak) { detail = `破解 ${activeTacticBreak.name}｜${Math.ceil(activeTacticBreak.timer)}s`; color = activeTacticBreak.color; }
       else if (activeCoreOverdrive) { detail = `核心超載 ${activeCoreOverdrive.name}｜${Math.ceil(activeCoreOverdrive.timer)}s`; color = activeCoreOverdrive.color; }
+      else if (activeEvasionSurge) { detail = `擦彈機動 ${activeEvasionSurge.name}｜${Math.ceil(activeEvasionSurge.timer)}s`; color = activeEvasionSurge.color; }
       else if (activeTempoBoost) { detail = `加成 ${activeTempoBoost.name}｜${Math.ceil(activeTempoBoost.timer)}s`; color = activeTempoBoost.color; }
       else if (hasTactic) { detail = `戰術 ${activeTactic.name}｜${tacticCounterText(activeTactic)}`; color = activeTactic.color || '#ffd166'; }
       else if (hasRouteChoice) {
@@ -4822,7 +4905,7 @@
         detail = `目標 ${def.name}→${objectiveChainPreview(beacon)}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
         color = def.color;
       }
-      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
+      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeCoreOverdrive && !activeEvasionSurge && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
         const tp = tutorialProgress(tutorialStep);
         detail = `教學 ${tutorialStep.label}｜${tp.value}/${tp.target}`;
         color = '#bdfcff';
@@ -4847,6 +4930,8 @@
         ctx.fillStyle = activeTacticBreak.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTacticBreak.timer / activeTacticBreak.duration, 0, 1), 2);
       } else if (activeCoreOverdrive) {
         ctx.fillStyle = activeCoreOverdrive.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeCoreOverdrive.timer / activeCoreOverdrive.duration, 0, 1), 2);
+      } else if (activeEvasionSurge) {
+        ctx.fillStyle = activeEvasionSurge.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeEvasionSurge.timer / activeEvasionSurge.duration, 0, 1), 2);
       } else if (activeTempoBoost) {
         ctx.fillStyle = activeTempoBoost.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTempoBoost.timer / activeTempoBoost.duration, 0, 1), 2);
       } else if (hasRouteConsequence) {
@@ -4866,7 +4951,7 @@
       return;
     }
     const x = 12; const y = 112; const w = Math.min(336, W - 24);
-    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (activeEvasionSurge ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -4945,6 +5030,13 @@
       ctx.fillText(`P2 核心超載｜${activeCoreOverdrive.name} ${Math.ceil(activeCoreOverdrive.timer)}s`, x + 10, lineY, w - 20);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
       ctx.fillStyle = activeCoreOverdrive.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeCoreOverdrive.timer / activeCoreOverdrive.duration, 0, 1), 4);
+      lineY += 24;
+    }
+    if (activeEvasionSurge) {
+      ctx.fillStyle = activeEvasionSurge.color; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P2 擦彈機動｜${activeEvasionSurge.name} ${Math.ceil(activeEvasionSurge.timer)}s`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
+      ctx.fillStyle = activeEvasionSurge.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeEvasionSurge.timer / activeEvasionSurge.duration, 0, 1), 4);
       lineY += 24;
     }
     if (activeTacticBreak) {
