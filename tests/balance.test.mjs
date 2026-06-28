@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import {
   BUILD_CORE_SCORE,
   CORE_RESONANCE_DEFS,
+  CORE_TRIAL_DEFS,
   DIFFICULTY_DEFS,
   EVASION_SURGE_DEF,
   combineRouteChoiceEffects,
   compactWorldFeatureTargetValue,
   coreResonanceForCore,
+  coreTrialForResonance,
   difficultyFor,
   enemyCapValue,
   eventChanceForWaveValue,
@@ -108,4 +110,22 @@ test('unknown core resonance falls back to a safe damage-only profile', () => {
   assert.equal(resonance.damageMult, 1.04);
   assert.equal(resonance.fireRateMult, 1);
   assert.equal(resonance.rewardMult, 1);
+});
+
+test('core trial helper maps resonances to timed objectives with safe fallback', () => {
+  const def = { name: '軌砲穿透流', color: '#bdfcff', core: '穿透過載核心' };
+  const resonance = coreResonanceForCore({ id: 'rail', score: BUILD_CORE_SCORE, def });
+  const trial = coreTrialForResonance(resonance);
+  assert.equal(trial.name, CORE_TRIAL_DEFS.rail.name);
+  assert.equal(trial.verb, '穿透命中');
+  assert.equal(trial.target, 8);
+  assert.equal(trial.duration, 24);
+  assert.equal(trial.color, def.color);
+  assert.equal(trial.progress, 0);
+  assert.equal(trial.completed, false);
+  assert.equal(coreTrialForResonance(null), null);
+  const fallback = coreTrialForResonance({ id: 'custom', name: '自訂諧振', buildName: '自訂流', color: '#fff' }, {});
+  assert.equal(fallback.name, '自訂諧振試煉');
+  assert.equal(fallback.target, 8);
+  assert.equal(fallback.rewardScrap, 20);
 });

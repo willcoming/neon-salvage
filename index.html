@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=6.1" />
+  <link rel="stylesheet" href="./styles.css?v=6.2" />
 </head>
 <body>
   <div id="app">
@@ -109,11 +109,11 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v6.1 Build 核心諧振版</strong>
+          <strong>v6.2 核心試煉版</strong>
           <ul>
-            <li>每個成形 Build 會啟動持續「核心諧振」被動，讓速射、穿透、近爆、電漿、追蹤、無人機、灼燒、生存與拾荒路線差異更明顯。</li>
-            <li>核心諧振會影響真實戰鬥數值與子彈特性：射速、傷害、穿透、爆裂半徑、追蹤轉向、灼燒、減傷、磁吸與碎晶收益。</li>
-            <li>HUD、飛船光環與結算報告新增核心諧振名稱、效果與命中紀錄，下一局 build 方向更清楚。</li>
+            <li>Build 核心諧振成形後會開啟短時間「核心試煉」，要求用該核心打法累積真實命中進度。</li>
+            <li>完成試煉會給碎晶、XP 與短補給，讓成形 build 有立即可追逐的小目標。</li>
+            <li>HUD、任務 strip 與結算新增試煉進度 / 完成 / 逾時紀錄，下一局更清楚知道核心打法是否打出價值。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -135,7 +135,7 @@
 目標：
 - 完成地圖目標、撐過事件、組出技能流派。
 - 第 5 波是 Boss 檢查，第 10 波擊破「星環核心主宰」即可撤離成功。
-- 結算會給 C/B/A/S 評級，並列出 Build、核心超載、擦彈機動、契約 / 詛咒、局內抉擇、路線後果、Boss 前預備、Boss 改造、壓力、目標路線、戰術破解與下一局建議。
+- 結算會給 C/B/A/S 評級，並列出 Build、核心諧振、核心試煉、核心超載、擦彈機動、契約 / 詛咒、局內抉擇、路線後果、Boss 前預備、Boss 改造、壓力、目標路線、戰術破解與下一局建議。
 
 操作：
 - WASD / 方向鍵：移動。
@@ -154,7 +154,7 @@
 
 畫面閱讀：
 - 左上 P1：目前 run 節奏、本局異變任務、開局契約 / 詛咒、局內路線、路線後果與 Boss 前預備。
-- 左上 P2：當前事件、核心超載、擦彈機動、敵群戰術、Boss 讀題、反制提示與破解加成。
+- 左上 P2：當前事件、核心試煉、核心超載、核心諧振、擦彈機動、敵群戰術、Boss 讀題、反制提示與破解加成。
 - 左上 P3：目前目標與副條件。
 - 地圖標籤：維修、新星、超頻、危險區、補給、資源。
 
@@ -203,6 +203,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script type="module" src="./game.js?v=6.1"></script>
+  <script type="module" src="./game.js?v=6.2"></script>
 </body>
 </html>

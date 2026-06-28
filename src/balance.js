@@ -38,6 +38,18 @@ export const CORE_RESONANCE_DEFS = Object.freeze({
   economy: { name: '拾荒諧振', desc: '磁吸 +85｜碎晶收益 +8%', magnetBonus: 85, rewardMult: 1.08 }
 });
 
+export const CORE_TRIAL_DEFS = Object.freeze({
+  rapid: { name: '速射試煉', verb: '微脈衝命中', target: 10, duration: 22, rewardScrap: 20, rewardXpMult: .28, powerup: 'rapid' },
+  rail: { name: '穿透試煉', verb: '穿透命中', target: 8, duration: 24, rewardScrap: 24, rewardXpMult: .3, powerup: 'nova' },
+  flak: { name: '近爆試煉', verb: '近爆命中', target: 10, duration: 22, rewardScrap: 22, rewardXpMult: .28, powerup: 'heal' },
+  plasma: { name: '電漿試煉', verb: '爆裂命中', target: 10, duration: 24, rewardScrap: 24, rewardXpMult: .3, powerup: 'rapid' },
+  seeker: { name: '索敵試煉', verb: '追蹤命中', target: 9, duration: 24, rewardScrap: 22, rewardXpMult: .28, powerup: 'rapid' },
+  drone: { name: '蜂群試煉', verb: '無人機命中', target: 9, duration: 24, rewardScrap: 24, rewardXpMult: .3, powerup: 'heal' },
+  burn: { name: '熔毀試煉', verb: '灼燒命中', target: 9, duration: 24, rewardScrap: 24, rewardXpMult: .3, powerup: 'nova' },
+  survival: { name: '護盾試煉', verb: '護盾核心命中', target: 7, duration: 26, rewardScrap: 22, rewardXpMult: .32, powerup: 'heal' },
+  economy: { name: '拾荒試煉', verb: '諧振拾荒命中', target: 8, duration: 24, rewardScrap: 30, rewardXpMult: .24, powerup: 'rapid' }
+});
+
 export const NEUTRAL_ROUTE_CHOICE = Object.freeze({
   id: 'none',
   name: '未定路線',
@@ -198,5 +210,19 @@ export function coreResonanceForCore(core = {}, resonanceDefs = CORE_RESONANCE_D
     droneDamageMult: 1,
     extraPulseEvery: 0,
     ...resonance
+  };
+}
+
+export function coreTrialForResonance(resonance = null, trialDefs = CORE_TRIAL_DEFS) {
+  if (!resonance?.id) return null;
+  const trial = trialDefs[resonance.id] || { name: `${resonance.name || '核心'}試煉`, verb: '諧振命中', target: 8, duration: 24, rewardScrap: 20, rewardXpMult: .25, powerup: 'rapid' };
+  return {
+    id: resonance.id,
+    resonanceName: resonance.name,
+    buildName: resonance.buildName,
+    color: resonance.color || '#37f6ff',
+    progress: 0,
+    completed: false,
+    ...trial
   };
 }

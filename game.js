@@ -5,6 +5,7 @@ import {
   DIFFICULTY_ORDER as difficultyOrder,
   RUN_STAGE_DEFS as runStageDefs,
   CORE_RESONANCE_DEFS as coreResonanceDefs,
+  CORE_TRIAL_DEFS as coreTrialDefs,
   EVASION_SURGE_GRAZES,
   EVASION_SURGE_WINDOW,
   EVASION_SURGE_DEF as evasionSurgeDef,
@@ -20,7 +21,8 @@ import {
   upgradeCostForLevel,
   scoreBuilds,
   topBuildFromScores,
-  coreResonanceForCore
+  coreResonanceForCore,
+  coreTrialForResonance
 } from './src/balance.js';
 import { createDiagnostics } from './src/diagnostics.js';
 
@@ -157,6 +159,8 @@ import { createDiagnostics } from './src/diagnostics.js';
   let activeBossBreak = null;
   let activeBossRhythm = null;
   let activeCoreOverdrive = null;
+  let activeCoreTrial = null;
+  let coreTrialSeen = new Set();
   let coreStreak = 0;
   let coreStreakTimer = 0;
   let lastCoreResonanceId = '';
@@ -438,7 +442,7 @@ import { createDiagnostics } from './src/diagnostics.js';
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreResonances: [], coreResonance: '', coreResonanceHits: 0, coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, evasiveSurges: [], evasionSurgeCount: 0, evasionBestStreak: 0, grazes: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreResonances: [], coreResonance: '', coreResonanceHits: 0, coreTrials: [], coreTrialCount: 0, coreTrialMisses: [], coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, evasiveSurges: [], evasionSurgeCount: 0, evasionBestStreak: 0, grazes: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -763,7 +767,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     const routeSig = `${activeRouteChoices.map(c => c.id).join('+')}:${routeChoiceOffer?.id || ''}:${worldFeatures.filter(f => f.type === 'routeChoice').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}`).join(',')}`;
     const consequenceSig = `${activeRouteConsequences.map(c => `${c.id}:${c.status}`).join(',')}:${worldFeatures.filter(f => f.type === 'routeConsequence').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}:${Math.ceil(f.hp || 0)}`).join(',')}:${enemies.filter(e => e.routeConsequence).map(e => `${e.routeConsequence.id}:${Math.round(e.hp)}`).join(',')}`;
     const prepSig = routeBossPrepEffects().names.join('+');
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeCoreOverdrive?.id || '', Math.ceil(activeCoreOverdrive?.timer || 0), activeEvasionSurge?.id || '', Math.ceil(activeEvasionSurge?.timer || 0), evasionStreak || 0, activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, prepSig, bossSig].join('|');
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeCoreTrial ? `${activeCoreTrial.id}:${activeCoreTrial.progress}:${Math.ceil(activeCoreTrial.timer)}` : '', activeCoreOverdrive?.id || '', Math.ceil(activeCoreOverdrive?.timer || 0), activeEvasionSurge?.id || '', Math.ceil(activeEvasionSurge?.timer || 0), evasionStreak || 0, activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, prepSig, bossSig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -973,6 +977,69 @@ import { createDiagnostics } from './src/diagnostics.js';
     return resonance ? `${resonance.buildName}→${resonance.name}｜${resonance.desc}` : '';
   }
 
+  function startCoreTrial(resonance = currentCoreResonance()) {
+    if (!resonance || activeCoreTrial || coreTrialSeen.has(resonance.id)) return null;
+    const trial = coreTrialForResonance(resonance, coreTrialDefs);
+    if (!trial) return null;
+    activeCoreTrial = { ...trial, timer: trial.duration, progress: 0, completed: false };
+    coreTrialSeen.add(resonance.id);
+    if (runStats) recordPaceNode(`核心試煉開始｜${trial.name}：${trial.verb} ${trial.target} 次`);
+    flash(`核心試煉：${trial.name}｜${trial.verb} ${trial.target} 次`);
+    wakeMissionHud(4.5);
+    return activeCoreTrial;
+  }
+
+  function completeCoreTrial(trial = activeCoreTrial) {
+    if (!trial || trial.completed) return;
+    trial.completed = true;
+    const xpGain = Math.ceil(xpNeed * (trial.rewardXpMult || .25));
+    const scrapGain = trial.rewardScrap || 20;
+    xp += xpGain;
+    meta.scrap += scrapGain;
+    if (trial.powerup) dropPowerup(trial.powerup, player?.x + 48 || W / 2, player?.y - 34 || H / 2, 18);
+    const label = `${trial.name}完成｜${trial.verb} ${trial.progress}/${trial.target}｜碎晶+${scrapGain}｜XP+${xpGain}`;
+    if (runStats) {
+      runStats.coreTrialCount = (runStats.coreTrialCount || 0) + 1;
+      runStats.coreTrials.push(label);
+      runStats.coreTrials = runStats.coreTrials.slice(-6);
+      recordPaceNode(`核心試煉完成｜${label}`);
+    }
+    if (player) {
+      addText(player.x, player.y - player.r - 84, `${trial.name}完成`, trial.color);
+      burst(player.x, player.y, trial.color, 22, 1.05);
+    }
+    flash(`核心試煉完成：碎晶 +${scrapGain}｜XP +${xpGain}`);
+    sfx('success');
+    haptic(35);
+    activeCoreTrial = null;
+    wakeMissionHud(4.2);
+  }
+
+  function expireCoreTrial() {
+    if (!activeCoreTrial) return;
+    const label = `${activeCoreTrial.name}未完成｜${activeCoreTrial.progress}/${activeCoreTrial.target}`;
+    if (runStats) {
+      runStats.coreTrialMisses.push(label);
+      runStats.coreTrialMisses = runStats.coreTrialMisses.slice(-4);
+      recordPaceNode(`核心試煉逾時｜${label}`);
+    }
+    flash(`核心試煉逾時：${activeCoreTrial.progress}/${activeCoreTrial.target}`);
+    activeCoreTrial = null;
+    wakeMissionHud(2.5);
+  }
+
+  function recordCoreResonanceHit(b, e) {
+    if (!b?.resonance) return;
+    if (runStats) runStats.coreResonanceHits += 1;
+    if (!activeCoreTrial || activeCoreTrial.completed || activeCoreTrial.id !== b.resonance) return;
+    activeCoreTrial.progress = Math.min(activeCoreTrial.target, activeCoreTrial.progress + 1);
+    if (activeCoreTrial.progress >= activeCoreTrial.target) completeCoreTrial(activeCoreTrial);
+    else if (activeCoreTrial.target - activeCoreTrial.progress <= 2 && player) {
+      addText(e?.x || player.x, (e?.y || player.y) - 28, `${activeCoreTrial.name} ${activeCoreTrial.progress}/${activeCoreTrial.target}`, activeCoreTrial.color);
+      wakeMissionHud(1.4);
+    }
+  }
+
   function announceCoreResonanceIfNeeded() {
     const resonance = currentCoreResonance();
     const id = resonance ? `${resonance.id}:${resonance.score}` : '';
@@ -990,6 +1057,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: .48, max: .48, r: 24, color: resonance.color, ring: true, fastRing: true });
       wakeMissionHud(3.2);
     }
+    startCoreTrial(resonance);
   }
 
   function coreOverdriveActive() {
@@ -1220,6 +1288,10 @@ import { createDiagnostics } from './src/diagnostics.js';
       coreResonance: runStats?.coreResonance || coreResonanceLabel() || '',
       coreResonances: [...(runStats?.coreResonances || [])].slice(-6),
       coreResonanceHits: runStats?.coreResonanceHits || 0,
+      coreTrials: [...(runStats?.coreTrials || [])].slice(-6),
+      coreTrialCount: runStats?.coreTrialCount || 0,
+      coreTrialMisses: [...(runStats?.coreTrialMisses || [])].slice(-4),
+      activeCoreTrial: activeCoreTrial ? `${activeCoreTrial.name}｜${activeCoreTrial.progress}/${activeCoreTrial.target}｜${Math.ceil(activeCoreTrial.timer)}s` : '',
       coreOverdrives: [...(runStats?.coreOverdrives || [])].slice(-8),
       coreOverdriveCount: runStats?.coreOverdriveCount || 0,
       coreStreakBest: runStats?.coreStreakBest || 0,
@@ -1350,6 +1422,8 @@ import { createDiagnostics } from './src/diagnostics.js';
     const bossRhythmHtml = record.bossRhythms?.length ? record.bossRhythms.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Boss 節奏反擊</span>';
     const bossHighlightHtml = record.bossHighlights?.length ? record.bossHighlights.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未記錄 Boss 擊破亮點</span>';
     const coreResonanceHtml = record.coreResonances?.length ? record.coreResonances.map(b => `<span>${escapeHtml(b)}</span>`).join('') : record.coreResonance ? `<span>${escapeHtml(record.coreResonance)}</span>` : '<span>尚未形成 Build 核心諧振</span>';
+    const coreTrialHtml = record.coreTrials?.length ? record.coreTrials.map(b => `<span>${escapeHtml(b)}</span>`).join('') : record.activeCoreTrial ? `<span>${escapeHtml(record.activeCoreTrial)}</span>` : '<span>尚未完成核心試煉</span>';
+    const coreTrialMissHtml = record.coreTrialMisses?.length ? record.coreTrialMisses.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>沒有逾時核心試煉</span>';
     const coreOverdriveHtml = record.coreOverdrives?.length ? record.coreOverdrives.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Build 核心超載</span>';
     const evasionSurgeHtml = record.evasiveSurges?.length ? record.evasiveSurges.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發擦彈機動</span>';
     const unlock = nextAchievement();
@@ -1358,6 +1432,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       ['波次', `第 ${record.wave} 波`],
       ['Build', record.build || '未成形'],
       ['諧振', record.coreResonance ? `${record.coreResonance.split('｜')[0]}｜命中${record.coreResonanceHits || 0}` : '未成形'],
+      ['試煉', record.coreTrialCount ? `${record.coreTrialCount} 完成` : record.activeCoreTrial || '未完成'],
       ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
       ['路線', record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇'],
       ['超載', record.coreOverdriveCount ? `${record.coreOverdriveCount} 次｜連殺${record.coreStreakBest || 0}` : '未觸發'],
@@ -1373,7 +1448,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
-        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>核心超載</dt><dd>${escapeHtml(record.coreOverdriveCount || 0)} 次｜連殺 ${escapeHtml(record.coreStreakBest || 0)}</dd></div><div><dt>擦彈機動</dt><dd>${escapeHtml(record.evasionSurgeCount || 0)} 次｜擦彈 ${escapeHtml(record.grazes || 0)}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>核心超載</dt><dd>${escapeHtml(record.coreOverdriveCount || 0)} 次｜連殺 ${escapeHtml(record.coreStreakBest || 0)}</dd></div><div><dt>核心試煉</dt><dd>${escapeHtml(record.coreTrialCount || 0)} 完成｜命中 ${escapeHtml(record.coreResonanceHits || 0)}</dd></div><div><dt>擦彈機動</dt><dd>${escapeHtml(record.evasionSurgeCount || 0)} 次｜擦彈 ${escapeHtml(record.grazes || 0)}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>契約</dt><dd>${escapeHtml(record.contract || '-')}</dd></div><div><dt>局內路線</dt><dd>${escapeHtml(record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>Boss改造</dt><dd>${escapeHtml(record.bossModifier || '-')}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
@@ -1394,6 +1469,8 @@ import { createDiagnostics } from './src/diagnostics.js';
       <div class="skill-chips"><b>Boss 節奏</b>${bossRhythmHtml}</div>
       <div class="skill-chips"><b>Boss 擊破亮點</b>${bossHighlightHtml}</div>
       <div class="skill-chips"><b>Build 核心諧振</b>${coreResonanceHtml}</div>
+      <div class="skill-chips"><b>核心試煉</b>${coreTrialHtml}</div>
+      <div class="skill-chips"><b>試煉逾時</b>${coreTrialMissHtml}</div>
       <div class="skill-chips"><b>Build 核心超載</b>${coreOverdriveHtml}</div>
       <div class="skill-chips"><b>擦彈機動</b>${evasionSurgeHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
@@ -2621,7 +2698,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     runStats.contractTag = activeContract.tag || '';
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
     applyRunContractOpening();
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; coreStreak = 0; coreStreakTimer = 0; lastCoreResonanceId = ''; activeEvasionSurge = null; evasionStreak = 0; evasionStreakTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; activeCoreTrial = null; coreTrialSeen = new Set(); coreStreak = 0; coreStreakTimer = 0; lastCoreResonanceId = ''; activeEvasionSurge = null; evasionStreak = 0; evasionStreakTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -3078,7 +3155,7 @@ import { createDiagnostics } from './src/diagnostics.js';
           pierce: 0, blast: 0, crit: false, burn: 0
         });
       }
-      if (runStats) runStats.coreResonanceHits += 1;
+      if (player) wakeMissionHud(.8);
     }
     if (upgradesRuntime.flakBurst > 0) {
       const count = 2 + Math.min(5, upgradesRuntime.flakBurst * 2);
@@ -3618,6 +3695,10 @@ import { createDiagnostics } from './src/diagnostics.js';
       activeCoreOverdrive.timer -= dt;
       if (activeCoreOverdrive.timer <= 0) activeCoreOverdrive = null;
     }
+    if (activeCoreTrial) {
+      activeCoreTrial.timer -= dt;
+      if (activeCoreTrial.timer <= 0) expireCoreTrial();
+    }
     if (activeEvasionSurge) {
       activeEvasionSurge.timer -= dt;
       if (activeEvasionSurge.timer <= 0) activeEvasionSurge = null;
@@ -3744,7 +3825,7 @@ import { createDiagnostics } from './src/diagnostics.js';
         if (dist2(b, e) < rr * rr) {
           const weakMult = (upgradesRuntime.weakScan > 0 && (e.elite || e.type === 'boss')) ? 1 + upgradesRuntime.weakScan * .16 : 1;
           let hitDamage = b.dmg * weakMult * (e.type === 'boss' ? (b.bossDamageMult || 1) : 1);
-          if (b.resonance && runStats) runStats.coreResonanceHits += 1;
+          recordCoreResonanceHit(b, e);
           if (e.elite?.id === 'refractor' && (Math.floor(runTime * 2) % 2 === 0)) hitDamage *= .62;
           if (e.shield > 0) {
             const blocked = Math.min(e.shield, hitDamage * .85);
@@ -4901,6 +4982,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       else if (bossWindow) { detail = `Boss讀題 ${bossWindow.source}｜破招 ${Math.ceil(bossWindow.timer)}s`; color = bossWindow.color; }
       else if (hasBoss) { detail = `Boss ${boss.label}${boss.phase2 ? '｜二階段' : ''}｜${(boss.bossModifier || currentBossModifier()).name}`; color = boss.color; }
       else if (activeTacticBreak) { detail = `破解 ${activeTacticBreak.name}｜${Math.ceil(activeTacticBreak.timer)}s`; color = activeTacticBreak.color; }
+      else if (activeCoreTrial) { detail = `試煉 ${activeCoreTrial.name}｜${activeCoreTrial.progress}/${activeCoreTrial.target}｜${Math.ceil(activeCoreTrial.timer)}s`; color = activeCoreTrial.color; }
       else if (activeCoreOverdrive) { detail = `核心超載 ${activeCoreOverdrive.name}｜${Math.ceil(activeCoreOverdrive.timer)}s`; color = activeCoreOverdrive.color; }
       else if (resonance) { detail = `核心諧振 ${resonance.name}｜${resonance.desc}`; color = resonance.color; }
       else if (activeEvasionSurge) { detail = `擦彈機動 ${activeEvasionSurge.name}｜${Math.ceil(activeEvasionSurge.timer)}s`; color = activeEvasionSurge.color; }
@@ -4922,7 +5004,7 @@ import { createDiagnostics } from './src/diagnostics.js';
         detail = `目標 ${def.name}→${objectiveChainPreview(beacon)}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
         color = def.color;
       }
-      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeCoreOverdrive && !resonance && !activeEvasionSurge && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
+      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeCoreTrial && !activeCoreOverdrive && !resonance && !activeEvasionSurge && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
         const tp = tutorialProgress(tutorialStep);
         detail = `教學 ${tutorialStep.label}｜${tp.value}/${tp.target}`;
         color = '#bdfcff';
@@ -4945,6 +5027,8 @@ import { createDiagnostics } from './src/diagnostics.js';
         ctx.fillStyle = bossWindow.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(bossWindow.progress / bossWindow.threshold, 0, 1), 2);
       } else if (activeTacticBreak) {
         ctx.fillStyle = activeTacticBreak.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTacticBreak.timer / activeTacticBreak.duration, 0, 1), 2);
+      } else if (activeCoreTrial) {
+        ctx.fillStyle = activeCoreTrial.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeCoreTrial.progress / Math.max(1, activeCoreTrial.target), 0, 1), 2);
       } else if (activeCoreOverdrive) {
         ctx.fillStyle = activeCoreOverdrive.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeCoreOverdrive.timer / activeCoreOverdrive.duration, 0, 1), 2);
       } else if (resonance) {
@@ -4970,7 +5054,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       return;
     }
     const x = 12; const y = 112; const w = Math.min(336, W - 24);
-    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (!activeCoreOverdrive && resonance ? 24 : 0) + (activeEvasionSurge ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreTrial ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (!activeCoreOverdrive && resonance ? 24 : 0) + (activeEvasionSurge ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -5042,6 +5126,15 @@ import { createDiagnostics } from './src/diagnostics.js';
       ctx.fillText(`P2 加成｜${activeTempoBoost.name} ${Math.ceil(activeTempoBoost.timer)}s`, x + 10, lineY);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
       ctx.fillStyle = activeTempoBoost.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeTempoBoost.timer / activeTempoBoost.duration, 0, 1), 4);
+      lineY += 24;
+    }
+    if (activeCoreTrial) {
+      ctx.fillStyle = activeCoreTrial.color; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P2 核心試煉｜${activeCoreTrial.name} ${Math.ceil(activeCoreTrial.timer)}s`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
+      ctx.fillStyle = activeCoreTrial.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeCoreTrial.progress / Math.max(1, activeCoreTrial.target), 0, 1), 4);
+      ctx.fillStyle = 'rgba(238,247,255,.72)'; ctx.font = '800 10px system-ui';
+      ctx.fillText(`${activeCoreTrial.verb} ${activeCoreTrial.progress}/${activeCoreTrial.target}`, x + 10, lineY + 19, w - 20);
       lineY += 24;
     }
     if (activeCoreOverdrive) {
