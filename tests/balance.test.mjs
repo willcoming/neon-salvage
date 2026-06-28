@@ -4,9 +4,14 @@ import {
   BUILD_CORE_SCORE,
   CORE_RESONANCE_DEFS,
   CORE_TRIAL_DEFS,
+  COMBAT_SURGE_DEF,
+  COMBAT_SURGE_KILLS,
+  COMBAT_SURGE_WINDOW,
   DIFFICULTY_DEFS,
   EVASION_SURGE_DEF,
   combineRouteChoiceEffects,
+  combatChainAfterKill,
+  combatSurgeShockwaveDamage,
   compactWorldFeatureTargetValue,
   coreResonanceForCore,
   coreTrialForResonance,
@@ -92,7 +97,23 @@ test('evasion surge constants remain aligned with gameplay copy', () => {
   assert.equal(EVASION_SURGE_DEF.incomingMult, .92);
 });
 
-test('core resonance stays inactive before core threshold and exposes build-specific effects after core', () => {
+test('combat surge helper advances kill chains and shockwave damage', () => {
+  let state = { combo: 0, timer: 0, best: 0 };
+  for (let i = 1; i <= COMBAT_SURGE_KILLS; i++) state = combatChainAfterKill(state);
+  assert.equal(state.combo, COMBAT_SURGE_KILLS);
+  assert.equal(state.best, COMBAT_SURGE_KILLS);
+  assert.equal(state.timer, COMBAT_SURGE_WINDOW);
+  assert.equal(state.surgeReady, true);
+  const reset = combatChainAfterKill({ combo: 9, timer: 0, best: state.best });
+  assert.equal(reset.combo, 1);
+  assert.equal(reset.surgeReady, false);
+  assert.equal(COMBAT_SURGE_DEF.name, '擊破爆發');
+  assert.equal(COMBAT_SURGE_DEF.fireRateMult, .9);
+  assert.equal(COMBAT_SURGE_DEF.damageMult, 1.06);
+  assert.equal(combatSurgeShockwaveDamage({ wave: 5, combo: 10 }), Math.round(10 + 5 * 1.2 + 5 * .85));
+});
+
+ test('core resonance stays inactive before core threshold and exposes build-specific effects after core', () => {
   const def = { name: '軌砲穿透流', color: '#bdfcff', core: '穿透過載核心' };
   assert.equal(coreResonanceForCore({ id: 'rail', score: BUILD_CORE_SCORE - 1, def }), null);
   const resonance = coreResonanceForCore({ id: 'rail', score: BUILD_CORE_SCORE + 4, def });

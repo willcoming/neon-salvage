@@ -12,6 +12,21 @@ export const EVASION_SURGE_DEF = Object.freeze({
   incomingMult: .92
 });
 
+export const COMBAT_SURGE_KILLS = 5;
+export const COMBAT_SURGE_WINDOW = 3.6;
+export const COMBAT_SURGE_DEF = Object.freeze({
+  id: 'combatSurge',
+  name: '擊破爆發',
+  desc: '5 連殺觸發衝擊波｜射速 +10%｜火力 +6%',
+  color: '#ffd166',
+  duration: 3.8,
+  fireRateMult: .9,
+  damageMult: 1.06,
+  shockwaveRadius: 128,
+  shockwaveDamageBase: 10,
+  shockwaveDamagePerWave: 1.2
+});
+
 export const DIFFICULTY_ORDER = ['standard', 'high', 'chaos'];
 export const DIFFICULTY_DEFS = Object.freeze({
   standard: { name: '標準星環', desc: '預設體驗', enemy: 1, speed: 1, cap: 1, reward: 1, event: 1 },
@@ -78,6 +93,21 @@ const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
 export function difficultyFor(id) {
   return DIFFICULTY_DEFS[id] || DIFFICULTY_DEFS.standard;
+}
+
+export function combatChainAfterKill({ combo = 0, timer = 0, best = 0, threshold = COMBAT_SURGE_KILLS, window = COMBAT_SURGE_WINDOW } = {}) {
+  const nextCombo = timer > 0 ? Math.max(0, combo) + 1 : 1;
+  return {
+    combo: nextCombo,
+    timer: window,
+    best: Math.max(best || 0, nextCombo),
+    surgeReady: nextCombo >= threshold && nextCombo % threshold === 0
+  };
+}
+
+export function combatSurgeShockwaveDamage({ wave = 1, combo = 0, def = COMBAT_SURGE_DEF } = {}) {
+  const comboBonus = Math.min(12, Math.max(0, combo - COMBAT_SURGE_KILLS) * .85);
+  return Math.round((def.shockwaveDamageBase || 0) + Math.max(1, wave || 1) * (def.shockwaveDamagePerWave || 0) + comboBonus);
 }
 
 export function stageKeyForWave(wave, sectorClearWave = 10) {

@@ -9,6 +9,9 @@ import {
   EVASION_SURGE_GRAZES,
   EVASION_SURGE_WINDOW,
   EVASION_SURGE_DEF as evasionSurgeDef,
+  COMBAT_SURGE_KILLS,
+  COMBAT_SURGE_WINDOW,
+  COMBAT_SURGE_DEF as combatSurgeDef,
   combineRouteChoiceEffects,
   difficultyFor,
   stageKeyForWave,
@@ -22,7 +25,9 @@ import {
   scoreBuilds,
   topBuildFromScores,
   coreResonanceForCore,
-  coreTrialForResonance
+  coreTrialForResonance,
+  combatChainAfterKill,
+  combatSurgeShockwaveDamage
 } from './src/balance.js';
 import { createDiagnostics } from './src/diagnostics.js';
 
@@ -167,6 +172,9 @@ import { createDiagnostics } from './src/diagnostics.js';
   let activeEvasionSurge = null;
   let evasionStreak = 0;
   let evasionStreakTimer = 0;
+  let activeCombatSurge = null;
+  let combatCombo = 0;
+  let combatComboTimer = 0;
   let bossCinematic = null;
   let victoryRainTimer = 0;
   let hitStopTimer = 0;
@@ -285,7 +293,7 @@ import { createDiagnostics } from './src/diagnostics.js';
   function sfx(name) {
     if (!meta.soundEnabled) return;
     const now = performance.now();
-    const gap = name === 'shoot' ? 55 : name === 'hit' ? 38 : name === 'pickup' ? 75 : name === 'bossHit' ? 90 : name === 'hurt' ? 240 : 0;
+    const gap = name === 'shoot' ? 55 : name === 'hit' ? 38 : name === 'pickup' ? 75 : name === 'bossHit' ? 90 : name === 'hurt' ? 240 : name === 'surge' ? 160 : 0;
     if (gap && now - (sfxGate[name] || 0) < gap) return;
     sfxGate[name] = now;
     if (name === 'shoot') tone(720, .035, 'square', .014, 1.28);
@@ -296,6 +304,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     else if (name === 'boss') { tone(90, .2, 'sawtooth', .035, .72); tone(180, .14, 'triangle', .025, .55); }
     else if (name === 'bossTell') { tone(180, .11, 'sawtooth', .026, .72); setTimeout(() => tone(360, .08, 'triangle', .018, 1.18), 60); }
     else if (name === 'counter') { tone(520, .055, 'triangle', .024, 1.35); setTimeout(() => tone(880, .075, 'sine', .018, 1.25), 55); }
+    else if (name === 'surge') { tone(180, .08, 'sawtooth', .032, .72); setTimeout(() => tone(620, .075, 'triangle', .026, 1.4), 45); setTimeout(() => tone(980, .09, 'sine', .022, 1.18), 95); }
     else if (name === 'bossDie') { tone(120, .18, 'sawtooth', .04, .5); setTimeout(() => tone(520, .12, 'triangle', .03, 1.6), 70); }
     else if (name === 'pickup') tone(960, .045, 'sine', .018, 1.35);
     else if (name === 'upgrade') { tone(520, .06, 'triangle', .025, 1.35); setTimeout(() => tone(760, .07, 'triangle', .022, 1.25), 55); }
@@ -414,6 +423,10 @@ import { createDiagnostics } from './src/diagnostics.js';
 
   function impactFeedback(x, y, color = '#37f6ff', strength = 1, sound = 'hit', angle = null) {
     sfx(sound);
+    if (sound === 'bossDie') triggerHitStop(.085);
+    else if (sound === 'elite') triggerHitStop(.045);
+    else if (sound === 'kill') triggerHitStop(.026);
+    else if (strength >= 2.8) triggerHitStop(.04);
     if (strength >= 1.8) addShake(strength, .12);
     const count = Math.min(18, Math.ceil(4 + strength * 3));
     for (let i = 0; i < count && particles.length < MAX_PARTICLES; i++) {
@@ -442,7 +455,7 @@ import { createDiagnostics } from './src/diagnostics.js';
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreResonances: [], coreResonance: '', coreResonanceHits: 0, coreTrials: [], coreTrialCount: 0, coreTrialMisses: [], coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, evasiveSurges: [], evasionSurgeCount: 0, evasionBestStreak: 0, grazes: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreResonances: [], coreResonance: '', coreResonanceHits: 0, coreTrials: [], coreTrialCount: 0, coreTrialMisses: [], coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, combatSurges: [], combatSurgeCount: 0, combatComboBest: 0, evasiveSurges: [], evasionSurgeCount: 0, evasionBestStreak: 0, grazes: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -1160,6 +1173,69 @@ import { createDiagnostics } from './src/diagnostics.js';
     else wakeMissionHud(1.2);
   }
 
+  function combatSurgeActive() {
+    return activeCombatSurge && activeCombatSurge.timer > 0 ? activeCombatSurge : null;
+  }
+
+  function applyCombatShockwave(source, combo = combatCombo) {
+    if (!source) return 0;
+    const radius = (combatSurgeDef.shockwaveRadius || 128) + Math.min(52, combo * 3.5);
+    const amount = combatSurgeShockwaveDamage({ wave, combo, def: combatSurgeDef });
+    let hits = 0;
+    if (particles.length < MAX_PARTICLES) particles.push({ x: source.x, y: source.y, vx: 0, vy: 0, life: .32, max: .32, r: radius * .42, color: combatSurgeDef.color, ring: true, fastRing: true });
+    if (particles.length < MAX_PARTICLES) particles.push({ x: source.x, y: source.y, vx: 0, vy: 0, life: .22, max: .22, r: radius * .25, color: '#ffffff', ring: true, fastRing: true });
+    for (const other of enemies) {
+      if (other.dead || other === source) continue;
+      const d = Math.hypot(other.x - source.x, other.y - source.y);
+      if (d > radius + other.r) continue;
+      const falloff = 1 - Math.min(.55, d / Math.max(1, radius) * .42);
+      const dealt = amount * falloff * (other.type === 'boss' ? .45 : 1);
+      other.hp -= dealt;
+      other.hit = Math.max(other.hit || 0, .12);
+      hits++;
+      if (particles.length < MAX_PARTICLES) {
+        const a = Math.atan2(other.y - source.y, other.x - source.x);
+        particles.push({ x: other.x, y: other.y, vx: Math.cos(a) * rand(70, 150), vy: Math.sin(a) * rand(70, 150), life: .18, max: .18, r: 2.4, color: combatSurgeDef.color, ring: false, kind: 'spark', len: 22 });
+      }
+      if (other.hp <= 0) killEnemy(other);
+    }
+    if (hits) addText(source.x, source.y - source.r - 34, `衝擊波 ${hits}`, combatSurgeDef.color);
+    return hits;
+  }
+
+  function triggerCombatSurge(source, combo = combatCombo) {
+    if (!source) return null;
+    activeCombatSurge = { ...combatSurgeDef, timer: combatSurgeDef.duration, combo, source: `${combo} 連殺` };
+    if (runStats) {
+      runStats.combatSurgeCount = (runStats.combatSurgeCount || 0) + 1;
+      const label = `${combatSurgeDef.name} x${combo}｜${combatSurgeDef.desc}`;
+      runStats.combatSurges.push(label);
+      runStats.combatSurges = runStats.combatSurges.slice(-8);
+      recordPaceNode(`擊破爆發｜${label}`);
+    }
+    addText(source.x, source.y - source.r - 48, `${combatSurgeDef.name} x${combo}`, combatSurgeDef.color);
+    burst(source.x, source.y, combatSurgeDef.color, 26, 1.18);
+    triggerHitStop(.052);
+    addShake(3.8, .18);
+    sfx('surge');
+    haptic(24);
+    applyCombatShockwave(source, combo);
+    flash(`${combatSurgeDef.name}：${combo} 連殺｜衝擊波 + 短暫火力加速`);
+    wakeMissionHud(3.2);
+    return activeCombatSurge;
+  }
+
+  function recordCombatKill(e) {
+    if (!e || e.type === 'boss') return;
+    const state = combatChainAfterKill({ combo: combatCombo, timer: combatComboTimer, best: runStats?.combatComboBest || 0 });
+    combatCombo = state.combo;
+    combatComboTimer = state.timer;
+    if (runStats) runStats.combatComboBest = state.best;
+    if (combatCombo >= 3) addText(e.x, e.y - e.r - 24, `連殺 x${combatCombo}`, combatSurgeDef.color);
+    if (state.surgeReady && (!activeCombatSurge || activeCombatSurge.timer < 1.2)) triggerCombatSurge(e, combatCombo);
+    else if (combatCombo >= COMBAT_SURGE_KILLS - 1 || combatComboTimer > COMBAT_SURGE_WINDOW * .55) wakeMissionHud(1.15);
+  }
+
   function detectBuildName() {
     const top = topBuild();
     if (!top.def || top.score <= 0) return '未成形';
@@ -1173,6 +1249,8 @@ import { createDiagnostics } from './src/diagnostics.js';
     if ((runStats.shieldSatelliteTime || 0) > 8 && (runStats.shieldSatelliteKills || 0) <= 1) return '診斷：護盾衛星拖慢清場，下一局看到藍色衛星要優先擊破。';
     if ((runStats.tacticPressure || 0) >= 8 && !(runStats.tacticBreakCount || 0)) return '診斷：敵群戰術壓力偏高但未破解，下一局先拆 HUD 提示的關鍵單位。';
     if ((runStats.tacticBreakCount || 0) >= 2) return '診斷：戰術破解穩定，能把敵群題目轉成短暫反攻窗口。';
+    if ((runStats.combatSurgeCount || 0) >= 2) return '診斷：擊破爆發穩定，5 連殺衝擊波已能把清場轉成爽快節奏。';
+    if (runKills >= 14 && !(runStats.combatSurgeCount || 0)) return '診斷：擊殺斷點偏散；用範圍、追蹤或拉怪把 5 連殺接成擊破爆發會更爽。';
     if ((runStats.tacticPressure || 0) >= 8) return '診斷：敵群戰術組合壓力偏高，先拆關鍵單位再清雜兵會更穩。';
     if ((runStats.bossBreakCount || 0) >= 2) return '診斷：Boss 讀題與破招掌握良好，能把終局招式轉成輸出窗口。';
     if ((runStats.bossRhythmCount || 0) >= 2) return '診斷：Boss 節奏掌握良好，能利用安全縫換到反擊窗口。';
@@ -1190,7 +1268,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     const boss = runStats?.bossKillTime ? `｜Boss ${formatTime(runStats.bossKillTime)}` : '';
     const consequence = runStats?.routeConsequences?.length ? `｜後果 ${runStats.routeConsequences.length}` : '';
     const prep = runStats?.routeBossPreps?.length ? `｜Boss預備 ${runStats.routeBossPreps.length}` : '';
-    return `戰鬥報告｜${contractTitle()}｜路線 ${routeChoiceTitle()}${consequence}${prep}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
+    return `戰鬥報告｜${contractTitle()}｜路線 ${routeChoiceTitle()}${consequence}${prep}｜時間 ${formatTime(runTime)}｜${longestWaveText()}｜連殺${runStats?.combatComboBest || 0}/爆發${runStats?.combatSurgeCount || 0}｜峰值 敵${runStats?.maxEnemies || 0}/物件${runStats?.maxWorldFeatures || 0}/粒子${runStats?.maxParticles || 0}/ring${runStats?.maxRings || 0}${boss}｜${pickedSkillsText()}｜${balanceHint()}｜${buildCoverageHint()}`;
   }
 
   function escapeHtml(value) {
@@ -1237,6 +1315,8 @@ import { createDiagnostics } from './src/diagnostics.js';
     }
     if ((record.shieldSatelliteTime || 0) > 0 && (record.shieldSatelliteKills || 0) < 2) list.push('優先擊破 2 台護盾衛星');
     if ((record.objectiveBonuses || 0) < 2 && (record.objectives || 0) >= 2) list.push('完成 2 個帶 ★ 副條件目標');
+    if ((record.kills || 0) >= 12 && !(record.combatSurgeCount || 0)) list.push('用 5 連殺觸發一次擊破爆發');
+    if ((record.combatSurgeCount || 0) >= 1 && (record.combatComboBest || 0) < 10) list.push('挑戰 10 連殺雙重爆發');
     if ((record.wave || 0) >= 2 && !(record.evasionSurgeCount || 0)) list.push('用 3 次擦彈啟動一次機動超載');
     if ((record.evasionSurgeCount || 0) >= 1 && (record.evasionBestStreak || 0) < 6) list.push('挑戰 6 連擦彈維持機動超載');
     if ((record.build || '').includes('核心成形') && !(record.coreOverdriveCount || 0)) list.push('用核心流派打出一次連殺超載');
@@ -1295,6 +1375,9 @@ import { createDiagnostics } from './src/diagnostics.js';
       coreOverdrives: [...(runStats?.coreOverdrives || [])].slice(-8),
       coreOverdriveCount: runStats?.coreOverdriveCount || 0,
       coreStreakBest: runStats?.coreStreakBest || 0,
+      combatSurges: [...(runStats?.combatSurges || [])].slice(-8),
+      combatSurgeCount: runStats?.combatSurgeCount || 0,
+      combatComboBest: runStats?.combatComboBest || 0,
       evasiveSurges: [...(runStats?.evasiveSurges || [])].slice(-8),
       evasionSurgeCount: runStats?.evasionSurgeCount || 0,
       evasionBestStreak: runStats?.evasionBestStreak || 0,
@@ -1425,6 +1508,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     const coreTrialHtml = record.coreTrials?.length ? record.coreTrials.map(b => `<span>${escapeHtml(b)}</span>`).join('') : record.activeCoreTrial ? `<span>${escapeHtml(record.activeCoreTrial)}</span>` : '<span>尚未完成核心試煉</span>';
     const coreTrialMissHtml = record.coreTrialMisses?.length ? record.coreTrialMisses.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>沒有逾時核心試煉</span>';
     const coreOverdriveHtml = record.coreOverdrives?.length ? record.coreOverdrives.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Build 核心超載</span>';
+    const combatSurgeHtml = record.combatSurges?.length ? record.combatSurges.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發擊破爆發</span>';
     const evasionSurgeHtml = record.evasiveSurges?.length ? record.evasiveSurges.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發擦彈機動</span>';
     const unlock = nextAchievement();
     const unlockHtml = unlock ? `${escapeHtml(unlock.name)}｜${escapeHtml(unlock.progress?.() || '')}｜${escapeHtml(unlock.unlock || '')}` : '所有成就已解鎖';
@@ -1435,7 +1519,8 @@ import { createDiagnostics } from './src/diagnostics.js';
       ['試煉', record.coreTrialCount ? `${record.coreTrialCount} 完成` : record.activeCoreTrial || '未完成'],
       ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
       ['路線', record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇'],
-      ['超載', record.coreOverdriveCount ? `${record.coreOverdriveCount} 次｜連殺${record.coreStreakBest || 0}` : '未觸發'],
+      ['超載', record.coreOverdriveCount ? `${record.coreOverdriveCount} 次｜核心連殺${record.coreStreakBest || 0}` : '未觸發'],
+      ['爽快', record.combatSurgeCount ? `${record.combatSurgeCount} 次爆發｜連殺${record.combatComboBest || 0}` : `連殺${record.combatComboBest || 0}`],
       ['擦彈', record.evasionSurgeCount ? `${record.evasionSurgeCount} 次｜連擦${record.evasionBestStreak || 0}` : `${record.grazes || 0} 擦`],
       ['後果', record.routeConsequences?.length ? `${record.routeConsequences.length} 完成` : record.routeConsequenceMisses?.length ? '已錯過' : '未觸發'],
       ['Boss預備', record.routeBossPreps?.length ? `${record.routeBossPreps.length} 個` : '未取得'],
@@ -1448,7 +1533,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
-        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>核心超載</dt><dd>${escapeHtml(record.coreOverdriveCount || 0)} 次｜連殺 ${escapeHtml(record.coreStreakBest || 0)}</dd></div><div><dt>核心試煉</dt><dd>${escapeHtml(record.coreTrialCount || 0)} 完成｜命中 ${escapeHtml(record.coreResonanceHits || 0)}</dd></div><div><dt>擦彈機動</dt><dd>${escapeHtml(record.evasionSurgeCount || 0)} 次｜擦彈 ${escapeHtml(record.grazes || 0)}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>核心超載</dt><dd>${escapeHtml(record.coreOverdriveCount || 0)} 次｜核心連殺 ${escapeHtml(record.coreStreakBest || 0)}</dd></div><div><dt>擊破爆發</dt><dd>${escapeHtml(record.combatSurgeCount || 0)} 次｜連殺 ${escapeHtml(record.combatComboBest || 0)}</dd></div><div><dt>核心試煉</dt><dd>${escapeHtml(record.coreTrialCount || 0)} 完成｜命中 ${escapeHtml(record.coreResonanceHits || 0)}</dd></div><div><dt>擦彈機動</dt><dd>${escapeHtml(record.evasionSurgeCount || 0)} 次｜擦彈 ${escapeHtml(record.grazes || 0)}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>契約</dt><dd>${escapeHtml(record.contract || '-')}</dd></div><div><dt>局內路線</dt><dd>${escapeHtml(record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>Boss改造</dt><dd>${escapeHtml(record.bossModifier || '-')}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
@@ -1472,6 +1557,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       <div class="skill-chips"><b>核心試煉</b>${coreTrialHtml}</div>
       <div class="skill-chips"><b>試煉逾時</b>${coreTrialMissHtml}</div>
       <div class="skill-chips"><b>Build 核心超載</b>${coreOverdriveHtml}</div>
+      <div class="skill-chips"><b>擊破爆發</b>${combatSurgeHtml}</div>
       <div class="skill-chips"><b>擦彈機動</b>${evasionSurgeHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
       <div class="skill-chips"><b>戰術破解</b>${tacticBreakHtml}</div>
@@ -2361,9 +2447,10 @@ import { createDiagnostics } from './src/diagnostics.js';
     const resonance = currentCoreResonance()?.fireRateMult || 1;
     const core = coreOverdriveActive()?.fireRateMult || 1;
     const evasion = evasionSurgeActive()?.fireRateMult || 1;
-    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route * resonance * core * evasion;
+    const combat = combatSurgeActive()?.fireRateMult || 1;
+    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route * resonance * core * evasion * combat;
   }
-  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (currentCoreResonance()?.damageMult || 1) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (coreOverdriveActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
+  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (currentCoreResonance()?.damageMult || 1) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (coreOverdriveActive()?.damageMult || 1) * (combatSurgeActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
   function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (currentCoreResonance()?.incomingMult || 1) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (coreOverdriveActive()?.incomingMult || 1) * (evasionSurgeActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
   function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (currentCoreResonance()?.magnetBonus || 0) + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (coreOverdriveActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0) + (routeChoiceEffects()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
@@ -2698,7 +2785,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     runStats.contractTag = activeContract.tag || '';
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
     applyRunContractOpening();
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; activeCoreTrial = null; coreTrialSeen = new Set(); coreStreak = 0; coreStreakTimer = 0; lastCoreResonanceId = ''; activeEvasionSurge = null; evasionStreak = 0; evasionStreakTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; activeCoreTrial = null; coreTrialSeen = new Set(); coreStreak = 0; coreStreakTimer = 0; lastCoreResonanceId = ''; activeEvasionSurge = null; evasionStreak = 0; evasionStreakTimer = 0; activeCombatSurge = null; combatCombo = 0; combatComboTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -3372,6 +3459,7 @@ import { createDiagnostics } from './src/diagnostics.js';
     meta.score += scoreGain;
     totalKills++; runKills++;
     recordCoreKill(e);
+    recordCombatKill(e);
     if (e.type === 'shieldSat' && runStats) runStats.shieldSatelliteKills++;
     const tacticBreakCandidate = tacticById(e.tacticId) || activeTactic;
     xp += e.type === 'boss' ? 8 : e.elite ? 3 : e.type === 'tank' ? 2 : 1;
@@ -3695,6 +3783,10 @@ import { createDiagnostics } from './src/diagnostics.js';
       activeCoreOverdrive.timer -= dt;
       if (activeCoreOverdrive.timer <= 0) activeCoreOverdrive = null;
     }
+    if (activeCombatSurge) {
+      activeCombatSurge.timer -= dt;
+      if (activeCombatSurge.timer <= 0) activeCombatSurge = null;
+    }
     if (activeCoreTrial) {
       activeCoreTrial.timer -= dt;
       if (activeCoreTrial.timer <= 0) expireCoreTrial();
@@ -3710,6 +3802,10 @@ import { createDiagnostics } from './src/diagnostics.js';
     if (coreStreakTimer > 0) {
       coreStreakTimer -= dt;
       if (coreStreakTimer <= 0) coreStreak = 0;
+    }
+    if (combatComboTimer > 0) {
+      combatComboTimer -= dt;
+      if (combatComboTimer <= 0) combatCombo = 0;
     }
     if (activeTacticBreak) {
       activeTacticBreak.timer -= dt;
@@ -4536,6 +4632,21 @@ import { createDiagnostics } from './src/diagnostics.js';
       ctx.setLineDash([]);
       ctx.globalAlpha = flicker ? .45 : 1;
     }
+    const combat = combatSurgeActive();
+    if (combat) {
+      const pulse = Math.sin(performance.now() * .018) * .5 + .5;
+      ctx.strokeStyle = combat.color;
+      ctx.lineWidth = 3;
+      ctx.globalAlpha *= .72;
+      ctx.shadowColor = combat.color;
+      ctx.shadowBlur = 26;
+      ctx.beginPath(); ctx.arc(0, 0, 38 + pulse * 9, 0, TWO_PI); ctx.stroke();
+      for (let i = 0; i < 4; i++) {
+        const a2 = i / 4 * TWO_PI + performance.now() * .006;
+        ctx.beginPath(); ctx.moveTo(Math.cos(a2) * 23, Math.sin(a2) * 23); ctx.lineTo(Math.cos(a2) * (48 + pulse * 6), Math.sin(a2) * (48 + pulse * 6)); ctx.stroke();
+      }
+      ctx.globalAlpha = flicker ? .45 : 1;
+    }
     ctx.fillStyle = '#ff3df2'; ctx.globalAlpha *= .82; ctx.beginPath(); ctx.moveTo(-23, -5); ctx.lineTo(-29 - Math.random() * 4, 0); ctx.lineTo(-23, 5); ctx.fill();
     ctx.restore();
 
@@ -4984,6 +5095,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       else if (activeTacticBreak) { detail = `破解 ${activeTacticBreak.name}｜${Math.ceil(activeTacticBreak.timer)}s`; color = activeTacticBreak.color; }
       else if (activeCoreTrial) { detail = `試煉 ${activeCoreTrial.name}｜${activeCoreTrial.progress}/${activeCoreTrial.target}｜${Math.ceil(activeCoreTrial.timer)}s`; color = activeCoreTrial.color; }
       else if (activeCoreOverdrive) { detail = `核心超載 ${activeCoreOverdrive.name}｜${Math.ceil(activeCoreOverdrive.timer)}s`; color = activeCoreOverdrive.color; }
+      else if (activeCombatSurge) { detail = `擊破爆發 x${activeCombatSurge.combo}｜${Math.ceil(activeCombatSurge.timer)}s`; color = activeCombatSurge.color; }
       else if (resonance) { detail = `核心諧振 ${resonance.name}｜${resonance.desc}`; color = resonance.color; }
       else if (activeEvasionSurge) { detail = `擦彈機動 ${activeEvasionSurge.name}｜${Math.ceil(activeEvasionSurge.timer)}s`; color = activeEvasionSurge.color; }
       else if (activeTempoBoost) { detail = `加成 ${activeTempoBoost.name}｜${Math.ceil(activeTempoBoost.timer)}s`; color = activeTempoBoost.color; }
@@ -5004,7 +5116,7 @@ import { createDiagnostics } from './src/diagnostics.js';
         detail = `目標 ${def.name}→${objectiveChainPreview(beacon)}｜${objectiveSideText(beacon)}${objectiveSideComplete(beacon) ? ' ★' : ''}`;
         color = def.color;
       }
-      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeCoreTrial && !activeCoreOverdrive && !resonance && !activeEvasionSurge && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
+      if (hasTutorial && !activeEvent && !activeBossBreak && !hasBoss && !activeTacticBreak && !activeCoreTrial && !activeCoreOverdrive && !activeCombatSurge && !resonance && !activeEvasionSurge && !activeTempoBoost && !hasTactic && !hasBossPrep && !beacon) {
         const tp = tutorialProgress(tutorialStep);
         detail = `教學 ${tutorialStep.label}｜${tp.value}/${tp.target}`;
         color = '#bdfcff';
@@ -5031,6 +5143,8 @@ import { createDiagnostics } from './src/diagnostics.js';
         ctx.fillStyle = activeCoreTrial.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeCoreTrial.progress / Math.max(1, activeCoreTrial.target), 0, 1), 2);
       } else if (activeCoreOverdrive) {
         ctx.fillStyle = activeCoreOverdrive.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeCoreOverdrive.timer / activeCoreOverdrive.duration, 0, 1), 2);
+      } else if (activeCombatSurge) {
+        ctx.fillStyle = activeCombatSurge.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeCombatSurge.timer / activeCombatSurge.duration, 0, 1), 2);
       } else if (resonance) {
         ctx.fillStyle = resonance.color; ctx.fillRect(x + 7, y + h - 3, w - 14, 2);
       } else if (activeEvasionSurge) {
@@ -5054,7 +5168,7 @@ import { createDiagnostics } from './src/diagnostics.js';
       return;
     }
     const x = 12; const y = 112; const w = Math.min(336, W - 24);
-    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreTrial ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (!activeCoreOverdrive && resonance ? 24 : 0) + (activeEvasionSurge ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreTrial ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (activeCombatSurge ? 24 : 0) + (!activeCoreOverdrive && resonance ? 24 : 0) + (activeEvasionSurge ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -5148,6 +5262,13 @@ import { createDiagnostics } from './src/diagnostics.js';
       ctx.fillText(`P2 核心諧振｜${resonance.name}`, x + 10, lineY, w - 20);
       ctx.fillStyle = 'rgba(238,247,255,.82)'; ctx.font = '800 10px system-ui';
       ctx.fillText(resonance.desc, x + 10, lineY + 15, w - 20);
+      lineY += 24;
+    }
+    if (activeCombatSurge) {
+      ctx.fillStyle = activeCombatSurge.color; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P2 擊破爆發｜x${activeCombatSurge.combo} ${Math.ceil(activeCombatSurge.timer)}s`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
+      ctx.fillStyle = activeCombatSurge.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeCombatSurge.timer / activeCombatSurge.duration, 0, 1), 4);
       lineY += 24;
     }
     if (activeEvasionSurge) {
