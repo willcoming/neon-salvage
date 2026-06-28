@@ -1,3 +1,27 @@
+import { SAVE_KEY, LEGACY_SAVE_KEYS, createBaseState, readSaveFromStorage, clearKnownSaveKeys } from './src/save.js';
+import {
+  BUILD_CORE_SCORE,
+  DIFFICULTY_DEFS as difficultyDefs,
+  DIFFICULTY_ORDER as difficultyOrder,
+  RUN_STAGE_DEFS as runStageDefs,
+  EVASION_SURGE_GRAZES,
+  EVASION_SURGE_WINDOW,
+  EVASION_SURGE_DEF as evasionSurgeDef,
+  combineRouteChoiceEffects,
+  difficultyFor,
+  stageKeyForWave,
+  lateGameScaleForWave,
+  enemyCapValue,
+  waveEnemyBudgetValue,
+  eventChanceForWaveValue,
+  spawnIntervalForWaveValue,
+  compactWorldFeatureTargetValue,
+  upgradeCostForLevel,
+  scoreBuilds,
+  topBuildFromScores
+} from './src/balance.js';
+import { createDiagnostics } from './src/diagnostics.js';
+
 (() => {
   'use strict';
 
@@ -24,6 +48,7 @@
     settingsModal: document.getElementById('settingsModal'),
     closeSettingsBtn: document.getElementById('closeSettingsBtn'),
     difficultyBtn: document.getElementById('difficultyBtn'),
+    perfBtn: document.getElementById('perfBtn'),
     how: document.getElementById('how'),
     toast: document.getElementById('toast'),
     controlModeBtn: document.getElementById('controlModeBtn'),
@@ -45,7 +70,8 @@
     zonePanel: document.getElementById('zonePanel')
   };
 
-  const SAVE_KEY = 'neon-salvage-save-v2';
+  const diagnostics = createDiagnostics({ document, storage: localStorage, performance });
+
   const TWO_PI = Math.PI * 2;
   const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -75,26 +101,7 @@
   let controlMode = 'keyboard';
   const touchMove = { x: 0, y: 0, active: false, pressed: false, sx: W / 2, sy: H / 2, cx: W / 2, cy: H / 2, dir: '', force: 0 };
 
-  const baseState = () => ({
-    scrap: 0,
-    score: 0,
-    bestWave: 1,
-    achievements: {},
-    recentRuns: [],
-    soundEnabled: true,
-    volume: .75,
-    hapticsEnabled: true,
-    shakeStrength: .7,
-    touchSensitivity: 1,
-    controlMode: 'keyboard',
-    autoAim: true,
-    aimAssist: 'assist',
-    tutorialDone: false,
-    selectedZone: 'random',
-    difficulty: 'standard',
-    lastSaved: Date.now(),
-    upgrades: { cannon: 0, reactor: 0, shield: 0, armor: 0, engine: 0, magnet: 0, survey: 0, drone: 0 }
-  });
+  const baseState = createBaseState;
 
   let meta = loadSave();
   controlMode = meta.controlMode === 'touch' ? 'touch' : 'keyboard';
@@ -199,54 +206,33 @@
   const SECTOR_CLEAR_WAVE = 10;
   const MAX_PARTICLES = 180;
   const MAX_RING_PARTICLES = 10;
-  const difficultyOrder = ['standard', 'high', 'chaos'];
-  const difficultyDefs = {
-    standard: { name: '標準星環', desc: '預設體驗', enemy: 1, speed: 1, cap: 1, reward: 1, event: 1 },
-    high: { name: '高壓星環', desc: '敵人更多、獎勵更多', enemy: 1.12, speed: 1.06, cap: 1.12, reward: 1.18, event: 1.18 },
-    chaos: { name: '失控星環', desc: 'Boss 更強、事件更頻繁', enemy: 1.25, speed: 1.12, cap: 1.18, reward: 1.38, event: 1.35 }
-  };
-
   function currentDifficulty() {
-    return difficultyDefs[meta?.difficulty] || difficultyDefs.standard;
+    return difficultyFor(meta?.difficulty);
   }
 
   function lateGameScale() {
-    return clamp(1 - Math.max(0, wave - 4) * .055, .64, 1);
+    return lateGameScaleForWave(wave);
   }
   function visualScale() {
     return lateGameScale() * (controlMode === 'touch' ? .9 : 1);
   }
   function enemyCap() {
-    const base = controlMode === 'touch' ? 30 : 36;
-    const pressureCut = Math.max(0, wave - 7) * 1.35;
-    const stage = runStageForWave(wave);
-    const stageEase = stage === runStageDefs.warmup ? .88 : stage === runStageDefs.final ? .86 : stage === runStageDefs.pressure ? .94 : 1;
-    return Math.round(Math.max(controlMode === 'touch' ? 22 : 26, (base - pressureCut) * stageEase) * currentDifficulty().cap);
+    return enemyCapValue({ wave, controlMode, difficulty: currentDifficulty() });
   }
 
   function waveEnemyBudget(n = wave) {
-    if (n % 5 === 0) return 0;
-    const budgets = { 1: 14, 2: 22, 3: 30, 4: 36, 6: 42, 7: 48, 8: 53, 9: 56 };
-    const base = budgets[n] || Math.round(34 + n * 3.2);
-    const mobileEase = controlMode === 'touch' ? .92 : 1;
-    const tutorialEase = tutorialRun && n <= 2 ? .72 : 1;
-    return Math.floor(base * mobileEase * tutorialEase * currentDifficulty().enemy * (currentAnomaly()?.enemyMult || 1) * (currentContract()?.enemyMult || 1) * (routeChoiceEffects().enemyMult || 1));
+    return waveEnemyBudgetValue({ wave: n, controlMode, tutorial: !!tutorialRun, difficulty: currentDifficulty(), anomaly: currentAnomaly(), contract: currentContract(), route: routeChoiceEffects() });
   }
 
   function eventChanceForWave(n = wave) {
-    if (n <= 3 || n % 5 === 0) return 0;
-    const boost = (currentAnomaly()?.eventBoost || 0) + (routeChoiceEffects().eventBoost || 0);
-    if (n <= 6) return (n === 6 ? .42 : .18) + boost;
-    return (n === 9 ? .72 : .48) + boost;
+    return eventChanceForWaveValue({ wave: n, anomaly: currentAnomaly(), route: routeChoiceEffects() });
   }
 
   function spawnIntervalForWave(n = wave) {
-    const stage = runStageForWave(n);
-    const base = stage === runStageDefs.warmup ? (n === 1 ? .19 : .165) : stage === runStageDefs.build ? .135 : .118;
-    return Math.max(controlMode === 'touch' ? .085 : .068, base - Math.max(0, n - 4) * .004 + (controlMode === 'touch' ? .012 : 0));
+    return spawnIntervalForWaveValue({ wave: n, controlMode });
   }
   function compactWorldFeatureTarget() {
-    return Math.max(14, Math.round((22 + Math.min(10, Math.floor(wave / 2))) * lateGameScale()));
+    return compactWorldFeatureTargetValue({ wave });
   }
 
   function ensureAudio() {
@@ -517,27 +503,7 @@
   }
 
   function routeChoiceEffects() {
-    const choices = activeRouteChoices.length ? activeRouteChoices : [];
-    const last = choices[choices.length - 1];
-    const acc = { ...neutralRouteChoice, id: choices.map(c => c.id).join('+') || 'none', name: choices.map(c => c.name).join(' + ') || neutralRouteChoice.name, tag: choices.map(c => c.tag).join('｜') || neutralRouteChoice.tag, color: last?.color || neutralRouteChoice.color, eventBias: [], objectiveBias: [], enemyBias: [] };
-    for (const c of choices) {
-      acc.damageMult *= c.damageMult || 1;
-      acc.fireRateMult *= c.fireRateMult || 1;
-      acc.incomingMult *= c.incomingMult || 1;
-      acc.rewardMult *= c.rewardMult || 1;
-      acc.enemyMult *= c.enemyMult || 1;
-      acc.bossHpMult *= c.bossHpMult || 1;
-      acc.bossShotMult *= c.bossShotMult || 1;
-      acc.bossSpeedMult *= c.bossSpeedMult || 1;
-      acc.bossAbilityMult *= c.bossAbilityMult || 1;
-      acc.magnetBonus += c.magnetBonus || 0;
-      acc.bossRewardBonus += c.bossRewardBonus || 0;
-      acc.eventBoost += c.eventBoost || 0;
-      acc.eventBias.push(...(c.eventBias || []));
-      acc.objectiveBias.push(...(c.objectiveBias || []));
-      acc.enemyBias.push(...(c.enemyBias || []));
-    }
-    return acc;
+    return combineRouteChoiceEffects(activeRouteChoices, neutralRouteChoice);
   }
 
   function routeChoiceTitle() {
@@ -936,18 +902,8 @@
     }
   }
 
-  const runStageDefs = {
-    warmup: { name: '暖機', waves: '1-3', color: '#bdfcff', desc: '操作 / 目標暖機' },
-    build: { name: 'Build 成形', waves: '4-6', color: '#ffd166', desc: '技能核心與第一個 Boss' },
-    pressure: { name: '高壓選擇', waves: '7-9', color: '#ff9f1c', desc: '戰術、事件與終局整備' },
-    final: { name: '終局考驗', waves: '10', color: '#ff4d6d', desc: '星環核心 Boss' }
-  };
-
   function runStageForWave(n = wave) {
-    if (n >= SECTOR_CLEAR_WAVE) return runStageDefs.final;
-    if (n >= 7) return runStageDefs.pressure;
-    if (n >= 4) return runStageDefs.build;
-    return runStageDefs.warmup;
+    return runStageDefs[stageKeyForWave(n, SECTOR_CLEAR_WAVE)];
   }
 
   function recordPaceNode(label) {
@@ -973,7 +929,9 @@
     runStats.maxEnemies = Math.max(runStats.maxEnemies, enemies.length);
     runStats.maxWorldFeatures = Math.max(runStats.maxWorldFeatures, worldFeatures.length);
     runStats.maxParticles = Math.max(runStats.maxParticles, particles.length);
-    runStats.maxRings = Math.max(runStats.maxRings, particles.filter(p => p.ring).length);
+    let ringCount = 0;
+    for (const p of particles) if (p.ring) ringCount++;
+    runStats.maxRings = Math.max(runStats.maxRings, ringCount);
   }
 
   function longestWaveText() {
@@ -992,21 +950,11 @@
   }
 
   function buildScoreMap(extraSkillId = null) {
-    const scores = {};
-    for (const skill of skillPool) {
-      const level = (upgradesRuntime?.[skill.id] || 0) + (skill.id === extraSkillId ? 1 : 0);
-      if (level <= 0 || !skill.build) continue;
-      scores[skill.build] = (scores[skill.build] || 0) + level * (skill.weight || 1);
-    }
-    return scores;
+    return scoreBuilds(skillPool, upgradesRuntime, extraSkillId);
   }
 
   function topBuild(extraSkillId = null) {
-    const scores = buildScoreMap(extraSkillId);
-    const entries = Object.entries(scores).sort((a, b) => b[1] - a[1]);
-    if (!entries.length) return { id: '', score: 0, def: null };
-    const [id, score] = entries[0];
-    return { id, score, def: buildDefs[id] || null };
+    return topBuildFromScores(buildScoreMap(extraSkillId), buildDefs);
   }
 
   function currentBuildCore() {
@@ -1456,7 +1404,6 @@
     { id: 'drone', lane: '拾荒系', name: '無人機合約', desc: '提高離線碎晶收益。', base: 28, scale: 1.62, max: 8 }
   ];
 
-  const BUILD_CORE_SCORE = 6;
   const buildDefs = {
     rapid: { name: '主砲速射流', color: '#37f6ff', core: '高頻主砲核心' },
     rail: { name: '軌砲穿透流', color: '#bdfcff', core: '穿透過載核心' },
@@ -1482,10 +1429,6 @@
     survival: { name: '韌性護盾', desc: '受傷 -18%｜短暫自修', incomingMult: .82, regenBonus: 4.2 },
     economy: { name: '拾荒磁暴', desc: '磁吸 +160｜火力 +5%', magnetBonus: 160, damageMult: 1.05 }
   };
-
-  const EVASION_SURGE_GRAZES = 3;
-  const EVASION_SURGE_WINDOW = 3.2;
-  const evasionSurgeDef = { id: 'evasionSurge', name: '擦彈機動', desc: '移速 +18%｜射速 +7%｜受傷 -8%', color: '#bdfcff', duration: 5.5, speedMult: 1.18, fireRateMult: .93, incomingMult: .92 };
 
   const skillPool = [
     { id: 'splitShot', build: 'rapid', weight: 2, role: '多彈道', name: '三叉脈衝', desc: '主砲增加散射彈道。' },
@@ -2105,10 +2048,7 @@
 
   function loadSave() {
     try {
-      const raw = localStorage.getItem(SAVE_KEY) || localStorage.getItem('neon-salvage-save-v1');
-      if (!raw) return baseState();
-      const parsed = JSON.parse(raw);
-      return { ...baseState(), ...parsed, achievements: { ...(parsed.achievements || {}) }, upgrades: { ...baseState().upgrades, ...(parsed.upgrades || {}) } };
+      return readSaveFromStorage(localStorage);
     } catch (err) {
       console.warn('save load failed', err);
       return baseState();
@@ -2126,8 +2066,7 @@
 
   function resetSave() {
     if (!confirm('確定要重置宇宙？所有碎晶、成就與永久升級都會清除。')) return;
-    localStorage.removeItem(SAVE_KEY);
-    localStorage.removeItem('neon-salvage-save-v1');
+    clearKnownSaveKeys(localStorage);
     meta = baseState();
     controlMode = meta.controlMode;
     autoAim = meta.autoAim;
@@ -2154,8 +2093,7 @@
   }
 
   function upgradeCost(def) {
-    const lvl = meta.upgrades[def.id] || 0;
-    return Math.floor(def.base * Math.pow(def.scale, lvl));
+    return upgradeCostForLevel(def, meta.upgrades[def.id] || 0);
   }
 
   function upgradeUnlocked(def) {
@@ -3015,6 +2953,12 @@
     setControlMode(controlMode === 'touch' ? 'keyboard' : 'touch');
   }
 
+  function togglePerfDashboard() {
+    const visible = diagnostics.toggle();
+    flash(`效能面板 ${visible ? '開啟' : '關閉'}｜F3 可切換`);
+    updateCombatControls();
+  }
+
   function updateCombatControls() {
     if (ui.settingsBtn) ui.settingsBtn.classList.toggle('active', isSettingsModalOpen());
     if (ui.controlModeBtn) {
@@ -3029,6 +2973,11 @@
     }
     updateSoundUi();
     updateDifficultyUi();
+    if (ui.perfBtn) {
+      ui.perfBtn.textContent = `效能面板 ${diagnostics.visible ? 'ON' : 'OFF'}`;
+      ui.perfBtn.classList.toggle('active', diagnostics.visible);
+      ui.perfBtn.title = '顯示 FPS、frame time、update/draw timing 與 entity 數量。F3 可快速切換。';
+    }
     if (ui.pauseBtn) {
       ui.pauseBtn.hidden = !running || gameOver || skillChoosing;
       ui.pauseBtn.textContent = paused ? '繼續' : '暫停';
@@ -5272,8 +5221,30 @@
     ctx.restore();
   }
 
+  function drawTouchIdleHint() {
+    if (controlMode !== 'touch' || !running || paused || gameOver || skillChoosing || ui.overlay.classList.contains('visible')) return;
+    const alpha = runTime < 10 ? .82 : .34;
+    const text = '按住任意位置拖曳：8向移動｜放開停止｜自動瞄準';
+    const w = Math.min(W - 24, 330);
+    const x = (W - w) / 2;
+    const y = H - 74;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.fillStyle = 'rgba(5,7,18,.54)';
+    ctx.strokeStyle = 'rgba(55,246,255,.22)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.roundRect(x, y, w, 34, 12); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#bdfcff';
+    ctx.font = '850 11px system-ui';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, W / 2, y + 17, w - 18);
+    ctx.restore();
+  }
+
   function drawTouchDpad() {
-    if (controlMode !== 'touch' || !touchMove.pressed) return;
+    if (controlMode !== 'touch') return;
+    if (!touchMove.pressed) { drawTouchIdleHint(); return; }
     const maxX = W > 860 ? W - 420 : W - 86;
     const x = clamp(touchMove.sx, 86, maxX);
     const y = clamp(touchMove.sy, 124, H - 124);
@@ -5324,6 +5295,10 @@
       ctx.fillText(p.label, 0, 1);
       ctx.restore();
     }
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(189,252,255,.90)';
+    ctx.font = '900 10px system-ui';
+    ctx.fillText(active ? `推進 ${Math.round(force * 100)}%` : '待命', 0, 82);
     ctx.restore();
   }
 
@@ -5358,7 +5333,30 @@
   }
   function doDash() { if (controlMode === 'touch' || !running || paused || gameOver || skillChoosing || dashCooldown > 0) return; dashTime = .16; dashCooldown = Math.max(.55, 1.32 - (meta.upgrades.engine || 0) * .065); player.invuln = .24; burst(player.x, player.y, '#ffd166', 11); sfx('dash'); addShake(1.2, .08); }
 
-  function loop(now) { const dt = Math.min((now - lastTime) / 1000, .05); lastTime = now; updateFeedbackTimers(dt); update(dt); draw(); requestAnimationFrame(loop); }
+  function diagnosticsCounts() {
+    return {
+      running, paused, skillChoosing, gameOver, wave,
+      bullets: bullets.length,
+      enemyShots: enemyShots.length,
+      enemies: enemies.length,
+      shards: shards.length,
+      particles: particles.length,
+      powerups: powerups.length,
+      worldFeatures: worldFeatures.length,
+      floatText: floatText.length,
+      bossTelegraphs: bossTelegraphs.length
+    };
+  }
+
+  function loop(now) {
+    const dt = Math.min((now - lastTime) / 1000, .05);
+    lastTime = now;
+    diagnostics.beginFrame(now);
+    diagnostics.measure('update', () => { updateFeedbackTimers(dt); update(dt); });
+    diagnostics.measure('draw', draw);
+    diagnostics.endFrame(diagnosticsCounts());
+    requestAnimationFrame(loop);
+  }
 
   window.addEventListener('resize', resize);
   window.visualViewport?.addEventListener('resize', resize);
@@ -5367,6 +5365,11 @@
   window.addEventListener('pagehide', clearMovementInput);
   document.addEventListener('visibilitychange', () => { if (document.hidden) clearMovementInput(); });
   window.addEventListener('keydown', e => {
+    if (!e.repeat && (e.code === 'F3' || (e.code === 'Backquote' && e.shiftKey))) {
+      e.preventDefault();
+      togglePerfDashboard();
+      return;
+    }
     keys.add(e.code);
     if (e.code === 'Space') { e.preventDefault(); if (!e.repeat) doDash(); }
     if (e.repeat) return;
@@ -5422,6 +5425,7 @@
   ui.shakeRange?.addEventListener('input', e => setControlSetting('shakeStrength', clamp(Number(e.target.value) / 100, 0, 1)));
   ui.touchSensitivityRange?.addEventListener('input', e => setControlSetting('touchSensitivity', clamp(Number(e.target.value) / 100, .55, 1.6)));
   ui.difficultyBtn?.addEventListener('click', toggleDifficulty);
+  ui.perfBtn?.addEventListener('click', togglePerfDashboard);
 
   function setTouchDirectionFromClient(e, start = false) {
     const rect = canvas.getBoundingClientRect();

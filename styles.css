@@ -513,6 +513,30 @@ h1, h2, p { margin: 0; }
 }
 #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+.perf-dashboard {
+  position: absolute;
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
+  z-index: 18;
+  min-width: 218px;
+  max-width: min(320px, 92vw);
+  padding: 10px 11px;
+  border-radius: 14px;
+  border: 1px solid rgba(189, 252, 255, .28);
+  color: rgba(238,247,255,.88);
+  background: rgba(5, 7, 18, .74);
+  box-shadow: 0 0 22px rgba(55,246,255,.16);
+  backdrop-filter: blur(10px);
+  pointer-events: none;
+  font-size: 11px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+.perf-dashboard[hidden] { display: none; }
+.perf-dashboard strong { display: block; color: var(--cyan); font-size: 12px; letter-spacing: .08em; margin-bottom: 3px; }
+.perf-dashboard span, .perf-dashboard small { display: block; }
+.perf-dashboard small { color: var(--muted); margin-top: 3px; }
+
 #touchControls {
   display: none;
   position: absolute;
@@ -528,10 +552,10 @@ body[data-control-mode="touch"] .hint { display: none; }
 @media (max-width: 860px) {
   body { overflow: hidden; }
   #app, #game { height: var(--app-height, 100dvh); }
-  #hud { left: 6px; right: 6px; top: calc(env(safe-area-inset-top, 0px) + 6px); grid-template-columns: 1fr; gap: 4px; transform: none; width: auto; }
+  #hud { left: 6px; right: 6px; top: calc(env(safe-area-inset-top, 0px) + 6px); grid-template-columns: 1fr; gap: 4px; transform: none; width: auto; max-width: calc(100vw - 12px); overflow: hidden; }
   .brand { display: none; }
-  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
-  .stats div { min-width: 0; padding: 5px 6px; border-radius: 10px; background: rgba(5,7,18,.66); border-color: rgba(55,246,255,.20); }
+  .stats { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; width: 100%; max-width: calc(100vw - 12px); overflow: hidden; }
+  .stats div { min-width: 0; overflow: hidden; padding: 5px 6px; border-radius: 10px; background: rgba(5,7,18,.66); border-color: rgba(55,246,255,.20); }
   .stats b { font-size: 13px; }
   .stats span { font-size: 9px; }
   .bar { display: none; }
@@ -560,6 +584,8 @@ body[data-control-mode="touch"] .hint { display: none; }
   .upgrade button { padding: 7px; font-size: 11px; }
   #panel > button { width: calc(50% - 5px); margin: 4px 2px 0; padding: 8px; font-size: 11px; }
   .card.run-card { width: min(94vw, 620px); max-height: 86vh; padding: 14px; }
+  .perf-dashboard { right: 8px; bottom: calc(env(safe-area-inset-bottom, 0px) + 76px); min-width: 168px; max-width: 52vw; padding: 7px 8px; font-size: 9px; opacity: .86; }
+  .perf-dashboard strong { font-size: 10px; margin-bottom: 2px; }
   .run-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
   .run-summary span { padding: 8px; font-size: 11px; }
   .report-grid { grid-template-columns: 1fr; gap: 7px; }
@@ -572,7 +598,8 @@ body[data-control-mode="touch"] .hint { display: none; }
 }
 
 @media (max-width: 560px) {
-  #hud { transform: none; width: auto; left: 6px; right: 6px; top: calc(env(safe-area-inset-top, 0px) + 6px); }
+  #hud { transform: none; width: min(calc(100vw - 12px), 378px); max-width: 378px; left: 6px; right: auto; top: calc(env(safe-area-inset-top, 0px) + 6px); }
+  .stats { max-width: 378px; }
   .combat-controls { gap: 4px; }
   .combat-controls button, .upgrade-prompt { min-height: 30px; padding: 5px 7px; font-size: 10px; touch-action: manipulation; }
   #pauseBtn { min-width: 52px; }

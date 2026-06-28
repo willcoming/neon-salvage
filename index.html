@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=5.0" />
+  <link rel="stylesheet" href="./styles.css?v=6.0" />
 </head>
 <body>
   <div id="app">
@@ -95,6 +95,10 @@
             <div><strong>難度</strong><small>影響敵量、敵速、事件頻率與獎勵。</small></div>
             <button id="difficultyBtn" type="button">難度：標準星環</button>
           </section>
+          <section class="setting-row">
+            <div><strong>效能面板</strong><small>顯示 FPS、frame/update/draw timing 與場上 entity 數量；也可按 F3 切換。</small></div>
+            <button id="perfBtn" type="button">效能面板 OFF</button>
+          </section>
         </div>
       </aside>
     </div>
@@ -105,11 +109,11 @@
         <h2>霓虹拾荒者 Neon Salvage</h2>
         <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
         <div class="version-card">
-          <strong>v5.9 擦彈機動與控制回饋版</strong>
+          <strong>v6.0 效能診斷與模組化基礎版</strong>
           <ul>
-            <li>敵彈擦身而過會累積擦彈連段，3 次擦彈觸發短暫「擦彈機動」。</li>
-            <li>擦彈機動提供移速、射速與減傷加成，鼓勵主動穿縫、橫移與高風險走位。</li>
-            <li>HUD、船身光環與結算新增擦彈 / 機動超載紀錄，下一局挑戰更明確。</li>
+            <li>新增 F3/設定可切換的效能面板，顯示 FPS、frame/update/draw timing 與場上 entity 數量。</li>
+            <li>save migration、balance/pacing helper 與 diagnostics 已拆成可測模組，後續調參更安全。</li>
+            <li>保留 v5.9 擦彈機動、桌機/手機操作、音效設定、永久升級與 run report 相容性。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -139,7 +143,8 @@
 - E：切換自動瞄準：輔助 → 完全 → 關閉。
 - 空白：相位衝刺，短時間無敵。
 - P：暫停並開啟艦載升級。
-- 設定：操作模式、音量、震動、難度與測試音效。
+- F3：切換效能面板（FPS、frame/update/draw timing 與場上 entity 數量）。
+- 設定：操作模式、音量、震動、難度、效能面板與測試音效。
 
 手機：
 - 切到手機模式後，按住螢幕會出現浮動方向鍵。
@@ -198,6 +203,6 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./game.js?v=5.9"></script>
+  <script type="module" src="./game.js?v=6.0"></script>
 </body>
 </html>
