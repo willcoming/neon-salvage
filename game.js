@@ -147,6 +147,9 @@
   let activeTacticBreak = null;
   let activeBossBreak = null;
   let activeBossRhythm = null;
+  let activeCoreOverdrive = null;
+  let coreStreak = 0;
+  let coreStreakTimer = 0;
   let bossCinematic = null;
   let victoryRainTimer = 0;
   let hitStopTimer = 0;
@@ -443,7 +446,7 @@
   }
 
   function newRunStats() {
-    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
+    return { waveStart: 0, bossStart: 0, bossName: '', bossKillTime: null, bossMechanics: [], bossBreaks: [], bossBreakCount: 0, bossRhythms: [], bossRhythmCount: 0, bossHighlights: [], bossModifier: '', bossPhase2: false, bossPhase2Start: 0, bossPhase2Survival: 0, contract: '', contractTag: '', routeChoices: [], routeChoiceTags: [], routeChoiceEffects: [], routeConsequences: [], routeConsequenceEffects: [], routeConsequenceMisses: [], routeBossPreps: [], objectiveRoute: [], objectiveChains: [], objectiveBonuses: 0, paceNodes: [], prepDrops: 0, waveTimes: {}, skills: [], eventsSeen: [], eventBoosts: [], tacticsSeen: [], tacticBreaks: [], tacticBreakCount: 0, zone: '', anomaly: '', anomalyTasks: [], anomalyScore: 0, shieldSatelliteTime: 0, shieldSatelliteKills: 0, tacticPressure: 0, salvageRushWins: 0, salvageRushShards: 0, coreOverdrives: [], coreOverdriveCount: 0, coreStreakBest: 0, maxEnemies: 0, maxWorldFeatures: 0, maxParticles: 0, maxRings: 0, deathCause: '' };
   }
 
   const runAnomalyDefs = {
@@ -788,7 +791,7 @@
     const routeSig = `${activeRouteChoices.map(c => c.id).join('+')}:${routeChoiceOffer?.id || ''}:${worldFeatures.filter(f => f.type === 'routeChoice').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}`).join(',')}`;
     const consequenceSig = `${activeRouteConsequences.map(c => `${c.id}:${c.status}`).join(',')}:${worldFeatures.filter(f => f.type === 'routeConsequence').map(f => `${f.choiceId}:${Math.round((f.charge || 0) * 10)}:${Math.ceil(f.hp || 0)}`).join(',')}:${enemies.filter(e => e.routeConsequence).map(e => `${e.routeConsequence.id}:${Math.round(e.hp)}`).join(',')}`;
     const prepSig = routeBossPrepEffects().names.join('+');
-    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, prepSig, bossSig].join('|');
+    return [wave, mission?.text || '', mission?.done ? 1 : 0, activeEvent?.id || '', activeTempoBoost?.id || '', activeTacticBreak?.id || '', activeBossBreak?.id || '', activeBossRhythm?.id || '', activeCoreOverdrive?.id || '', Math.ceil(activeCoreOverdrive?.timer || 0), activeContract?.id || '', activeTactic?.id || activeTactic?.name || '', beaconSig, anomalySig, routeSig, consequenceSig, prepSig, bossSig].join('|');
   }
 
   function makeAnomalyState(def = currentAnomaly()) {
@@ -1008,6 +1011,64 @@
     return top.def && top.score >= BUILD_CORE_SCORE ? top : { id: '', score: 0, def: null };
   }
 
+  function coreOverdriveActive() {
+    return activeCoreOverdrive && activeCoreOverdrive.timer > 0 ? activeCoreOverdrive : null;
+  }
+
+  function coreOverdriveNeed(core = currentBuildCore()) {
+    if (!core.id) return Infinity;
+    return Math.max(6, CORE_OVERDRIVE_KILLS - Math.floor(Math.max(0, core.score - BUILD_CORE_SCORE) / 3));
+  }
+
+  function coreOverdriveProfile(core = currentBuildCore()) {
+    if (!core.id) return null;
+    const def = core.def || buildDefs[core.id] || { name: '核心流派', color: '#37f6ff', core: 'Build 核心' };
+    const boost = coreOverdriveDefs[core.id] || { name: `${def.name}超載`, desc: '火力 +8%', damageMult: 1.08 };
+    return { id: core.id, buildName: def.name, coreName: def.core, color: def.color || '#37f6ff', duration: 7.5 + Math.min(3, Math.max(0, core.score - BUILD_CORE_SCORE) * .35), damageMult: 1, fireRateMult: 1, incomingMult: 1, magnetBonus: 0, regenBonus: 0, bossBreakThresholdMult: 1, bossBreakWindowBonus: 0, ...boost };
+  }
+
+  function triggerCoreOverdrive(source = '連續擊破') {
+    if (!player) return null;
+    const core = currentBuildCore();
+    const profile = coreOverdriveProfile(core);
+    if (!profile) return null;
+    activeCoreOverdrive = { ...profile, timer: profile.duration, source };
+    coreStreak = 0;
+    coreStreakTimer = 0;
+    if (runStats) {
+      runStats.coreOverdriveCount = (runStats.coreOverdriveCount || 0) + 1;
+      const label = `${profile.buildName}→${profile.name}｜${profile.desc}`;
+      runStats.coreOverdrives.push(label);
+      runStats.coreOverdrives = runStats.coreOverdrives.slice(-8);
+      recordPaceNode(`Build核心超載｜${label}`);
+    }
+    addText(player.x, player.y - player.r - 62, `${profile.name} ${Math.ceil(profile.duration)}s`, profile.color);
+    particles.push({ x: player.x, y: player.y, vx: 0, vy: 0, life: .52, max: .52, r: 30, color: profile.color, ring: true, fastRing: true });
+    burst(player.x, player.y, profile.color, 26, 1.05);
+    flash(`Build 核心超載：${profile.name}｜${profile.desc}`);
+    sfx('counter');
+    haptic(30);
+    wakeMissionHud(4.2);
+    return activeCoreOverdrive;
+  }
+
+  function recordCoreKill(e) {
+    if (!e || e.type === 'boss') return;
+    const core = currentBuildCore();
+    if (!core.id) return;
+    coreStreak = coreStreakTimer > 0 ? coreStreak + 1 : 1;
+    coreStreakTimer = CORE_OVERDRIVE_WINDOW;
+    if (runStats) runStats.coreStreakBest = Math.max(runStats.coreStreakBest || 0, coreStreak);
+    const need = coreOverdriveNeed(core);
+    if (coreStreak >= need && (!activeCoreOverdrive || activeCoreOverdrive.timer < 2.5)) {
+      triggerCoreOverdrive(`${need} 連殺`);
+    } else if (need - coreStreak === 2 && player) {
+      const profile = coreOverdriveProfile(core);
+      addText(player.x, player.y - player.r - 48, `核心連殺 ${coreStreak}/${need}`, profile?.color || '#ffd166');
+      wakeMissionHud(1.6);
+    }
+  }
+
   function detectBuildName() {
     const top = topBuild();
     if (!top.def || top.score <= 0) return '未成形';
@@ -1084,6 +1145,8 @@
     }
     if ((record.shieldSatelliteTime || 0) > 0 && (record.shieldSatelliteKills || 0) < 2) list.push('優先擊破 2 台護盾衛星');
     if ((record.objectiveBonuses || 0) < 2 && (record.objectives || 0) >= 2) list.push('完成 2 個帶 ★ 副條件目標');
+    if ((record.build || '').includes('核心成形') && !(record.coreOverdriveCount || 0)) list.push('用核心流派打出一次連殺超載');
+    if ((record.coreOverdriveCount || 0) >= 1 && (record.coreStreakBest || 0) < 14) list.push('挑戰 14 連殺延續核心超載');
     if ((record.tacticsSeen || []).length && !(record.tacticBreakCount || 0)) list.push(`破解 ${record.tacticsSeen[0]} 戰術`);
     else if ((record.tacticsSeen || []).length) list.push('連續破解 2 次敵群戰術');
     if (record.bossPhase2 && !(record.bossBreakCount || 0)) list.push('Boss 二階段讀題後完成 1 次破招');
@@ -1128,6 +1191,9 @@
       bossPhase2Survival: Math.floor(runStats?.bossPhase2Survival || (runStats?.bossPhase2Start ? Math.max(0, runTime - runStats.bossPhase2Start) : 0)),
       skills: [...(runStats?.skills || [])].slice(-6),
       build: detectBuildName(),
+      coreOverdrives: [...(runStats?.coreOverdrives || [])].slice(-8),
+      coreOverdriveCount: runStats?.coreOverdriveCount || 0,
+      coreStreakBest: runStats?.coreStreakBest || 0,
       contract: runStats?.contract || contractTitle(),
       contractTag: runStats?.contractTag || currentContract().tag || '',
       routeChoices: [...(runStats?.routeChoices || [])].slice(-4),
@@ -1250,6 +1316,7 @@
     const bossBreakHtml = record.bossBreaks?.length ? record.bossBreaks.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未完成 Boss 破招</span>';
     const bossRhythmHtml = record.bossRhythms?.length ? record.bossRhythms.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Boss 節奏反擊</span>';
     const bossHighlightHtml = record.bossHighlights?.length ? record.bossHighlights.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未記錄 Boss 擊破亮點</span>';
+    const coreOverdriveHtml = record.coreOverdrives?.length ? record.coreOverdrives.map(b => `<span>${escapeHtml(b)}</span>`).join('') : '<span>尚未觸發 Build 核心超載</span>';
     const unlock = nextAchievement();
     const unlockHtml = unlock ? `${escapeHtml(unlock.name)}｜${escapeHtml(unlock.progress?.() || '')}｜${escapeHtml(unlock.unlock || '')}` : '所有成就已解鎖';
     const summaryHtml = [
@@ -1257,6 +1324,7 @@
       ['Build', record.build || '未成形'],
       ['契約', `${record.contract || '標準委託'}｜${record.zone || '-'}`],
       ['路線', record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '未抉擇'],
+      ['超載', record.coreOverdriveCount ? `${record.coreOverdriveCount} 次｜連殺${record.coreStreakBest || 0}` : '未觸發'],
       ['後果', record.routeConsequences?.length ? `${record.routeConsequences.length} 完成` : record.routeConsequenceMisses?.length ? '已錯過' : '未觸發'],
       ['Boss預備', record.routeBossPreps?.length ? `${record.routeBossPreps.length} 個` : '未取得'],
       ['壓力', `${record.pressure || '-'}｜${(record.budget || '-').split('｜')[0]}`],
@@ -1268,7 +1336,7 @@
       <div class="report-grid">
         <section><h3>本局成果</h3><dl><div><dt>難度</dt><dd>${escapeHtml(record.difficulty || '標準星環')}</dd></div><div><dt>時間</dt><dd>${escapeHtml(formatTime(record.time))}</dd></div><div><dt>擊殺</dt><dd>${escapeHtml(record.kills)}</dd></div><div><dt>目標</dt><dd>${escapeHtml(record.objectives)}${record.objectiveBonuses ? `｜★${escapeHtml(record.objectiveBonuses)}` : ''}</dd></div><div><dt>事件</dt><dd>${escapeHtml(record.events)}</dd></div><div><dt>碎晶</dt><dd>+${escapeHtml(record.scrap)}</dd></div></dl></section>
         <section><h3>戰鬥壓力</h3><dl><div><dt>最高敵人</dt><dd>${escapeHtml(record.maxEnemies)}</dd></div><div><dt>地圖物件</dt><dd>${escapeHtml(record.maxWorldFeatures)}</dd></div><div><dt>粒子</dt><dd>${escapeHtml(record.maxParticles)}</dd></div><div><dt>ring</dt><dd>${escapeHtml(record.maxRings)}</dd></div><div><dt>壓力</dt><dd>${escapeHtml(record.pressure)}</dd></div><div><dt>預算</dt><dd>${escapeHtml(record.budget || '-')}</dd></div></dl></section>
-        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
+        <section><h3>節奏</h3><dl><div><dt>最久波</dt><dd>${escapeHtml(record.longestWave)}</dd></div><div><dt>Boss</dt><dd>${escapeHtml(record.bossName || '-')}${record.bossTime ? `｜${escapeHtml(formatTime(record.bossTime))}` : ''}${record.bossPhase2 ? `｜二階段 ${escapeHtml(formatTime(record.bossPhase2Survival || 0))}` : ''}</dd></div><div><dt>Boss 破招</dt><dd>${escapeHtml(record.bossBreakCount || 0)} 次</dd></div><div><dt>Boss 節奏</dt><dd>${escapeHtml(record.bossRhythmCount || 0)} 次</dd></div><div><dt>核心超載</dt><dd>${escapeHtml(record.coreOverdriveCount || 0)} 次｜連殺 ${escapeHtml(record.coreStreakBest || 0)}</dd></div><div><dt>整備</dt><dd>${record.prepDrops ? '終局補給已投放' : '未抵達整備波'}</dd></div><div><dt>分數</dt><dd>${escapeHtml(record.score)}</dd></div></dl></section>
         <section><h3>星域內容</h3><dl><div><dt>區域</dt><dd>${escapeHtml(record.zone || '-')}</dd></div><div><dt>契約</dt><dd>${escapeHtml(record.contract || '-')}</dd></div><div><dt>局內路線</dt><dd>${escapeHtml(record.routeChoices?.length ? record.routeChoices.map(r => r.split('｜')[0]).join(' + ') : '-')}</dd></div><div><dt>異變</dt><dd>${escapeHtml(record.anomaly || '-')}</dd></div><div><dt>Boss改造</dt><dd>${escapeHtml(record.bossModifier || '-')}</dd></div><div><dt>戰術破解</dt><dd>${escapeHtml(record.tacticBreakCount || 0)} 次</dd></div></dl></section>
       </div>
       <div class="skill-chips"><b>事件紀錄</b>${eventHtml}</div>
@@ -1288,6 +1356,7 @@
       <div class="skill-chips"><b>Boss 破招</b>${bossBreakHtml}</div>
       <div class="skill-chips"><b>Boss 節奏</b>${bossRhythmHtml}</div>
       <div class="skill-chips"><b>Boss 擊破亮點</b>${bossHighlightHtml}</div>
+      <div class="skill-chips"><b>Build 核心超載</b>${coreOverdriveHtml}</div>
       <div class="skill-chips"><b>戰術組合</b>${tacticHtml}</div>
       <div class="skill-chips"><b>戰術破解</b>${tacticBreakHtml}</div>
       <div class="skill-chips"><b>主要流派</b><span>${escapeHtml(record.build || '未成形')}</span></div>
@@ -1344,6 +1413,20 @@
     burn: { name: '暴擊灼燒流', color: '#ff4d6d', core: '熔毀弱點核心' },
     survival: { name: '生存續航流', color: '#4dff88', core: '韌性護盾核心' },
     economy: { name: '拾荒經濟流', color: '#ffd166', core: '碎晶滾雪球核心' }
+  };
+
+  const CORE_OVERDRIVE_KILLS = 9;
+  const CORE_OVERDRIVE_WINDOW = 5.5;
+  const coreOverdriveDefs = {
+    rapid: { name: '高頻超載', desc: '射擊間隔 -18%', fireRateMult: .82 },
+    rail: { name: '穿甲校準', desc: '火力 +16%｜Boss破招門檻-16%', damageMult: 1.16, bossBreakThresholdMult: .84, bossBreakWindowBonus: .35 },
+    flak: { name: '近爆推進', desc: '火力 +8%｜受傷 -8%', damageMult: 1.08, incomingMult: .92 },
+    plasma: { name: '電漿連鎖', desc: '火力 +12%｜射擊間隔 -6%', damageMult: 1.12, fireRateMult: .94 },
+    seeker: { name: '索敵矩陣', desc: '射擊間隔 -10%｜磁吸 +70', fireRateMult: .9, magnetBonus: 70 },
+    drone: { name: '蜂群同步', desc: '射擊間隔 -12%｜火力 +6%', fireRateMult: .88, damageMult: 1.06 },
+    burn: { name: '熔毀節拍', desc: '火力 +14%｜受傷 -6%', damageMult: 1.14, incomingMult: .94 },
+    survival: { name: '韌性護盾', desc: '受傷 -18%｜短暫自修', incomingMult: .82, regenBonus: 4.2 },
+    economy: { name: '拾荒磁暴', desc: '磁吸 +160｜火力 +5%', magnetBonus: 160, damageMult: 1.05 }
   };
 
   const skillPool = [
@@ -1816,8 +1899,9 @@
   function armBossBreakWindow(e, info = bossReadInfo(e)) {
     if (!e || e.type !== 'boss') return null;
     const modifier = e.bossModifier || currentBossModifier();
-    const threshold = Math.max(28, e.maxHp * (e.finalBoss ? .035 : .045) * (modifier.breakThresholdMult || 1));
-    const duration = 4.2 + (modifier.breakWindowBonus || 0);
+    const core = coreOverdriveActive();
+    const threshold = Math.max(28, e.maxHp * (e.finalBoss ? .035 : .045) * (modifier.breakThresholdMult || 1) * (core?.bossBreakThresholdMult || 1));
+    const duration = 4.2 + (modifier.breakWindowBonus || 0) + (core?.bossBreakWindowBonus || 0);
     e.breakWindow = { name: info.breakName || 'Boss 破防', source: info.title || info.mechanic || 'Boss 招式', counter: info.counter || '', threshold, progress: 0, timer: duration, duration, color: info.color || e.color || '#ff4d6d' };
     wakeMissionHud(4.6);
     return e.breakWindow;
@@ -2164,11 +2248,12 @@
     const rhythm = bossRhythmActive()?.fireRateMult || 1;
     const contract = currentContract()?.fireRateMult || 1;
     const route = routeChoiceEffects()?.fireRateMult || 1;
-    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route;
+    const core = coreOverdriveActive()?.fireRateMult || 1;
+    return fireRate() * harvest * storm * tempo * tactic * boss * rhythm * contract * route * core;
   }
-  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
-  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
-  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0) + (routeChoiceEffects()?.magnetBonus || 0); }
+  function damage() { return (15 + (meta.upgrades.cannon || 0) * 2.45 + (meta.upgrades.reactor || 0) * 2.15) * (tempoBoostActive()?.damageMult || 1) * (tacticBreakActive()?.damageMult || 1) * (bossBreakActive()?.damageMult || 1) * (bossRhythmActive()?.damageMult || 1) * (coreOverdriveActive()?.damageMult || 1) * (currentContract()?.damageMult || 1) * (routeChoiceEffects()?.damageMult || 1); }
+  function incomingDamage(amount) { return amount * Math.max(.78, 1 - (meta.upgrades.armor || 0) * .035) * (tempoBoostActive()?.incomingMult || 1) * (tacticBreakActive()?.incomingMult || 1) * (bossBreakActive()?.incomingMult || 1) * (bossRhythmActive()?.incomingMult || 1) * (coreOverdriveActive()?.incomingMult || 1) * (currentContract()?.incomingMult || 1) * (routeChoiceEffects()?.incomingMult || 1); }
+  function magnetRange() { return 92 + (meta.upgrades.magnet || 0) * 28 + (tempoBoostActive()?.magnetBonus || 0) + (tacticBreakActive()?.magnetBonus || 0) + (coreOverdriveActive()?.magnetBonus || 0) + (currentContract()?.magnetBonus || 0) + (routeChoiceEffects()?.magnetBonus || 0); }
   function isPlayerProtected() { return !!player && (player.invuln > 0 || runTime < 3.5); }
 
   function shouldStartTutorial() {
@@ -2501,7 +2586,7 @@
     runStats.contractTag = activeContract.tag || '';
     recordPaceNode(`本局異變｜${activeAnomaly.name}：${activeAnomaly.tag}`);
     applyRunContractOpening();
-    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
+    upgradeFromRun = false; bossActive = false; gameOver = false; skillChoosing = false; activeEvent = null; activeTactic = null; eventTimer = 0; meteorTimer = 0; activeTempoBoost = null; activeTacticBreak = null; activeBossBreak = null; activeBossRhythm = null; activeCoreOverdrive = null; coreStreak = 0; coreStreakTimer = 0; bossCinematic = null; victoryRainTimer = 0; bossTelegraphs = []; hitStopTimer = 0; tacticPulse = 0; bossAlertTimer = 0; bossAlert = null; eventBannerTimer = 0; missionHudWakeUntil = 0; missionHudSignature = ''; damageFlash = 0; playerDamageCue = null;
     tutorialRun = makeTutorialRun();
     mission = tutorialRun ? tutorialMission() : newMission();
     wakeMissionHud(4.5);
@@ -3141,6 +3226,7 @@
     const scoreGain = Math.floor((e.type === 'boss' ? 400 : 16) + wave * (e.type === 'boss' ? 24 : 3.5));
     meta.score += scoreGain;
     totalKills++; runKills++;
+    recordCoreKill(e);
     if (e.type === 'shieldSat' && runStats) runStats.shieldSatelliteKills++;
     const tacticBreakCandidate = tacticById(e.tacticId) || activeTactic;
     xp += e.type === 'boss' ? 8 : e.elite ? 3 : e.type === 'tank' ? 2 : 1;
@@ -3460,6 +3546,14 @@
       activeTempoBoost.timer -= dt;
       if (activeTempoBoost.timer <= 0) activeTempoBoost = null;
     }
+    if (activeCoreOverdrive) {
+      activeCoreOverdrive.timer -= dt;
+      if (activeCoreOverdrive.timer <= 0) activeCoreOverdrive = null;
+    }
+    if (coreStreakTimer > 0) {
+      coreStreakTimer -= dt;
+      if (coreStreakTimer <= 0) coreStreak = 0;
+    }
     if (activeTacticBreak) {
       activeTacticBreak.timer -= dt;
       if (activeTacticBreak.timer <= 0) activeTacticBreak = null;
@@ -3514,7 +3608,7 @@
     updateWorldFeatures(dt);
     updateBeacon(dt);
 
-    const tempoRegen = tempoBoostActive()?.regenBonus || 0;
+    const tempoRegen = (tempoBoostActive()?.regenBonus || 0) + (coreOverdriveActive()?.regenBonus || 0);
     if ((upgradesRuntime.shieldRegen > 0 || tempoRegen > 0) && player.hp < player.maxHp) {
       player.regenClock += dt;
       if (player.regenClock >= .5) {
@@ -4278,21 +4372,29 @@
     const top = topBuild();
     if (!top.def || top.score <= 0) return;
     const core = top.score >= BUILD_CORE_SCORE;
-    const color = top.def.color || '#37f6ff';
+    const overdrive = coreOverdriveActive();
+    const color = overdrive?.color || top.def.color || '#37f6ff';
     const t = performance.now() * .001;
     const pulse = Math.sin(t * 5.2) * .5 + .5;
     const r = 34 + Math.min(18, top.score * 1.8) + pulse * 2;
     ctx.save();
     ctx.translate(player.x, player.y);
-    ctx.globalAlpha = core ? .72 : .24;
+    ctx.globalAlpha = overdrive ? .88 : core ? .72 : .24;
     ctx.strokeStyle = color;
     ctx.fillStyle = color;
     ctx.shadowColor = color;
-    ctx.shadowBlur = core ? 18 : 9;
-    ctx.lineWidth = core ? 2.2 : 1.2;
+    ctx.shadowBlur = overdrive ? 28 : core ? 18 : 9;
+    ctx.lineWidth = overdrive ? 3 : core ? 2.2 : 1.2;
     ctx.beginPath();
     ctx.arc(0, 0, r, 0, TWO_PI);
     ctx.stroke();
+    if (overdrive) {
+      ctx.setLineDash([10, 8]);
+      ctx.beginPath(); ctx.arc(0, 0, r + 18 + pulse * 8, 0, TWO_PI); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = '900 10px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('OVERDRIVE', 0, -r - 24);
+    }
     if (top.id === 'rapid') {
       for (let i = 0; i < 6; i++) {
         const a = t * 3.8 + i / 6 * TWO_PI;
@@ -4701,6 +4803,7 @@
       else if (bossWindow) { detail = `Boss讀題 ${bossWindow.source}｜破招 ${Math.ceil(bossWindow.timer)}s`; color = bossWindow.color; }
       else if (hasBoss) { detail = `Boss ${boss.label}${boss.phase2 ? '｜二階段' : ''}｜${(boss.bossModifier || currentBossModifier()).name}`; color = boss.color; }
       else if (activeTacticBreak) { detail = `破解 ${activeTacticBreak.name}｜${Math.ceil(activeTacticBreak.timer)}s`; color = activeTacticBreak.color; }
+      else if (activeCoreOverdrive) { detail = `核心超載 ${activeCoreOverdrive.name}｜${Math.ceil(activeCoreOverdrive.timer)}s`; color = activeCoreOverdrive.color; }
       else if (activeTempoBoost) { detail = `加成 ${activeTempoBoost.name}｜${Math.ceil(activeTempoBoost.timer)}s`; color = activeTempoBoost.color; }
       else if (hasTactic) { detail = `戰術 ${activeTactic.name}｜${tacticCounterText(activeTactic)}`; color = activeTactic.color || '#ffd166'; }
       else if (hasRouteChoice) {
@@ -4742,6 +4845,8 @@
         ctx.fillStyle = bossWindow.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(bossWindow.progress / bossWindow.threshold, 0, 1), 2);
       } else if (activeTacticBreak) {
         ctx.fillStyle = activeTacticBreak.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTacticBreak.timer / activeTacticBreak.duration, 0, 1), 2);
+      } else if (activeCoreOverdrive) {
+        ctx.fillStyle = activeCoreOverdrive.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeCoreOverdrive.timer / activeCoreOverdrive.duration, 0, 1), 2);
       } else if (activeTempoBoost) {
         ctx.fillStyle = activeTempoBoost.color; ctx.fillRect(x + 7, y + h - 3, (w - 14) * clamp(activeTempoBoost.timer / activeTempoBoost.duration, 0, 1), 2);
       } else if (hasRouteConsequence) {
@@ -4761,7 +4866,7 @@
       return;
     }
     const x = 12; const y = 112; const w = Math.min(336, W - 24);
-    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
+    const h = 166 + (activeEvent ? 24 : 0) + (activeTempoBoost ? 24 : 0) + (activeCoreOverdrive ? 24 : 0) + (activeTacticBreak ? 24 : 0) + (activeBossBreak ? 24 : 0) + (activeBossRhythm ? 24 : 0) + (hasBoss ? 52 : 0) + (hasTactic ? 42 : 0) + (hasRouteConsequence ? 36 : 0) + (!hasRouteConsequence && hasBossPrep ? 30 : 0) + (hasObjective ? 32 : 0) + (hasTutorial ? 42 : 0);
     ctx.globalAlpha = .86; ctx.fillStyle = 'rgba(5,7,18,.58)'; ctx.strokeStyle = mission?.done ? '#4dff88' : boss?.color || activeTactic?.color || '#ffd166'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.roundRect(x, y, w, h, 11); ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 1; ctx.fillStyle = mission?.done ? '#4dff88' : '#ffd166'; ctx.font = '800 11px system-ui'; ctx.fillText(mission?.done ? '任務完成' : mission?.text || '任務載入中', x + 10, y + 19, w - 112);
@@ -4833,6 +4938,13 @@
       ctx.fillText(`P2 加成｜${activeTempoBoost.name} ${Math.ceil(activeTempoBoost.timer)}s`, x + 10, lineY);
       ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
       ctx.fillStyle = activeTempoBoost.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeTempoBoost.timer / activeTempoBoost.duration, 0, 1), 4);
+      lineY += 24;
+    }
+    if (activeCoreOverdrive) {
+      ctx.fillStyle = activeCoreOverdrive.color; ctx.font = '900 11px system-ui';
+      ctx.fillText(`P2 核心超載｜${activeCoreOverdrive.name} ${Math.ceil(activeCoreOverdrive.timer)}s`, x + 10, lineY, w - 20);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(x + 10, lineY + 6, w - 20, 4);
+      ctx.fillStyle = activeCoreOverdrive.color; ctx.fillRect(x + 10, lineY + 6, (w - 20) * clamp(activeCoreOverdrive.timer / activeCoreOverdrive.duration, 0, 1), 4);
       lineY += 24;
     }
     if (activeTacticBreak) {
