@@ -4,11 +4,11 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=6.4" />
+  <link rel="stylesheet" href="./styles.css?v=7.0" />
 </head>
 <body>
   <div id="app">
-    <canvas id="game" width="1280" height="720" aria-label="霓虹拾荒者遊戲畫面"></canvas>
+    <div id="game" role="img" aria-label="霓虹拾荒者 Phaser 遊戲畫面"></div>
     <section id="hud" aria-live="polite">
       <div class="brand">
         <span class="sigil">◆</span>
@@ -105,15 +105,15 @@
 
     <div id="overlay" class="glass visible">
       <div class="card">
-        <p class="eyebrow">BETA DEMO // 10 波撤離制 roguelite</p>
+        <p class="eyebrow">BETA DEMO // Phaser 引擎遷移</p>
         <h2>霓虹拾荒者 Neon Salvage</h2>
-        <p>駕駛小型飛船穿越破碎星環：完成目標、撐過事件、組出技能流派，擊破第 10 波星環核心後撤離。這是可公開試玩的 Beta Demo，適合用桌機或手機快速體驗一局。</p>
+        <p>Phaser 引擎版先移植核心爽感：飛船移動、自動瞄準、敵群清場、10 波推進、Boss 波、擊破爆發與結算。舊 Canvas 版保留在 repo 供回滾。</p>
         <div class="version-card">
-          <strong>v6.4 敵群平衡版</strong>
+          <strong>v7.0 Phaser 引擎版</strong>
           <ul>
-            <li>敵群密度全面提高：一般波次敵人預算、場上 cap 與生成節奏都上修，清場壓力更接近 swarm roguelite。</li>
-            <li>角色同步平衡：基礎護盾、移速、主砲射速與傷害上修，裝甲減傷也更有感，避免只是硬塞敵人。</li>
-            <li>保留「擊破爆發」；更多敵人會更容易接出 5 連殺衝擊波，但 mobile 仍保留較低密度係數。</li>
+            <li>引擎切換到 Phaser 3.90：渲染、場景、相機、輸入與 resize 交給遊戲引擎管理。</li>
+            <li>第一階段已移植核心 loop：飛船移動、自動瞄準射擊、敵群、Boss 波、掉落、HUD、暫停與結算。</li>
+            <li>保留擊破爆發與上一版敵群平衡參數；舊 Canvas runtime 仍留在 game.js 作為安全回滾點。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -135,7 +135,7 @@
 目標：
 - 完成地圖目標、撐過事件、組出技能流派。
 - 第 5 波是 Boss 檢查，第 10 波擊破「星環核心主宰」即可撤離成功。
-- 結算會給 C/B/A/S 評級，並列出 Build、核心諧振、核心試煉、核心超載、擊破爆發、擦彈機動、敵群壓力、契約 / 詛咒、局內抉擇、路線後果、Boss 前預備、Boss 改造、目標路線、戰術破解與下一局建議。
+- Phaser 第一階段結算會列出時間、波次、擊殺、最高連殺、擊破爆發與碎晶；完整 Build/事件/Boss 診斷會分階段搬回來。
 
 操作：
 - WASD / 方向鍵：移動。
@@ -144,12 +144,12 @@
 - 空白：相位衝刺，短時間無敵。
 - P：暫停並開啟艦載升級。
 - F3：切換效能面板（FPS、frame/update/draw timing 與場上 entity 數量）。
-- 設定：操作模式、音量、震動、難度、效能面板與測試音效。
+- 設定：操作模式、音量、震動、難度與測試音效；效能面板下一階段接入 Phaser profiling。
 
 手機：
 - 切到手機模式後，按住螢幕會出現浮動方向鍵。
 - 手機模式預設使用自動瞄準，沒有衝刺鍵。
-- 手機版任務 HUD 是單條橫列；平常會淡出，事件、目標或任務變化時會短暫亮起。
+- 手機版使用 Phaser pointer 輸入：按住螢幕推進，射擊維持自動瞄準。
 - 若手機沒聲音，先到設定點「測試音效」喚醒音訊。
 
 畫面閱讀：
@@ -177,9 +177,9 @@
 - 星域可選隨機、電磁殘骸帶、晶礦雲帶、裂隙邊界；每個星域會帶不同 Boss modifier。
 
 戰鬥重點：
+- 這版已切到 Phaser 引擎；先以核心戰鬥 loop 為主，完整技能 Build 會在後續版本逐步搬回。
 - 敵群比前版更密；角色基礎護盾、移速與主砲也同步上修，重點是主動清場而不是純逃跑。
-- 先撿碎晶、拿技能，盡快讓一個 Build 成形。
-- 3.6 秒內 5 連殺會觸發「擊破爆發」：金色衝擊波清附近敵人，並短暫提高射速與火力。
+- 3.6 秒內 5 連殺會觸發「擊破爆發」：金色衝擊波清附近敵人。
 - Build 核心成形後，船身光環、子彈尾焰與命中火花會變成該流派顏色；連續擊破會累積核心連殺並觸發短暫「核心超載」。
 - 技能卡會顯示選後分數與推薦理由；優先看「核心候選」與目前缺口。核心成形後，連殺超載會依流派給射速、火力、磁吸或續航加成。
 - 敵彈剛好擦身而過會累積擦彈；3 次擦彈會觸發「擦彈機動」，短時間提升移速、射速並降低受傷。
@@ -205,6 +205,7 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script type="module" src="./game.js?v=6.4"></script>
+  <script src="./vendor/phaser.min.js?v=7.0"></script>
+  <script type="module" src="./phaser-game.js?v=7.0"></script>
 </body>
 </html>

@@ -1,11 +1,14 @@
 {
   "name": "neon-salvage-static-beta",
-  "version": "6.4.0",
+  "version": "7.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check game.js && node --check src/balance.js && node --check src/save.js && node --check src/diagnostics.js",
+    "check": "node --check phaser-game.js && node --check game.js && node --check src/balance.js && node --check src/save.js && node --check src/diagnostics.js",
     "test": "node --test tests/*.test.mjs",
     "verify": "npm run check && npm test"
+  },
+  "dependencies": {
+    "phaser": "3.90.0"
   }
 }
