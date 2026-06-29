@@ -17,7 +17,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.2 漫畫爆擊視覺版';
+  const VERSION = 'v7.3 背景造型版';
   const WORLD = { w: 3200, h: 2200 };
   const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 14 };
   const MAX_PARTICLES = 320;
@@ -27,6 +27,25 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     { id: 'crystal', name: '晶礦雲帶', desc: '資源較多，高速敵人較常出現。', color: '#ffd166' },
     { id: 'rift', name: '裂隙邊界', desc: '危險裂隙較多，但目標獎勵更高。', color: '#ff4d6d' }
   ];
+  const ROUTE_STYLE = {
+    random: {
+      id: 'random', accent: '#bdfcff', secondary: '#ffdf68', dark: '#111426',
+      shipName: '拾荒遊俠塗裝', landmark: '漂流中繼站'
+    },
+    scrapyard: {
+      id: 'scrapyard', accent: '#37f6ff', secondary: '#8aa3ff', dark: '#0f1827',
+      shipName: '電磁殘骸裝甲', landmark: '殘骸艦橋'
+    },
+    crystal: {
+      id: 'crystal', accent: '#ffd166', secondary: '#62ff91', dark: '#171321',
+      shipName: '晶礦鍍金機翼', landmark: '晶礦母脈'
+    },
+    rift: {
+      id: 'rift', accent: '#ff4d6d', secondary: '#ff3df2', dark: '#190d1d',
+      shipName: '裂隙獵手塗裝', landmark: '紅裂縫燈塔'
+    }
+  };
+  const BACKDROP_PROPS = createBackdropProps();
   const COMIC = {
     ink: 0x07080c,
     paper: 0x111426,
@@ -156,12 +175,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // Comic impact visual pass';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 背景造型版';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.2 加強漫畫爆擊視覺：命中星芒、擊破字卡、拾取拖尾、受傷紅閃與高速分鏡速度線，讓戰鬥更有衝擊。';
+    if (p) p.textContent = 'v7.3 加上星域背景、漂浮殘骸、晶礦裂隙與路線塗裝；飛船和敵人不再只是幾何圖形，而是有清楚輪廓與部件。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
-      ui.startBtn.textContent = '開始 Phaser 版';
+      ui.startBtn.textContent = '開始 v7.3';
     }
     if (ui.howBtn) ui.howBtn.style.display = '';
   }
@@ -174,7 +193,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = `zone-card${meta.selectedZone === z.id ? ' selected' : ''}`;
-      btn.innerHTML = `<b style="color:${z.color}">${z.name}</b><small>${z.desc}</small><small>Engine：Phaser runtime</small>`;
+      const style = ROUTE_STYLE[z.id] || ROUTE_STYLE.random;
+      btn.innerHTML = `<b style="color:${z.color}">${z.name}</b><small>${z.desc}</small><small>背景：${style.landmark}｜造型：${style.shipName}</small>`;
       btn.addEventListener('click', () => {
         meta.selectedZone = z.id;
         saveMeta();
@@ -186,8 +206,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   }
 
   function updateMetaPanels() {
-    if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜Comic FX Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.2：新增命中星芒、擊破爆字、傷害閃框、拾取拖尾與速度線；舊 Canvas 版仍保留在 game.js 供回滾。';
+    const style = currentRouteStyle();
+    if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜${style.shipName}｜Phaser 3.90`;
+    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.3：新增星域遠景、殘骸/晶礦/裂隙地景、路線塗裝、飛船艙蓋與敵人部件造型；舊 Canvas 版仍保留在 game.js 供回滾。';
   }
 
   function hideUpgradeSurfaces() {
@@ -680,50 +701,159 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
 
     drawBackground() {
       const g = this.g;
-      g.fillStyle(COMIC.paper, 1);
+      const style = currentRouteStyle();
+      const accent = colorValue(style.accent);
+      const secondary = colorValue(style.secondary);
+      const dark = colorValue(style.dark);
+
+      g.fillStyle(dark, 1);
       g.fillRect(0, 0, WORLD.w, WORLD.h);
 
-      // Bold comic-book panel wedges: less neon fog, more printed ink shapes.
-      g.fillStyle(0x173b76, 0.48);
-      g.fillTriangle(0, 0, 980, 0, 0, WORLD.h);
-      g.fillStyle(0x822c2d, 0.38);
-      g.fillTriangle(WORLD.w, 0, WORLD.w, WORLD.h, WORLD.w - 760, WORLD.h);
-      g.fillStyle(0x24172d, 0.44);
-      g.fillTriangle(WORLD.w * 0.18, WORLD.h, WORLD.w * 0.62, 0, WORLD.w * 0.92, WORLD.h);
+      // Route-colored nebula slabs: broad background mood without hiding bullets.
+      g.fillStyle(accent, 0.13);
+      g.fillCircle(WORLD.w * 0.17, WORLD.h * 0.18, 560);
+      g.fillStyle(secondary, 0.10);
+      g.fillCircle(WORLD.w * 0.83, WORLD.h * 0.23, 520);
+      g.fillStyle(COMIC.magenta, style.id === 'rift' ? 0.14 : 0.06);
+      g.fillCircle(WORLD.w * 0.56, WORLD.h * 0.84, 620);
 
-      g.lineStyle(8, COMIC.ink, 0.78);
-      g.lineBetween(0, WORLD.h, 980, 0);
-      g.lineBetween(WORLD.w - 760, WORLD.h, WORLD.w, 0);
-      g.lineBetween(WORLD.w * 0.18, WORLD.h, WORLD.w * 0.62, 0);
-      g.lineBetween(WORLD.w * 0.92, WORLD.h, WORLD.w * 0.62, 0);
+      // Far star field, deterministic so the world reads like a place instead of noise.
+      for (const star of BACKDROP_PROPS.stars) {
+        const twinkle = 0.62 + Math.sin(performance.now() * 0.0015 + star.phase) * 0.22;
+        g.fillStyle(star.warm ? COMIC.gold : COMIC.cyan, star.alpha * twinkle);
+        g.fillCircle(star.x, star.y, star.r);
+      }
 
-      // Sparse halftone dots, visible enough to read as American comic print.
+      // Comic panel geometry remains, but now sits behind real scenery silhouettes.
+      g.fillStyle(0x173b76, 0.30);
+      g.fillTriangle(0, 0, 860, 0, 0, WORLD.h * 0.8);
+      g.fillStyle(0x822c2d, 0.25);
+      g.fillTriangle(WORLD.w, 0, WORLD.w, WORLD.h, WORLD.w - 720, WORLD.h);
+      g.fillStyle(secondary, 0.08);
+      g.fillTriangle(WORLD.w * 0.22, WORLD.h, WORLD.w * 0.58, 0, WORLD.w * 0.90, WORLD.h);
+      g.lineStyle(7, COMIC.ink, 0.58);
+      g.lineBetween(0, WORLD.h * 0.8, 860, 0);
+      g.lineBetween(WORLD.w - 720, WORLD.h, WORLD.w, 0);
+      g.lineBetween(WORLD.w * 0.22, WORLD.h, WORLD.w * 0.58, 0);
+      g.lineBetween(WORLD.w * 0.90, WORLD.h, WORLD.w * 0.58, 0);
+
+      this.drawSectorScenery(style);
+
+      // Sparse halftone dots, kept behind gameplay entities.
       for (let y = 110; y < WORLD.h; y += 132) {
         for (let x = 90; x < WORLD.w; x += 132) {
           const wave = Math.sin(x * 0.006 + y * 0.011);
-          const radius = 3 + Math.max(0, wave) * 7;
+          const radius = 2.4 + Math.max(0, wave) * 5.4;
           const warmSide = x > WORLD.w * 0.62;
-          g.fillStyle(warmSide ? COMIC.orange : COMIC.cyan, warmSide ? 0.15 : 0.13);
+          g.fillStyle(warmSide ? COMIC.orange : accent, warmSide ? 0.10 : 0.08);
           g.fillCircle(x, y, radius);
         }
       }
 
-      // Graphic speed lines / battlefield seams.
-      g.lineStyle(3, 0xffffff, 0.08);
+      // Graphic seams / border clarify that this is a stylized comic battlefield.
+      g.lineStyle(3, 0xffffff, 0.06);
       for (let y = 180; y <= WORLD.h; y += 220) g.lineBetween(80, y, WORLD.w - 80, y - 96);
-      g.lineStyle(2, COMIC.ink, 0.46);
+      g.lineStyle(2, COMIC.ink, 0.36);
       for (let x = 0; x <= WORLD.w; x += 320) g.lineBetween(x, 0, x - 170, WORLD.h);
-
       g.lineStyle(7, COMIC.ink, 0.95);
       g.strokeRect(24, 24, WORLD.w - 48, WORLD.h - 48);
-      g.lineStyle(3, COMIC.gold, 0.62);
+      g.lineStyle(3, accent, 0.58);
       g.strokeRect(34, 34, WORLD.w - 68, WORLD.h - 68);
+    }
 
-      const zone = ZONE_DEFS.find(z => z.id === meta.selectedZone) || ZONE_DEFS[0];
-      g.lineStyle(10, COMIC.ink, 0.72);
-      g.strokeCircle(WORLD.w * 0.5, WORLD.h * 0.5, 460);
-      g.fillStyle(PhaserLib.Display.Color.HexStringToColor(zone.color).color, 0.10);
-      g.fillCircle(WORLD.w * 0.5, WORLD.h * 0.5, 450);
+    drawSectorScenery(style) {
+      const g = this.g;
+      const accent = colorValue(style.accent);
+      const secondary = colorValue(style.secondary);
+      for (const wreck of BACKDROP_PROPS.wrecks) this.drawWreckage(wreck, accent, secondary);
+      for (const beacon of BACKDROP_PROPS.beacons) this.drawBeacon(beacon, accent, style.id === 'random' ? 0.78 : 0.46);
+      for (const crystal of BACKDROP_PROPS.crystals) this.drawCrystalCluster(crystal, style.id === 'crystal' ? 1 : 0.45, accent, secondary);
+      for (const rift of BACKDROP_PROPS.rifts) this.drawRiftCrack(rift, style.id === 'rift' ? 1 : 0.36, accent);
+
+      const cx = WORLD.w * 0.5;
+      const cy = WORLD.h * 0.52;
+      g.lineStyle(10, COMIC.ink, 0.82);
+      g.fillStyle(COMIC.ink, 0.25);
+      g.fillRoundedRect(cx - 116, cy - 58, 232, 116, 18);
+      g.fillStyle(accent, 0.18);
+      g.fillRoundedRect(cx - 104, cy - 46, 208, 92, 16);
+      g.strokeRoundedRect(cx - 116, cy - 58, 232, 116, 18);
+      g.lineStyle(5, secondary, 0.52);
+      g.lineBetween(cx - 92, cy, cx + 92, cy);
+      g.lineBetween(cx, cy - 39, cx, cy + 39);
+      g.fillStyle(secondary, 0.78);
+      g.fillCircle(cx, cy, 15);
+    }
+
+    drawWreckage(prop, accent, secondary) {
+      const g = this.g;
+      const hull = rotatedBox(prop.x, prop.y, prop.w, prop.h, prop.a);
+      g.fillStyle(COMIC.shadow, 0.20);
+      fillPoly(g, rotatedBox(prop.x + 10, prop.y + 12, prop.w, prop.h, prop.a));
+      g.fillStyle(accent, 0.15);
+      fillPoly(g, hull);
+      g.lineStyle(8, COMIC.ink, 0.72);
+      strokePoly(g, hull);
+      const stripe = rotatedBox(prop.x, prop.y, prop.w * 0.72, Math.max(7, prop.h * 0.16), prop.a);
+      g.fillStyle(secondary, 0.20);
+      fillPoly(g, stripe);
+      g.lineStyle(3, COMIC.ink, 0.45);
+      const p1 = point(prop.x, prop.y, prop.a, -prop.w * 0.38);
+      const p2 = point(prop.x, prop.y, prop.a, prop.w * 0.38);
+      g.lineBetween(p1.x, p1.y, p2.x, p2.y);
+    }
+
+    drawCrystalCluster(prop, emphasis, accent, secondary) {
+      const g = this.g;
+      const alpha = 0.18 + 0.34 * emphasis;
+      for (let i = 0; i < 3; i++) {
+        const x = prop.x + (i - 1) * prop.r * 0.55;
+        const h = prop.r * (1.4 - i * 0.12);
+        g.lineStyle(5, COMIC.ink, alpha + 0.18);
+        g.strokeTriangle(x, prop.y - h, x + prop.r * 0.48, prop.y + prop.r * 0.55, x - prop.r * 0.38, prop.y + prop.r * 0.72);
+        g.fillStyle(i % 2 ? accent : secondary, alpha);
+        g.fillTriangle(x, prop.y - h, x + prop.r * 0.48, prop.y + prop.r * 0.55, x - prop.r * 0.38, prop.y + prop.r * 0.72);
+      }
+    }
+
+    drawRiftCrack(prop, emphasis, accent) {
+      const g = this.g;
+      const alpha = 0.12 + 0.42 * emphasis;
+      const dx = Math.cos(prop.a);
+      const dy = Math.sin(prop.a);
+      const nx = -dy;
+      const ny = dx;
+      let last = null;
+      for (let i = 0; i <= 7; i++) {
+        const t = i / 7 - 0.5;
+        const wobble = Math.sin(prop.phase + i * 1.9) * prop.amp;
+        const p = { x: prop.x + dx * prop.len * t + nx * wobble, y: prop.y + dy * prop.len * t + ny * wobble };
+        if (last) {
+          g.lineStyle(11, COMIC.ink, alpha * 0.62);
+          g.lineBetween(last.x, last.y, p.x, p.y);
+          g.lineStyle(5, accent, alpha);
+          g.lineBetween(last.x, last.y, p.x, p.y);
+        }
+        last = p;
+      }
+    }
+
+    drawBeacon(prop, accent, alpha) {
+      const g = this.g;
+      const top = { x: prop.x, y: prop.y - prop.h * 0.62 };
+      const bottom = { x: prop.x, y: prop.y + prop.h * 0.62 };
+      g.lineStyle(8, COMIC.ink, alpha * 0.72);
+      g.lineBetween(top.x, top.y, bottom.x, bottom.y);
+      g.lineStyle(4, accent, alpha * 0.72);
+      g.lineBetween(top.x, top.y, bottom.x, bottom.y);
+      g.lineStyle(5, COMIC.ink, alpha);
+      g.strokeTriangle(prop.x, prop.y - prop.h * 0.82, prop.x + prop.w, prop.y, prop.x, prop.y + prop.h * 0.82);
+      g.strokeTriangle(prop.x, prop.y - prop.h * 0.82, prop.x - prop.w, prop.y, prop.x, prop.y + prop.h * 0.82);
+      g.fillStyle(accent, alpha * 0.16);
+      g.fillTriangle(prop.x, prop.y - prop.h * 0.82, prop.x + prop.w, prop.y, prop.x, prop.y + prop.h * 0.82);
+      g.fillTriangle(prop.x, prop.y - prop.h * 0.82, prop.x - prop.w, prop.y, prop.x, prop.y + prop.h * 0.82);
+      g.fillStyle(COMIC.gold, alpha * 0.60);
+      g.fillCircle(prop.x, prop.y, 7);
     }
 
     drawPlayer() {
@@ -731,6 +861,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const g = this.g;
       const flicker = p.invuln > 0 && Math.sin(performance.now() * 0.04) > 0;
       if (flicker) return;
+      const style = currentRouteStyle();
+      const accent = colorValue(style.accent);
+      const secondary = colorValue(style.secondary);
       const a = p.angle;
       const nose = point(p.x, p.y, a, 27);
       const left = point(p.x, p.y, a + 2.46, 21);
@@ -738,43 +871,62 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const tail = point(p.x, p.y, a + Math.PI, 18);
       const leftWing = point(p.x, p.y, a + 2.92, 31);
       const rightWing = point(p.x, p.y, a - 2.92, 31);
+      const leftGun = point(p.x, p.y, a + 2.76, 22);
+      const rightGun = point(p.x, p.y, a - 2.76, 22);
 
-      // Superhero-comic ship silhouette: chunky ink, flat color blocks, hard rim lights.
-      g.lineStyle(13, COMIC.ink, 1);
+      // Route skin: chunky ink silhouette + visible cockpit, fins, guns, route-color plating.
+      g.lineStyle(15, COMIC.ink, 1);
       g.strokeTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
-      g.fillStyle(COMIC.blue, 1);
+      g.fillStyle(accent, 0.98);
       g.fillTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
 
-      g.lineStyle(9, COMIC.ink, 1);
+      g.lineStyle(10, COMIC.ink, 1);
       g.strokeTriangle(tail.x, tail.y, leftWing.x, leftWing.y, left.x, left.y);
       g.strokeTriangle(tail.x, tail.y, rightWing.x, rightWing.y, right.x, right.y);
-      g.fillStyle(COMIC.red, 0.98);
+      g.fillStyle(COMIC.red, style.id === 'rift' ? 1 : 0.86);
       g.fillTriangle(tail.x, tail.y, leftWing.x, leftWing.y, left.x, left.y);
-      g.fillStyle(COMIC.gold, 0.96);
+      g.fillStyle(secondary, 0.94);
       g.fillTriangle(tail.x, tail.y, rightWing.x, rightWing.y, right.x, right.y);
 
+      g.lineStyle(7, COMIC.ink, 0.92);
+      g.lineBetween(leftGun.x, leftGun.y, nose.x, nose.y);
+      g.lineBetween(rightGun.x, rightGun.y, nose.x, nose.y);
+      g.lineStyle(3, COMIC.white, 0.86);
+      g.lineBetween(point(leftGun.x, leftGun.y, a, 4).x, point(leftGun.x, leftGun.y, a, 4).y, point(nose.x, nose.y, a + Math.PI, 8).x, point(nose.x, nose.y, a + Math.PI, 8).y);
+      g.lineBetween(point(rightGun.x, rightGun.y, a, 4).x, point(rightGun.x, rightGun.y, a, 4).y, point(nose.x, nose.y, a + Math.PI, 8).x, point(nose.x, nose.y, a + Math.PI, 8).y);
+
       const canopy = point(p.x, p.y, a, 4);
-      g.lineStyle(5, COMIC.ink, 1);
+      g.lineStyle(6, COMIC.ink, 1);
       g.fillStyle(COMIC.white, 1);
-      g.fillCircle(canopy.x, canopy.y, 7);
-      g.strokeCircle(canopy.x, canopy.y, 7);
-      g.lineStyle(4, COMIC.cyan, 0.9);
-      g.lineBetween(tail.x, tail.y, nose.x, nose.y);
+      g.fillCircle(canopy.x, canopy.y, 8);
+      g.strokeCircle(canopy.x, canopy.y, 8);
+      g.fillStyle(COMIC.ink, 0.72);
+      g.fillCircle(point(canopy.x, canopy.y, a, 2).x, point(canopy.x, canopy.y, a, 2).y, 3.2);
+      g.lineStyle(4, secondary, 0.9);
+      g.lineBetween(point(tail.x, tail.y, a, 5).x, point(tail.x, tail.y, a, 5).y, point(nose.x, nose.y, a + Math.PI, 5).x, point(nose.x, nose.y, a + Math.PI, 5).y);
+
+      const badge = point(p.x, p.y, a + Math.PI, 4);
+      g.lineStyle(3, COMIC.ink, 0.9);
+      g.strokeTriangle(badge.x, badge.y - 5, badge.x + 6, badge.y, badge.x, badge.y + 5);
+      g.strokeTriangle(badge.x, badge.y - 5, badge.x - 6, badge.y, badge.x, badge.y + 5);
+      g.fillStyle(secondary, 0.90);
+      g.fillTriangle(badge.x, badge.y - 5, badge.x + 6, badge.y, badge.x, badge.y + 5);
+      g.fillTriangle(badge.x, badge.y - 5, badge.x - 6, badge.y, badge.x, badge.y + 5);
 
       const flare1 = point(p.x, p.y, a + Math.PI, 30);
       const flare2 = point(p.x, p.y, a + Math.PI + 0.28, 46);
       const flare3 = point(p.x, p.y, a + Math.PI - 0.28, 46);
       g.lineStyle(5, COMIC.ink, 0.9);
       g.strokeTriangle(tail.x, tail.y, flare2.x, flare2.y, flare3.x, flare3.y);
-      g.fillStyle(COMIC.orange, 0.74);
+      g.fillStyle(style.id === 'crystal' ? COMIC.gold : COMIC.orange, 0.76);
       g.fillTriangle(tail.x, tail.y, flare2.x, flare2.y, flare3.x, flare3.y);
-      g.fillStyle(COMIC.gold, 0.9);
+      g.fillStyle(secondary, 0.9);
       g.fillCircle(flare1.x, flare1.y, 7);
 
-      g.lineStyle(4, COMIC.ink, 0.68);
-      g.strokeCircle(p.x, p.y, 35 + Math.sin(performance.now() * 0.006) * 3);
-      g.lineStyle(2, COMIC.cyan, 0.32);
-      g.strokeCircle(p.x, p.y, 38 + Math.sin(performance.now() * 0.006) * 3);
+      g.lineStyle(4, COMIC.ink, 0.52);
+      g.strokeCircle(p.x, p.y, 26 + Math.sin(performance.now() * 0.006) * 2);
+      g.lineStyle(2, accent, 0.28);
+      g.strokeCircle(p.x, p.y, 29 + Math.sin(performance.now() * 0.006) * 2);
     }
 
     drawEnemies() {
@@ -829,6 +981,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           g.lineBetween(e.x - e.r * 0.5, e.y - e.r * 0.35, e.x + e.r * 0.45, e.y + e.r * 0.35);
         }
 
+        this.drawEnemySkinDetails(e);
+
         if (e.hp < e.maxHp) {
           g.lineStyle(3, COMIC.ink, 1);
           g.fillStyle(COMIC.ink, 0.95);
@@ -837,6 +991,68 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           g.fillRect(e.x - e.r, e.y - e.r - 13, e.r * 2 * clamp(e.hp / e.maxHp, 0, 1), 4);
         }
       }
+    }
+
+    drawEnemySkinDetails(e) {
+      const g = this.g;
+      if (e.type === 'sprinter') {
+        g.lineStyle(4, COMIC.ink, 0.92);
+        g.lineBetween(e.x - e.r * 0.95, e.y - e.r * 0.68, e.x - e.r * 1.42, e.y - e.r * 1.08);
+        g.lineBetween(e.x - e.r * 0.95, e.y + e.r * 0.68, e.x - e.r * 1.42, e.y + e.r * 1.08);
+        g.lineStyle(3, COMIC.white, 0.76);
+        g.lineBetween(e.x - e.r * 0.55, e.y, e.x + e.r * 0.62, e.y);
+        g.fillStyle(COMIC.gold, 0.74);
+        g.fillCircle(e.x + e.r * 0.68, e.y, 3.8);
+        return;
+      }
+      if (e.type === 'shooter') {
+        g.lineStyle(7, COMIC.ink, 0.95);
+        g.lineBetween(e.x, e.y, e.x + e.r * 1.35, e.y);
+        g.lineStyle(4, COMIC.gold, 0.88);
+        g.lineBetween(e.x + e.r * 0.2, e.y, e.x + e.r * 1.35, e.y);
+        g.fillStyle(COMIC.white, 0.94);
+        g.fillCircle(e.x, e.y, 4.5);
+        g.lineStyle(2, COMIC.ink, 0.88);
+        g.strokeCircle(e.x, e.y, 4.5);
+        return;
+      }
+      if (e.type === 'tank') {
+        g.fillStyle(COMIC.ink, 0.88);
+        for (let i = -1; i <= 1; i++) {
+          g.fillCircle(e.x + i * e.r * 0.62, e.y - e.r * 0.47, 3.4);
+          g.fillCircle(e.x + i * e.r * 0.62, e.y + e.r * 0.47, 3.4);
+        }
+        g.lineStyle(4, COMIC.gold, 0.64);
+        g.lineBetween(e.x - e.r * 0.92, e.y, e.x + e.r * 0.92, e.y);
+        return;
+      }
+      if (e.type === 'boss') {
+        const spikes = [-0.92, -0.46, 0, 0.46, 0.92];
+        for (const off of spikes) {
+          const top = point(e.x, e.y, -Math.PI / 2 + off, e.r + 22);
+          const left = point(e.x, e.y, -Math.PI / 2 + off - 0.10, e.r + 4);
+          const right = point(e.x, e.y, -Math.PI / 2 + off + 0.10, e.r + 4);
+          g.lineStyle(4, COMIC.ink, 0.94);
+          g.strokeTriangle(top.x, top.y, left.x, left.y, right.x, right.y);
+          g.fillStyle(COMIC.gold, 0.78);
+          g.fillTriangle(top.x, top.y, left.x, left.y, right.x, right.y);
+        }
+        g.lineStyle(4, COMIC.white, 0.76);
+        g.strokeCircle(e.x, e.y, e.r * 0.48);
+        g.fillStyle(COMIC.magenta, 0.9);
+        g.fillCircle(e.x, e.y, 7);
+        return;
+      }
+
+      // Chaser/default: claw drone face instead of a plain dot.
+      g.fillStyle(COMIC.ink, 0.9);
+      g.fillCircle(e.x - e.r * 0.32, e.y - e.r * 0.18, 3.3);
+      g.fillCircle(e.x + e.r * 0.32, e.y - e.r * 0.18, 3.3);
+      g.lineStyle(4, COMIC.ink, 0.82);
+      g.lineBetween(e.x - e.r * 0.78, e.y + e.r * 0.42, e.x - e.r * 1.26, e.y + e.r * 0.78);
+      g.lineBetween(e.x + e.r * 0.78, e.y + e.r * 0.42, e.x + e.r * 1.26, e.y + e.r * 0.78);
+      g.lineStyle(3, COMIC.gold, 0.72);
+      g.lineBetween(e.x - e.r * 0.52, e.y + e.r * 0.42, e.x + e.r * 0.52, e.y + e.r * 0.42);
     }
 
     drawBullets() {
@@ -1045,8 +1261,87 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     }
   }
 
+  function createBackdropProps() {
+    let seed = 93071;
+    const rnd = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed / 4294967296;
+    };
+    const stars = Array.from({ length: 118 }, () => ({
+      x: 72 + rnd() * (WORLD.w - 144),
+      y: 70 + rnd() * (WORLD.h - 140),
+      r: 1.1 + rnd() * 2.2,
+      alpha: 0.16 + rnd() * 0.42,
+      phase: rnd() * Math.PI * 2,
+      warm: rnd() > 0.72
+    }));
+    const wrecks = Array.from({ length: 14 }, () => ({
+      x: 130 + rnd() * (WORLD.w - 260),
+      y: 150 + rnd() * (WORLD.h - 300),
+      w: 90 + rnd() * 210,
+      h: 20 + rnd() * 42,
+      a: -0.75 + rnd() * 1.5
+    }));
+    const crystals = Array.from({ length: 12 }, () => ({
+      x: 130 + rnd() * (WORLD.w - 260),
+      y: 140 + rnd() * (WORLD.h - 280),
+      r: 18 + rnd() * 34
+    }));
+    const rifts = Array.from({ length: 7 }, () => ({
+      x: 220 + rnd() * (WORLD.w - 440),
+      y: 220 + rnd() * (WORLD.h - 440),
+      len: 180 + rnd() * 310,
+      amp: 12 + rnd() * 28,
+      a: rnd() * Math.PI,
+      phase: rnd() * Math.PI * 2
+    }));
+    const beacons = Array.from({ length: 5 }, () => ({
+      x: 320 + rnd() * (WORLD.w - 640),
+      y: 260 + rnd() * (WORLD.h - 520),
+      w: 24 + rnd() * 30,
+      h: 70 + rnd() * 90
+    }));
+    return { stars, wrecks, crystals, rifts, beacons };
+  }
+
+  function currentRouteStyle() {
+    return ROUTE_STYLE[meta.selectedZone] || ROUTE_STYLE.random;
+  }
+
+  function colorValue(hex) {
+    return PhaserLib.Display.Color.HexStringToColor(hex).color;
+  }
+
   function point(x, y, a, r) {
     return { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r };
+  }
+
+  function rotatedBox(x, y, w, h, a) {
+    const hw = w / 2;
+    const hh = h / 2;
+    const ca = Math.cos(a);
+    const sa = Math.sin(a);
+    return [
+      { x: x + (-hw * ca - -hh * sa), y: y + (-hw * sa + -hh * ca) },
+      { x: x + (hw * ca - -hh * sa), y: y + (hw * sa + -hh * ca) },
+      { x: x + (hw * ca - hh * sa), y: y + (hw * sa + hh * ca) },
+      { x: x + (-hw * ca - hh * sa), y: y + (-hw * sa + hh * ca) }
+    ];
+  }
+
+  function fillPoly(g, pts) {
+    if (pts.length < 3) return;
+    for (let i = 1; i < pts.length - 1; i++) {
+      g.fillTriangle(pts[0].x, pts[0].y, pts[i].x, pts[i].y, pts[i + 1].x, pts[i + 1].y);
+    }
+  }
+
+  function strokePoly(g, pts) {
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i];
+      const b = pts[(i + 1) % pts.length];
+      g.lineBetween(a.x, a.y, b.x, b.y);
+    }
   }
 
   function smoothAngle(current, target, t) {
