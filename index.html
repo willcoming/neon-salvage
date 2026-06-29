@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=7.4" />
+  <link rel="stylesheet" href="./styles.css?v=7.5" />
 </head>
 <body>
   <div id="app">
@@ -24,6 +24,7 @@
         <div><b id="score">0</b><span>分數</span></div>
       </div>
       <div class="bar"><i id="xpBar"></i></div>
+      <div id="coreHud" class="core-hud">戰術核心待機｜擊殺掉核心，撿到後武器會變形</div>
       <div class="combat-controls">
         <button id="settingsBtn" type="button">設定</button>
         <button id="pauseBtn" type="button">暫停</button>
@@ -105,15 +106,15 @@
 
     <div id="overlay" class="glass visible">
       <div class="card">
-        <p class="eyebrow">BETA DEMO // 造型與多 Boss 版</p>
+        <p class="eyebrow">BETA DEMO // 戰術核心樂趣版</p>
         <h2>霓虹拾荒者 Neon Salvage</h2>
-        <p>v7.4 加強飛機與敵人造型，敵人不再只會撞與單發射擊；新增爆破者、坦克散彈、射手預瞄、閃擊衝刺提示與不同 Boss 型態。</p>
+        <p>v7.5 把「打掉敵人 → 撿核心 → 武器變形 → 連鎖清場」做進正常戰鬥，開局就有短流派武器，前 30 秒會更有爽點。</p>
         <div class="version-card">
-          <strong>v7.4 造型與多 Boss 版</strong>
+          <strong>v7.5 戰術核心樂趣版</strong>
           <ul>
-            <li>飛機與敵人外型再加強：Boss 依種類改變輪廓，敵人有更明顯的砲管、爆心與裝甲細節。</li>
-            <li>敵人新增攻擊方式：射手預瞄、坦克三向散彈、爆破者倒數自爆、閃擊機衝刺警示。</li>
-            <li>Boss 依星域 / 波次變化：核心守衛、鐵壁殘骸王、晶礦女王、重砲裂隙艦、裂隙主宰、星環核心主宰。</li>
+            <li>開局直接啟動一個戰術核心；武器會立刻變成霰彈、穿甲或環刃其中一種短流派。</li>
+            <li>擊殺會掉落彩色核心：撿到後切換 / 延長流派，連殺會觸發 OVERDRIVE。</li>
+            <li>核心效果是實際玩法：霰彈多彈道、穿甲可貫穿、環刃會定期掃身邊敵人。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -135,7 +136,7 @@
 目標：
 - 完成地圖目標、撐過事件、組出技能流派。
 - 第 5 波是 Boss 檢查，第 10 波擊破「星環核心主宰」即可撤離成功。
-- v7.4 重點：飛機與敵人造型加強；射手會預瞄、坦克會三向散彈、爆破者會倒數自爆，Boss 會依星域與第 5 / 10 波切換不同型態。
+- v7.5 重點：開局直接拿戰術核心；擊殺掉落彩色核心，撿到後武器變形。霰彈多彈道、穿甲可貫穿、環刃會近身掃場；連殺會觸發 OVERDRIVE。
 
 操作：
 - WASD / 方向鍵：移動。
@@ -205,7 +206,7 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./vendor/phaser.min.js?v=7.4"></script>
-  <script type="module" src="./phaser-game.js?v=7.4"></script>
+  <script src="./vendor/phaser.min.js?v=7.5"></script>
+  <script type="module" src="./phaser-game.js?v=7.5"></script>
 </body>
 </html>

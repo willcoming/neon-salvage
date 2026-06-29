@@ -17,7 +17,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.4 造型與多 Boss 版';
+  const VERSION = 'v7.5 戰術核心樂趣版';
   const WORLD = { w: 3200, h: 2200 };
   const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 14 };
   const MAX_PARTICLES = 320;
@@ -45,6 +45,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       shipName: '裂隙獵手塗裝', landmark: '紅裂縫燈塔'
     }
   };
+  const TACTIC_CORE_IDS = ['scatter', 'lance', 'halo'];
+  const TACTIC_CORES = {
+    scatter: { name: '霰彈核心', label: 'SHOTGUN', color: '#ff8c22', duration: 10, fireRate: 0.82 },
+    lance: { name: '穿甲核心', label: 'PIERCE', color: '#78f6ff', duration: 11, fireRate: 1.08 },
+    halo: { name: '環刃核心', label: 'HALO', color: '#62ff91', duration: 10, fireRate: 0.92 }
+  };
   const BACKDROP_PROPS = createBackdropProps();
   const COMIC = {
     ink: 0x07080c,
@@ -65,6 +71,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     scrap: document.getElementById('scrap'),
     score: document.getElementById('score'),
     xpBar: document.getElementById('xpBar'),
+    coreHud: document.getElementById('coreHud'),
     overlay: document.getElementById('overlay'),
     startBtn: document.getElementById('startBtn'),
     howBtn: document.getElementById('howBtn'),
@@ -175,12 +182,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 造型與多 Boss 版';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 戰術核心樂趣版';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.4 加強飛機與敵人造型，敵人有不同攻擊方式，Boss 會依星域與波次變成不同型態。';
+    if (p) p.textContent = 'v7.5 把「打掉敵人 → 撿核心 → 武器變形 → 連鎖清場」做進正常戰鬥，讓前 30 秒就有爽點。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
-      ui.startBtn.textContent = '開始 v7.4';
+      ui.startBtn.textContent = '開始 v7.5';
     }
     if (ui.howBtn) ui.howBtn.style.display = '';
   }
@@ -208,7 +215,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   function updateMetaPanels() {
     const style = currentRouteStyle();
     if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜${style.shipName}｜Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.4：強化飛機/敵人造型，新增爆破者、坦克散彈、射手預瞄、閃擊衝刺提示與多 Boss 型態；同時延續滿版舞台修正。';
+    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.5：擊殺會掉落戰術核心；霰彈、穿甲、環刃三種短流派會即時改變武器，撿核心能刷新時間並記錄到結算。';
   }
 
   function hideUpgradeSurfaces() {
@@ -232,6 +239,16 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.waveBudget = 0;
       this.spawnClock = 0;
       this.fireClock = 0;
+      this.haloClock = 0;
+      this.shotCounter = 0;
+      this.nextEnemyId = 1;
+      this.coreDropPity = 0;
+      this.tacticCore = null;
+      this.tacticPickups = 0;
+      this.overdriveTimer = 0;
+      this.overdriveCount = 0;
+      this.bestOverdriveChain = 0;
+      this.lastOverdriveCombo = 0;
       this.runTime = 0;
       this.kills = 0;
       this.combo = 0;
@@ -287,7 +304,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       ui.overlay?.classList.remove('visible');
       hideUpgradeSurfaces();
       this.startWave(1);
-      flash('Phaser 引擎啟動｜敵群接近');
+      this.activateTacticCore(starterCoreForZone(), '開局核心');
+      flash('開局核心啟動｜武器已變形');
       beep('clear');
       haptic(18);
     }
@@ -326,6 +344,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.runTime += dt;
       this.player.invuln = Math.max(0, this.player.invuln - dt);
       this.comboTimer = Math.max(0, this.comboTimer - dt);
+      this.updateTacticCore(dt);
       if (this.comboTimer <= 0) this.combo = 0;
       this.updatePlayer(dt);
       this.updateSpawning(dt);
@@ -338,6 +357,109 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.updateCamera(dt);
       this.drawAll();
       updateHud(this);
+    }
+
+    activeTacticDef() {
+      return this.tacticCore?.timer > 0 ? TACTIC_CORES[this.tacticCore.id] : null;
+    }
+
+    updateTacticCore(dt) {
+      if (this.tacticCore?.timer > 0) {
+        this.tacticCore.timer = Math.max(0, this.tacticCore.timer - dt);
+        if (this.tacticCore.timer === 0) {
+          const def = TACTIC_CORES[this.tacticCore.id];
+          this.addFloatingText(this.player.x, this.player.y - 52, `${def?.name || '核心'}冷卻`, '#bdfcff', 650, 15);
+        }
+      }
+      this.overdriveTimer = Math.max(0, this.overdriveTimer - dt);
+      if (this.activeTacticDef()?.name && this.tacticCore.id === 'halo') {
+        this.haloClock -= dt;
+        if (this.haloClock <= 0) {
+          this.haloPulse();
+          this.haloClock = this.overdriveTimer > 0 ? 0.24 : 0.38;
+        }
+      } else {
+        this.haloClock = 0;
+      }
+    }
+
+    activateTacticCore(coreId = 'scatter', source = '戰術核心') {
+      const safeId = TACTIC_CORES[coreId] ? coreId : 'scatter';
+      const def = TACTIC_CORES[safeId];
+      const same = this.tacticCore?.id === safeId && this.tacticCore.timer > 0;
+      const previous = this.tacticCore?.timer || 0;
+      this.tacticCore = {
+        id: safeId,
+        timer: same ? Math.min(def.duration + 6, previous + def.duration * 0.72) : def.duration,
+        duration: def.duration
+      };
+      this.tacticPickups++;
+      this.haloClock = Math.min(this.haloClock || 0, 0.12);
+      this.message = `${source}｜${def.name}`;
+      this.messageTimer = 1.9;
+      this.screenFlash = Math.max(this.screenFlash, 0.18);
+      this.screenFlashColor = def.color;
+      this.addFloatingText(this.player.x, this.player.y - 58, `${def.label} ON`, def.color, 1050, 25);
+      this.comicImpact(this.player.x, this.player.y, def.color, this.player.angle, 1.1);
+      this.addShake(same ? 6 : 4, same ? 0.18 : 0.13);
+      if (same) this.triggerCoreOverdrive(this.player, '核心刷新');
+      beep('surge');
+      haptic(26);
+    }
+
+    triggerCoreOverdrive(source = this.player, reason = '連殺') {
+      const def = this.activeTacticDef();
+      if (!def) return;
+      this.overdriveTimer = Math.max(this.overdriveTimer, 3.6);
+      this.overdriveCount++;
+      this.bestOverdriveChain = Math.max(this.bestOverdriveChain, this.combo || 0);
+      this.tacticCore.timer = Math.min(def.duration + 5, this.tacticCore.timer + 2.2);
+      this.message = `OVERDRIVE｜${def.name}`;
+      this.messageTimer = 1.55;
+      this.screenFlash = Math.max(this.screenFlash, 0.22);
+      this.screenFlashColor = def.color;
+      this.particles.push({ x: source.x, y: source.y, vx: 0, vy: 0, r: 24, grow: 360, life: 0.28, max: 0.28, color: def.color, ring: true });
+      this.addFloatingText(source.x, source.y - 66, `OVERDRIVE ${reason}`, def.color, 920, 24);
+      this.addShake(7, 0.18);
+      beep('surge');
+      haptic(30);
+    }
+
+    firePlayerBullet(angle, opts = {}) {
+      const speed = opts.speed || PLAYER_BASE.bulletSpeed;
+      this.bullets.push({
+        x: this.player.x + Math.cos(angle) * (opts.offset || 22),
+        y: this.player.y + Math.sin(angle) * (opts.offset || 22),
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: opts.life || 1.25,
+        r: opts.r || 4.2,
+        damage: opts.damage || playerDamage(this),
+        color: opts.color,
+        core: opts.core,
+        pierce: opts.pierce || 0,
+        hitIds: opts.pierce ? new Set() : null
+      });
+    }
+
+    haloPulse() {
+      const def = this.activeTacticDef();
+      if (!def) return;
+      const radius = this.overdriveTimer > 0 ? 196 : 154;
+      const amount = playerDamage(this) * (this.overdriveTimer > 0 ? 0.82 : 0.54);
+      let hits = 0;
+      for (const e of this.enemies) {
+        if (e.dead || dist(this.player.x, this.player.y, e.x, e.y) > radius + e.r) continue;
+        e.hp -= amount * (e.type === 'boss' ? 0.35 : 1);
+        e.hit = 0.15;
+        hits++;
+        if (e.hp <= 0) this.killEnemy(e);
+      }
+      this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 16, grow: radius * 3.6, life: 0.22, max: 0.22, color: def.color, ring: true });
+      if (hits) {
+        this.addFloatingText(this.player.x, this.player.y - 44, `環刃 ${hits}`, def.color, 520, 17);
+        beep('hit');
+      }
     }
 
     updatePlayer(dt) {
@@ -361,7 +483,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         if (target) this.player.angle = smoothAngle(this.player.angle, angleBetween(this.player.x, this.player.y, target.x, target.y), 6 * dt);
       }
       const zoneSpeed = meta.selectedZone === 'rift' ? 1.03 : 1;
-      const speed = PLAYER_BASE.speed * zoneSpeed * (meta.controlMode === 'touch' ? 0.92 : 1);
+      const coreSpeed = this.overdriveTimer > 0 ? 1.12 : 1;
+      const speed = PLAYER_BASE.speed * zoneSpeed * coreSpeed * (meta.controlMode === 'touch' ? 0.92 : 1);
       this.player.vx = mx * speed;
       this.player.vy = my * speed;
       this.player.x = clamp(this.player.x + this.player.vx * dt, 60, WORLD.w - 60);
@@ -389,6 +512,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const hpScale = difficultyFor(meta.difficulty).enemy || 1;
       const def = enemyDef(type, this.wave, bossKind);
       const enemy = {
+        id: this.nextEnemyId++,
         type, bossKind, x: px, y: py, vx: 0, vy: 0, r: def.r, hp: def.hp * hpScale, maxHp: def.hp * hpScale,
         speed: def.speed * (difficultyFor(meta.difficulty).speed || 1), color: def.color,
         shotClock: PhaserLib.Math.FloatBetween(boss ? 0.8 : 0.4, boss ? 1.7 : 1.6), dashClock: 0,
@@ -408,9 +532,22 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         : angleBetween(this.player.x, this.player.y, pointer.worldX || this.player.x + 1, pointer.worldY || this.player.y);
       if (Number.isNaN(a)) a = this.player.angle;
       this.player.angle = smoothAngle(this.player.angle, a, 0.8);
-      this.bullets.push({ x: this.player.x + Math.cos(a) * 22, y: this.player.y + Math.sin(a) * 22, vx: Math.cos(a) * PLAYER_BASE.bulletSpeed, vy: Math.sin(a) * PLAYER_BASE.bulletSpeed, life: 1.25, r: 4.2, damage: playerDamage() });
-      this.fireClock = PLAYER_BASE.fireRate;
-      beep('shot');
+      const core = this.activeTacticDef();
+      const overdrive = this.overdriveTimer > 0;
+      this.shotCounter++;
+      if (core?.label === 'SHOTGUN') {
+        const spread = overdrive ? [-0.42, -0.25, -0.10, 0.10, 0.25, 0.42] : [-0.32, -0.16, 0, 0.16, 0.32];
+        for (const off of spread) this.firePlayerBullet(a + off, { speed: PLAYER_BASE.bulletSpeed * 0.92, life: 0.78, r: 4.8, damage: playerDamage(this) * 0.62, color: core.color, core: 'scatter' });
+      } else if (core?.label === 'PIERCE') {
+        this.firePlayerBullet(a, { speed: PLAYER_BASE.bulletSpeed * 1.36, life: 1.45, r: overdrive ? 7.2 : 5.6, damage: playerDamage(this) * 1.32, color: core.color, core: 'lance', pierce: overdrive ? 5 : 3 });
+      } else if (core?.label === 'HALO') {
+        this.firePlayerBullet(a, { speed: PLAYER_BASE.bulletSpeed * 1.05, life: 1.05, r: 4.7, damage: playerDamage(this) * 0.9, color: core.color, core: 'halo' });
+        for (const off of [-0.86, 0.86]) this.firePlayerBullet(a + off, { speed: PLAYER_BASE.bulletSpeed * 0.78, life: 0.62, r: 3.6, damage: playerDamage(this) * 0.48, color: core.color, core: 'halo' });
+      } else {
+        this.firePlayerBullet(a, { damage: playerDamage(this) });
+      }
+      this.fireClock = playerFireRate(this);
+      beep(overdrive ? 'surge' : 'shot');
     }
 
     updateBullets(dt) {
@@ -420,12 +557,15 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         b.life -= dt;
         for (const e of this.enemies) {
           if (e.dead || dist(b.x, b.y, e.x, e.y) > b.r + e.r) continue;
+          if (b.hitIds?.has(e.id)) continue;
+          if (b.hitIds) b.hitIds.add(e.id);
           e.hp -= b.damage;
           e.hit = 0.12;
-          b.dead = true;
+          if (b.pierce > 0) b.pierce--;
+          else b.dead = true;
           const hitAngle = Math.atan2(b.vy, b.vx);
-          this.burst(b.x, b.y, '#bdfcff', 5, 0.45);
-          this.comicImpact(b.x, b.y, e.hp <= 0 ? '#ffdf68' : '#f6f2dc', hitAngle, e.hp <= 0 ? 1.05 : 0.72);
+          this.burst(b.x, b.y, b.color || '#bdfcff', 5, 0.45);
+          this.comicImpact(b.x, b.y, e.hp <= 0 ? (b.color || '#ffdf68') : '#f6f2dc', hitAngle, e.hp <= 0 ? 1.05 : 0.72);
           if (e.hp <= 0) this.killEnemy(e);
           break;
         }
@@ -584,22 +724,30 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
 
     updateDrops(dt) {
       for (const s of this.shards) {
+        const isCore = s.kind === 'core';
         const d = dist(s.x, s.y, this.player.x, this.player.y);
-        if (d < 170) {
+        const magnet = isCore ? 260 : 170;
+        if (d < magnet) {
           const a = angleBetween(s.x, s.y, this.player.x, this.player.y);
-          s.vx += Math.cos(a) * 520 * dt;
-          s.vy += Math.sin(a) * 520 * dt;
-          if (Math.random() < 0.18) this.particles.push({ x: s.x, y: s.y, vx: -Math.cos(a) * 45, vy: -Math.sin(a) * 45, r: 2.1, life: 0.22, max: 0.22, color: '#ffdf68', kind: 'spark' });
+          const pull = isCore ? 760 : 520;
+          s.vx += Math.cos(a) * pull * dt;
+          s.vy += Math.sin(a) * pull * dt;
+          if (Math.random() < (isCore ? 0.42 : 0.18)) this.particles.push({ x: s.x, y: s.y, vx: -Math.cos(a) * 45, vy: -Math.sin(a) * 45, r: isCore ? 3.3 : 2.1, life: 0.22, max: 0.22, color: isCore ? (TACTIC_CORES[s.coreId]?.color || '#ffdf68') : '#ffdf68', kind: 'spark' });
         }
         s.x += s.vx * dt;
         s.y += s.vy * dt;
-        s.vx *= Math.pow(0.02, dt);
-        s.vy *= Math.pow(0.02, dt);
-        if (d < PLAYER_BASE.radius + 12) {
+        s.vx *= Math.pow(isCore ? 0.035 : 0.02, dt);
+        s.vy *= Math.pow(isCore ? 0.035 : 0.02, dt);
+        if (d < PLAYER_BASE.radius + (isCore ? 20 : 12)) {
           s.dead = true;
-          meta.scrap += s.value;
-          meta.score += s.value * 4;
-          this.comicImpact(s.x, s.y, '#ffdf68', angleBetween(s.x, s.y, this.player.x, this.player.y), 0.45);
+          if (isCore) {
+            this.activateTacticCore(s.coreId, '撿到核心');
+            meta.score += 160;
+          } else {
+            meta.scrap += s.value;
+            meta.score += s.value * 4;
+            this.comicImpact(s.x, s.y, '#ffdf68', angleBetween(s.x, s.y, this.player.x, this.player.y), 0.45);
+          }
         }
       }
       this.shards = this.shards.filter(s => !s.dead);
@@ -668,6 +816,16 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.screenFlash = Math.max(this.screenFlash, boss ? 0.22 : 0.08);
       this.screenFlashColor = boss ? color : '#78f6ff';
       this.dropShards(e.x, e.y, boss ? 18 : PhaserLib.Math.Between(2, 4));
+      if (boss) {
+        this.dropTacticCore(e.x, e.y, 'lance');
+      } else {
+        this.coreDropPity++;
+        const dropChance = 0.16 + Math.min(0.18, this.combo * 0.018);
+        if (this.coreDropPity >= 5 || Math.random() < dropChance) {
+          this.dropTacticCore(e.x, e.y);
+          this.coreDropPity = 0;
+        }
+      }
       beep(boss ? 'surge' : 'hit');
       haptic(boss ? 38 : 10);
       if (!boss) this.recordCombatKill(e);
@@ -680,6 +838,10 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.comboTimer = state.timer;
       this.bestCombo = state.best;
       if (this.combo >= 3) this.addFloatingText(e.x, e.y - e.r - 18, `連殺 x${this.combo}`, COMBAT_SURGE_DEF.color, 750);
+      if (this.activeTacticDef() && this.combo >= 4 && this.combo % 4 === 0 && this.lastOverdriveCombo !== this.combo) {
+        this.lastOverdriveCombo = this.combo;
+        this.triggerCoreOverdrive(e, '連殺');
+      }
       if (state.surgeReady) this.triggerCombatSurge(e);
     }
 
@@ -702,6 +864,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.screenFlash = Math.max(this.screenFlash, 0.20);
       this.screenFlashColor = COMBAT_SURGE_DEF.color;
       this.addFloatingText(source.x, source.y - 48, `${COMBAT_SURGE_DEF.name}｜${hits}`, COMBAT_SURGE_DEF.color, 1050);
+      if (this.activeTacticDef()) this.triggerCoreOverdrive(source, '擊破爆發');
       this.addShake(8, 0.22);
       beep('surge');
       haptic(32);
@@ -713,6 +876,22 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         const speed = PhaserLib.Math.Between(80, 210);
         this.shards.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: 4, value: 1 });
       }
+    }
+
+    dropTacticCore(x, y, coreId = null) {
+      const id = coreId || this.nextTacticCoreId();
+      const def = TACTIC_CORES[id] || TACTIC_CORES.scatter;
+      const a = PhaserLib.Math.FloatBetween(0, Math.PI * 2);
+      const speed = PhaserLib.Math.Between(75, 150);
+      this.shards.push({ kind: 'core', coreId: id, x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: 9, value: 0, color: def.color });
+      this.particles.push({ x, y, vx: 0, vy: 0, r: 12, grow: 170, life: 0.24, max: 0.24, color: def.color, ring: true });
+      this.addFloatingText(x, y - 34, def.name, def.color, 820, 16);
+    }
+
+    nextTacticCoreId() {
+      const current = this.tacticCore?.id;
+      const pool = TACTIC_CORE_IDS.filter(id => id !== current);
+      return pool[PhaserLib.Math.Between(0, pool.length - 1)] || 'scatter';
     }
 
     burst(x, y, color, count, scale = 1) {
@@ -763,7 +942,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       meta.bestWave = Math.max(meta.bestWave || 1, this.wave);
       meta.recentRuns = [{
         id: Date.now(), engine: 'Phaser', status: clear ? 'clear' : 'dead', wave: this.wave, kills: this.kills,
-        combo: this.bestCombo, surges: this.surgeCount, time: Math.floor(this.runTime), scrap: meta.scrap, score: meta.score
+        combo: this.bestCombo, surges: this.surgeCount, corePickups: this.tacticPickups, overdrives: this.overdriveCount,
+        time: Math.floor(this.runTime), scrap: meta.scrap, score: meta.score
       }, ...(meta.recentRuns || [])].slice(0, 5);
       saveMeta();
       this.showRunOverlay(clear);
@@ -778,7 +958,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       card.querySelector('.eyebrow').textContent = clear ? 'SECTOR CLEAR // Phaser runtime' : 'RUN TERMINATED // Phaser runtime';
       card.querySelector('h2').textContent = clear ? '星環核心已回收' : '飛船解體，但資料已保存';
       const p = card.querySelector('p:not(.eyebrow)');
-      if (p) p.textContent = `Engine Phaser｜時間 ${formatTime(this.runTime)}｜第 ${this.wave} 波｜擊殺 ${this.kills}｜最高連殺 ${this.bestCombo}｜擊破爆發 ${this.surgeCount}｜碎晶 ${meta.scrap}`;
+      if (p) p.textContent = `Engine Phaser｜時間 ${formatTime(this.runTime)}｜第 ${this.wave} 波｜擊殺 ${this.kills}｜最高連殺 ${this.bestCombo}｜戰術核心 ${this.tacticPickups}｜OVERDRIVE ${this.overdriveCount}｜碎晶 ${meta.scrap}`;
       if (ui.startBtn) {
         ui.startBtn.textContent = '再次出擊';
         ui.startBtn.style.display = '';
@@ -1029,6 +1209,23 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       g.strokeCircle(p.x, p.y, 26 + Math.sin(performance.now() * 0.006) * 2);
       g.lineStyle(2, accent, 0.28);
       g.strokeCircle(p.x, p.y, 29 + Math.sin(performance.now() * 0.006) * 2);
+      const core = this.activeTacticDef();
+      if (core) {
+        const c = colorValue(core.color);
+        const t = performance.now() * 0.006;
+        const overdrive = this.overdriveTimer > 0;
+        g.lineStyle(overdrive ? 8 : 5, COMIC.ink, overdrive ? 0.82 : 0.54);
+        g.strokeCircle(p.x, p.y, (overdrive ? 50 : 39) + Math.sin(t) * 4);
+        g.lineStyle(overdrive ? 4 : 3, c, overdrive ? 0.92 : 0.58);
+        g.strokeCircle(p.x, p.y, (overdrive ? 55 : 43) + Math.sin(t) * 4);
+        if (core.label === 'HALO') {
+          for (let i = 0; i < 3; i++) {
+            const orb = point(p.x, p.y, t * 1.7 + i * Math.PI * 2 / 3, overdrive ? 42 : 34);
+            g.fillStyle(c, 0.86);
+            g.fillCircle(orb.x, orb.y, overdrive ? 7 : 5);
+          }
+        }
+      }
     }
 
     drawEnemies() {
@@ -1243,16 +1440,17 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         const speed = Math.hypot(b.vx, b.vy) || 1;
         const nx = b.vx / speed;
         const ny = b.vy / speed;
-        const tailX = b.x - nx * 56;
-        const tailY = b.y - ny * 56;
+        const tailX = b.x - nx * (b.core === 'lance' ? 84 : 56);
+        const tailY = b.y - ny * (b.core === 'lance' ? 84 : 56);
+        const coreColor = b.color ? colorValue(b.color) : COMIC.orange;
         // Few but strong tracer lanes: black ink edge + hot comic core.
-        g.lineStyle(16, COMIC.ink, 0.95);
+        g.lineStyle(b.core === 'lance' ? 20 : 16, COMIC.ink, 0.95);
         g.lineBetween(tailX, tailY, b.x + nx * 8, b.y + ny * 8);
-        g.lineStyle(10, COMIC.orange, 0.96);
+        g.lineStyle(b.core === 'lance' ? 12 : 10, coreColor, 0.96);
         g.lineBetween(tailX, tailY, b.x + nx * 7, b.y + ny * 7);
         g.lineStyle(3, COMIC.white, 1);
         g.lineBetween(tailX + nx * 10, tailY + ny * 10, b.x + nx * 9, b.y + ny * 9);
-        g.fillStyle(COMIC.gold, 1);
+        g.fillStyle(coreColor, 1);
         g.fillCircle(b.x, b.y, b.r + 1.2);
       }
       for (const s of this.enemyShots) {
@@ -1276,6 +1474,22 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     drawDrops() {
       const g = this.g;
       for (const s of this.shards) {
+        if (s.kind === 'core') {
+          const def = TACTIC_CORES[s.coreId] || TACTIC_CORES.scatter;
+          const color = colorValue(def.color);
+          const pulse = 1 + Math.sin(performance.now() * 0.012 + s.x) * 0.12;
+          const r = (s.r + 5) * pulse;
+          g.lineStyle(8, COMIC.ink, 1);
+          g.strokeCircle(s.x, s.y, r + 4);
+          g.fillStyle(color, 0.95);
+          g.fillCircle(s.x, s.y, r);
+          g.lineStyle(4, COMIC.white, 0.86);
+          g.strokeCircle(s.x, s.y, r * 0.58);
+          g.lineStyle(3, COMIC.gold, 0.78);
+          g.lineBetween(s.x - r, s.y, s.x + r, s.y);
+          g.lineBetween(s.x, s.y - r, s.x, s.y + r);
+          continue;
+        }
         const r = s.r + 3;
         g.lineStyle(4, COMIC.ink, 1);
         g.strokeTriangle(s.x, s.y - r, s.x + r, s.y, s.x, s.y + r);
@@ -1619,10 +1833,34 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     return { enemyMult: 1 };
   }
 
-  function playerDamage() {
+  function starterCoreForZone() {
+    if (meta.selectedZone === 'scrapyard') return 'lance';
+    if (meta.selectedZone === 'crystal') return 'halo';
+    if (meta.selectedZone === 'rift') return 'scatter';
+    return TACTIC_CORE_IDS[PhaserLib.Math.Between(0, TACTIC_CORE_IDS.length - 1)] || 'scatter';
+  }
+
+  function coreHint(def) {
+    if (def?.label === 'SHOTGUN') return '五向霰彈清近身';
+    if (def?.label === 'PIERCE') return '單發貫穿打成串';
+    if (def?.label === 'HALO') return '環刃定期掃場';
+    return '武器變形中';
+  }
+
+  function playerFireRate(scene) {
+    let rate = PLAYER_BASE.fireRate;
+    const def = scene?.activeTacticDef?.();
+    if (def?.fireRate) rate *= def.fireRate;
+    if (scene?.overdriveTimer > 0) rate *= 0.68;
+    return Math.max(0.055, rate);
+  }
+
+  function playerDamage(scene = null) {
     const cannon = meta.upgrades?.cannon || 0;
     const reactor = meta.upgrades?.reactor || 0;
-    return PLAYER_BASE.damage + cannon * 2.7 + reactor * 2.35;
+    let amount = PLAYER_BASE.damage + cannon * 2.7 + reactor * 2.35;
+    if (scene?.overdriveTimer > 0) amount *= 1.18;
+    return amount;
   }
 
   function updateHud(scene) {
@@ -1632,6 +1870,19 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     ui.scrap.textContent = String(meta.scrap || 0);
     ui.score.textContent = String(meta.score || 0);
     if (ui.xpBar) ui.xpBar.style.width = `${clamp((scene.waveSpawned / Math.max(1, scene.waveBudget)) * 100, 0, 100)}%`;
+    if (ui.coreHud) {
+      const def = scene.activeTacticDef?.();
+      const overdrive = scene.overdriveTimer > 0;
+      ui.coreHud.classList.toggle('overdrive', overdrive);
+      if (def) {
+        const timer = Math.ceil(scene.tacticCore.timer);
+        ui.coreHud.textContent = overdrive
+          ? `OVERDRIVE ${Math.ceil(scene.overdriveTimer)}s｜${def.name} ${timer}s｜射速/火力爆發`
+          : `${def.name} ${timer}s｜${coreHint(def)}｜連殺觸發 OVERDRIVE`;
+      } else {
+        ui.coreHud.textContent = '戰術核心待機｜擊殺掉核心，撿到後武器會變形';
+      }
+    }
     if (ui.pauseBtn) ui.pauseBtn.textContent = scene.pausedRun ? '繼續' : '暫停';
   }
 
