@@ -17,7 +17,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.5 戰術核心樂趣版';
+  const VERSION = 'v7.6 夥伴機任務版';
   const WORLD = { w: 3200, h: 2200 };
   const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 14 };
   const MAX_PARTICLES = 320;
@@ -51,6 +51,21 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     lance: { name: '穿甲核心', label: 'PIERCE', color: '#78f6ff', duration: 11, fireRate: 1.08 },
     halo: { name: '環刃核心', label: 'HALO', color: '#62ff91', duration: 10, fireRate: 0.92 }
   };
+  const DRONE_IDS = ['tank', 'artillery', 'repair', 'shield', 'rapid', 'melee'];
+  const DRONE_DEFS = {
+    tank: { name: '堡壘夥伴機', role: '耐打型', color: '#8aa3ff', hp: 130, orbit: 70, fireRate: 0.95, damage: 8, range: 520 },
+    artillery: { name: '重砲夥伴機', role: '重砲攻擊型', color: '#ff8c22', hp: 76, orbit: 92, fireRate: 1.45, damage: 24, range: 760 },
+    repair: { name: '維修夥伴機', role: '維修型', color: '#62ff91', hp: 70, orbit: 56, fireRate: 2.6, heal: 8, range: 520 },
+    shield: { name: '護盾夥伴機', role: '護盾型', color: '#78f6ff', hp: 88, orbit: 64, fireRate: 1.15, damage: 6, range: 500 },
+    rapid: { name: '蜂針夥伴機', role: '快速攻擊型', color: '#ffd166', hp: 62, orbit: 82, fireRate: 0.38, damage: 7, range: 620 },
+    melee: { name: '斬擊夥伴機', role: '近戰強力型', color: '#ff3df2', hp: 92, orbit: 46, fireRate: 0.42, damage: 18, range: 120 }
+  };
+  const RUN_SKILL_DEFS = {
+    cannon: { name: '主砲校準', desc: '主機火力 +14%', base: 14, scale: 1.45, color: '#ffdf68' },
+    armor: { name: '機體裝甲', desc: '最大護盾 +18 並立即補血', base: 16, scale: 1.5, color: '#8aa3ff' },
+    engine: { name: '推進核心', desc: '移速 +7%｜任務開啟更穩', base: 12, scale: 1.42, color: '#78f6ff' },
+    companion: { name: '夥伴同步', desc: '全部夥伴機等級 +1', base: 20, scale: 1.55, color: '#62ff91' }
+  };
   const BACKDROP_PROPS = createBackdropProps();
   const COMIC = {
     ink: 0x07080c,
@@ -72,6 +87,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     score: document.getElementById('score'),
     xpBar: document.getElementById('xpBar'),
     coreHud: document.getElementById('coreHud'),
+    missionHud: document.getElementById('missionHud'),
     overlay: document.getElementById('overlay'),
     startBtn: document.getElementById('startBtn'),
     howBtn: document.getElementById('howBtn'),
@@ -182,14 +198,25 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 戰術核心樂趣版';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 夥伴機任務版';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.5 把「打掉敵人 → 撿核心 → 武器變形 → 連鎖清場」做進正常戰鬥，讓前 30 秒就有爽點。';
+    if (p) p.textContent = 'v7.6 新增隨機任務區塊：停在旁邊開啟後取得夥伴機；死亡可花碎晶接關，主機技能改成當局貨幣購買。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
-      ui.startBtn.textContent = '開始 v7.5';
+      ui.startBtn.textContent = '開始 v7.6';
     }
     if (ui.howBtn) ui.howBtn.style.display = '';
+    setHomePanelsVisible(true);
+    card.querySelector('.run-shop')?.remove();
+  }
+
+  function setHomePanelsVisible(visible) {
+    const card = ui.overlay?.querySelector('.card');
+    if (!card) return;
+    for (const selector of ['.version-card', '.beta-summary', '#offlineNotice', '#achievementPanel', '#zonePanel']) {
+      const el = card.querySelector(selector);
+      if (el) el.hidden = !visible;
+    }
   }
 
   function renderZones() {
@@ -215,13 +242,40 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   function updateMetaPanels() {
     const style = currentRouteStyle();
     if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜${style.shipName}｜Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.5：擊殺會掉落戰術核心；霰彈、穿甲、環刃三種短流派會即時改變武器，撿核心能刷新時間並記錄到結算。';
+    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.6：地圖會出現任務區塊，停在旁邊開啟可獲得六種夥伴機；重複獲得會升級。主機技能改成用當局碎晶購買，死亡可花碎晶接關。';
   }
 
-  function hideUpgradeSurfaces() {
+  function hideUpgradeSurfaces({ resume = false } = {}) {
     if (ui.upgradePrompt) ui.upgradePrompt.hidden = true;
     if (ui.upgradeMenuBtn) ui.upgradeMenuBtn.hidden = true;
     if (ui.upgradeModal) ui.upgradeModal.hidden = true;
+    if (resume && sceneRef?.running && !sceneRef.gameOver) sceneRef.pausedRun = false;
+    if (sceneRef) updateHud(sceneRef);
+  }
+
+  function openRunShop() {
+    if (!sceneRef) return;
+    if (sceneRef.running && !sceneRef.gameOver) sceneRef.pausedRun = true;
+    const container = document.getElementById('upgrades');
+    if (document.getElementById('upgradeTitle')) document.getElementById('upgradeTitle').textContent = '當局技能商店';
+    const muted = document.querySelector('#panel .muted');
+    if (muted) muted.textContent = '花本局與累積碎晶購買主機技能；等級只保留本局，死亡接關會保留，重新開始會歸零。';
+    if (container) {
+      container.innerHTML = '';
+      for (const [id, def] of Object.entries(RUN_SKILL_DEFS)) {
+        const cost = sceneRef.runSkillCost(id);
+        const level = sceneRef.runSkills[id] || 0;
+        const card = document.createElement('div');
+        card.className = 'upgrade';
+        card.innerHTML = `<header><strong>${def.name}</strong><span class="level">Lv.${level}</span></header><p>${def.desc}</p><button type="button" ${meta.scrap < cost ? 'disabled' : ''}>花 ${cost} 碎晶購買</button>`;
+        card.querySelector('button')?.addEventListener('click', () => {
+          if (sceneRef.purchaseRunSkill(id)) openRunShop();
+        });
+        container.appendChild(card);
+      }
+    }
+    if (ui.upgradeModal) ui.upgradeModal.hidden = false;
+    updateHud(sceneRef);
   }
 
   class NeonScene extends PhaserLib.Scene {
@@ -240,6 +294,14 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.spawnClock = 0;
       this.fireClock = 0;
       this.haloClock = 0;
+      this.runSkills = { cannon: 0, armor: 0, engine: 0, companion: 0 };
+      this.reviveCount = 0;
+      this.missionBlocks = [];
+      this.nextMissionId = 1;
+      this.companions = [];
+      this.companionShots = 0;
+      this.missionClaims = 0;
+      this.shopPurchases = 0;
       this.shotCounter = 0;
       this.nextEnemyId = 1;
       this.coreDropPity = 0;
@@ -323,6 +385,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.screenFlash = Math.max(this.screenFlash, bossKind ? 0.24 : 0.13);
       this.screenFlashColor = bossKind ? bossColor(bossKind) : '#ffdf68';
       this.comicSplash(this.player.x, this.player.y, bossKind ? 'BOSS!!' : 'WAVE!', bossKind ? bossColor(bossKind) : '#ffdf68');
+      if (!bossKind && (n === 1 || n % 2 === 0 || Math.random() < 0.36)) this.spawnMissionBlock();
     }
 
     handlePointerDown(pointer) {
@@ -351,6 +414,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.updateFiring(dt);
       this.updateBullets(dt);
       this.updateEnemies(dt);
+      this.updateMissionBlocks(dt);
+      this.updateCompanions(dt);
       this.updateDrops(dt);
       this.updateParticles(dt);
       this.updateWaveProgress();
@@ -462,6 +527,153 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       }
     }
 
+    spawnMissionBlock(forceType = null) {
+      if (this.missionBlocks.length >= 2) return null;
+      const a = PhaserLib.Math.FloatBetween(0, Math.PI * 2);
+      const r = PhaserLib.Math.Between(260, 470);
+      const x = clamp(this.player.x + Math.cos(a) * r, 150, WORLD.w - 150);
+      const y = clamp(this.player.y + Math.sin(a) * r, 150, WORLD.h - 150);
+      const droneType = forceType || DRONE_IDS[PhaserLib.Math.Between(0, DRONE_IDS.length - 1)] || 'rapid';
+      const def = DRONE_DEFS[droneType] || DRONE_DEFS.rapid;
+      const block = { id: this.nextMissionId++, x, y, r: 62, progress: 0, target: 2.05, droneType, color: def.color, pulse: Math.random() * 10 };
+      this.missionBlocks.push(block);
+      this.message = `偵測任務區塊｜${def.role}`;
+      this.messageTimer = 1.8;
+      this.addFloatingText(x, y - 46, '任務區塊', def.color, 900, 17);
+      return block;
+    }
+
+    updateMissionBlocks(dt) {
+      for (const block of this.missionBlocks) {
+        const d = dist(this.player.x, this.player.y, block.x, block.y);
+        const parked = d < block.r + 42 && Math.hypot(this.player.vx, this.player.vy) < 125 + (this.runSkills.engine || 0) * 12;
+        if (parked) {
+          block.progress += dt;
+          this.player.vx *= 0.92;
+          this.player.vy *= 0.92;
+          if (Math.random() < 0.25) this.particles.push({ x: block.x, y: block.y, vx: PhaserLib.Math.FloatBetween(-28, 28), vy: PhaserLib.Math.FloatBetween(-28, 28), r: 2.4, life: 0.28, max: 0.28, color: block.color, kind: 'spark' });
+        } else {
+          block.progress = Math.max(0, block.progress - dt * 0.38);
+        }
+        if (block.progress >= block.target) {
+          block.done = true;
+          this.openMissionBlock(block);
+        }
+      }
+      this.missionBlocks = this.missionBlocks.filter(block => !block.done);
+    }
+
+    openMissionBlock(block) {
+      const def = DRONE_DEFS[block.droneType] || DRONE_DEFS.rapid;
+      this.grantCompanion(block.droneType, block.x, block.y);
+      meta.scrap += 8;
+      meta.score += 240;
+      this.missionClaims++;
+      this.dropSupplyItem(block.x + 18, block.y, 'cash', 12);
+      this.comicSplash(block.x, block.y, 'ALLY!', def.color, 1.2);
+      this.screenFlash = Math.max(this.screenFlash, 0.18);
+      this.screenFlashColor = def.color;
+      this.addShake(6, 0.16);
+      saveMeta();
+    }
+
+    grantCompanion(type = 'rapid', x = this.player.x, y = this.player.y) {
+      const safeType = DRONE_DEFS[type] ? type : 'rapid';
+      const def = DRONE_DEFS[safeType];
+      let drone = this.companions.find(item => item.type === safeType);
+      if (drone) {
+        drone.level++;
+        drone.hp = Math.min(drone.maxHp + def.hp * 0.18, (drone.maxHp || def.hp) + def.hp * 0.35);
+        this.addFloatingText(drone.x, drone.y - 30, `${def.name} Lv.${this.companionLevel(drone)}`, def.color, 900, 16);
+      } else {
+        const idx = this.companions.length;
+        drone = { type: safeType, level: 1, x, y, angle: idx * Math.PI * 2 / 6, fireClock: 0.2, hp: def.hp, maxHp: def.hp, slashClock: 0 };
+        this.companions.push(drone);
+        this.addFloatingText(x, y - 30, `${def.name} 加入`, def.color, 1000, 17);
+      }
+      this.message = `${def.role}｜${def.name}`;
+      this.messageTimer = 1.7;
+      beep('clear');
+      haptic(24);
+      return drone;
+    }
+
+    companionLevel(drone) {
+      return Math.max(1, (drone?.level || 1) + (this.runSkills?.companion || 0));
+    }
+
+    updateCompanions(dt) {
+      const count = Math.max(1, this.companions.length);
+      this.companions.forEach((drone, index) => {
+        const def = DRONE_DEFS[drone.type] || DRONE_DEFS.rapid;
+        const lvl = this.companionLevel(drone);
+        drone.angle += dt * (0.82 + index * 0.04);
+        const orbit = def.orbit + Math.min(34, lvl * 5) + index * 8;
+        const slot = drone.angle + index * Math.PI * 2 / count;
+        const tx = this.player.x + Math.cos(slot) * orbit;
+        const ty = this.player.y + Math.sin(slot) * orbit * 0.72;
+        drone.x += (tx - drone.x) * Math.min(1, dt * 7.5);
+        drone.y += (ty - drone.y) * Math.min(1, dt * 7.5);
+        drone.fireClock -= dt;
+        if (drone.type === 'repair') {
+          if (drone.fireClock <= 0) {
+            const heal = (def.heal || 7) + lvl * 2;
+            const before = this.player.hp;
+            this.player.hp = Math.min(playerMaxHp(this), this.player.hp + heal);
+            if (this.player.hp > before) this.addFloatingText(this.player.x, this.player.y - 48, `+${Math.round(this.player.hp - before)}`, def.color, 650, 16);
+            drone.fireClock = Math.max(0.8, def.fireRate - lvl * 0.12);
+            this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 12, grow: 120, life: 0.28, max: 0.28, color: def.color, ring: true });
+          }
+          return;
+        }
+        if (drone.type === 'shield') {
+          let blocked = 0;
+          for (const shot of this.enemyShots) {
+            if (dist(shot.x, shot.y, this.player.x, this.player.y) < 92 + lvl * 12) { shot.dead = true; blocked++; }
+          }
+          if (blocked) {
+            this.player.invuln = Math.max(this.player.invuln, 0.18);
+            this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 18, grow: 150, life: 0.24, max: 0.24, color: def.color, ring: true });
+          }
+        }
+        const target = this.nearestEnemyFrom(drone.x, drone.y, def.range + lvl * 18);
+        if (!target) return;
+        if (drone.type === 'melee') {
+          if (dist(drone.x, drone.y, target.x, target.y) < 126 + lvl * 6 && drone.fireClock <= 0) {
+            const damage = def.damage + lvl * 5;
+            target.hp -= damage * (target.type === 'boss' ? 0.42 : 1);
+            target.hit = 0.14;
+            this.comicImpact(target.x, target.y, def.color, angleBetween(drone.x, drone.y, target.x, target.y), 0.86);
+            this.addFloatingText(target.x, target.y - target.r - 10, '斬擊', def.color, 420, 14);
+            if (target.hp <= 0) this.killEnemy(target);
+            drone.fireClock = Math.max(0.18, def.fireRate - lvl * 0.028);
+          }
+          return;
+        }
+        if (drone.fireClock <= 0) {
+          const a = angleBetween(drone.x, drone.y, target.x, target.y);
+          const damage = (def.damage || 8) + lvl * (drone.type === 'artillery' ? 6 : 2.2);
+          const speed = drone.type === 'artillery' ? 620 : drone.type === 'rapid' ? 820 : 680;
+          const radius = drone.type === 'artillery' ? 7.5 : drone.type === 'tank' ? 5.5 : 4;
+          this.bullets.push({ x: drone.x, y: drone.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: drone.type === 'artillery' ? 1.25 : 0.95, r: radius, damage, color: def.color, core: 'drone', pierce: drone.type === 'artillery' ? 1 : 0, hitIds: drone.type === 'artillery' ? new Set() : null });
+          this.companionShots++;
+          drone.fireClock = Math.max(0.16, def.fireRate - lvl * (drone.type === 'rapid' ? 0.032 : 0.045));
+        }
+      });
+      this.enemyShots = this.enemyShots.filter(s => !s.dead && s.life > 0);
+    }
+
+    nearestEnemyFrom(x, y, maxRange = Infinity) {
+      let best = null;
+      let bestD = maxRange;
+      for (const e of this.enemies) {
+        if (e.dead) continue;
+        const d = dist(x, y, e.x, e.y);
+        if (d < bestD) { best = e; bestD = d; }
+      }
+      return best;
+    }
+
     updatePlayer(dt) {
       let mx = 0;
       let my = 0;
@@ -484,7 +696,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       }
       const zoneSpeed = meta.selectedZone === 'rift' ? 1.03 : 1;
       const coreSpeed = this.overdriveTimer > 0 ? 1.12 : 1;
-      const speed = PLAYER_BASE.speed * zoneSpeed * coreSpeed * (meta.controlMode === 'touch' ? 0.92 : 1);
+      const runSpeed = 1 + (this.runSkills.engine || 0) * 0.07;
+      const speed = PLAYER_BASE.speed * zoneSpeed * coreSpeed * runSpeed * (meta.controlMode === 'touch' ? 0.92 : 1);
       this.player.vx = mx * speed;
       this.player.vy = my * speed;
       this.player.x = clamp(this.player.x + this.player.vx * dt, 60, WORLD.w - 60);
@@ -725,24 +938,35 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     updateDrops(dt) {
       for (const s of this.shards) {
         const isCore = s.kind === 'core';
+        const isSupply = s.kind === 'repair' || s.kind === 'cash';
         const d = dist(s.x, s.y, this.player.x, this.player.y);
-        const magnet = isCore ? 260 : 170;
+        const magnet = isCore ? 260 : isSupply ? 215 : 170;
         if (d < magnet) {
           const a = angleBetween(s.x, s.y, this.player.x, this.player.y);
-          const pull = isCore ? 760 : 520;
+          const pull = isCore ? 760 : isSupply ? 640 : 520;
           s.vx += Math.cos(a) * pull * dt;
           s.vy += Math.sin(a) * pull * dt;
-          if (Math.random() < (isCore ? 0.42 : 0.18)) this.particles.push({ x: s.x, y: s.y, vx: -Math.cos(a) * 45, vy: -Math.sin(a) * 45, r: isCore ? 3.3 : 2.1, life: 0.22, max: 0.22, color: isCore ? (TACTIC_CORES[s.coreId]?.color || '#ffdf68') : '#ffdf68', kind: 'spark' });
+          if (Math.random() < (isCore || isSupply ? 0.42 : 0.18)) this.particles.push({ x: s.x, y: s.y, vx: -Math.cos(a) * 45, vy: -Math.sin(a) * 45, r: isCore ? 3.3 : isSupply ? 2.8 : 2.1, life: 0.22, max: 0.22, color: isCore ? (TACTIC_CORES[s.coreId]?.color || '#ffdf68') : s.color || '#ffdf68', kind: 'spark' });
         }
         s.x += s.vx * dt;
         s.y += s.vy * dt;
-        s.vx *= Math.pow(isCore ? 0.035 : 0.02, dt);
-        s.vy *= Math.pow(isCore ? 0.035 : 0.02, dt);
-        if (d < PLAYER_BASE.radius + (isCore ? 20 : 12)) {
+        s.vx *= Math.pow(isCore ? 0.035 : isSupply ? 0.028 : 0.02, dt);
+        s.vy *= Math.pow(isCore ? 0.035 : isSupply ? 0.028 : 0.02, dt);
+        if (d < PLAYER_BASE.radius + (isCore ? 20 : isSupply ? 16 : 12)) {
           s.dead = true;
           if (isCore) {
             this.activateTacticCore(s.coreId, '撿到核心');
             meta.score += 160;
+          } else if (s.kind === 'repair') {
+            const before = this.player.hp;
+            this.player.hp = Math.min(playerMaxHp(this), this.player.hp + (s.value || 18));
+            this.addFloatingText(this.player.x, this.player.y - 42, `維修 +${Math.round(this.player.hp - before)}`, s.color || '#62ff91', 780, 16);
+            this.comicImpact(s.x, s.y, s.color || '#62ff91', angleBetween(s.x, s.y, this.player.x, this.player.y), 0.58);
+          } else if (s.kind === 'cash') {
+            meta.scrap += s.value || 8;
+            meta.score += (s.value || 8) * 7;
+            this.addFloatingText(s.x, s.y - 20, `貨幣 +${s.value || 8}`, s.color || '#ffdf68', 780, 16);
+            this.comicImpact(s.x, s.y, s.color || '#ffdf68', angleBetween(s.x, s.y, this.player.x, this.player.y), 0.52);
           } else {
             meta.scrap += s.value;
             meta.score += s.value * 4;
@@ -789,9 +1013,13 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
 
     damagePlayer(amount, sx, sy) {
       if (this.player.invuln > 0 || this.gameOver) return;
-      this.player.hp -= amount;
+      const shieldDrone = this.companions.find(d => d.type === 'shield');
+      const guardDrone = this.companions.find(d => d.type === 'tank');
+      const reduction = 1 - Math.min(0.34, (this.runSkills.armor || 0) * 0.045 + (shieldDrone ? this.companionLevel(shieldDrone) * 0.025 : 0) + (guardDrone ? this.companionLevel(guardDrone) * 0.015 : 0));
+      const finalAmount = amount * reduction;
+      this.player.hp -= finalAmount;
       this.player.invuln = 0.42;
-      this.addFloatingText(this.player.x, this.player.y - 28, `-${Math.round(amount)}`, '#ff4d6d', 650);
+      this.addFloatingText(this.player.x, this.player.y - 28, `-${Math.round(finalAmount)}`, '#ff4d6d', 650);
       this.burst(sx, sy, '#ff4d6d', 10, 0.85);
       this.comicImpact(sx, sy, '#e83b3b', angleBetween(sx, sy, this.player.x, this.player.y), 0.95);
       this.screenFlash = Math.max(this.screenFlash, 0.22);
@@ -816,6 +1044,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.screenFlash = Math.max(this.screenFlash, boss ? 0.22 : 0.08);
       this.screenFlashColor = boss ? color : '#78f6ff';
       this.dropShards(e.x, e.y, boss ? 18 : PhaserLib.Math.Between(2, 4));
+      if (boss || Math.random() < 0.10 || (this.player.hp < playerMaxHp(this) * 0.45 && Math.random() < 0.18)) {
+        this.dropSupplyItem(e.x + PhaserLib.Math.Between(-22, 22), e.y + PhaserLib.Math.Between(-22, 22), this.player.hp < playerMaxHp(this) * 0.55 ? 'repair' : 'cash');
+      }
       if (boss) {
         this.dropTacticCore(e.x, e.y, 'lance');
       } else {
@@ -888,6 +1119,16 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.addFloatingText(x, y - 34, def.name, def.color, 820, 16);
     }
 
+    dropSupplyItem(x, y, kind = 'cash', value = null) {
+      const a = PhaserLib.Math.FloatBetween(0, Math.PI * 2);
+      const speed = PhaserLib.Math.Between(70, 150);
+      const repair = kind === 'repair';
+      const color = repair ? '#62ff91' : '#ffdf68';
+      this.shards.push({ kind: repair ? 'repair' : 'cash', x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: repair ? 8 : 7, value: value ?? (repair ? 22 : 10), color });
+      this.particles.push({ x, y, vx: 0, vy: 0, r: 9, grow: 110, life: 0.2, max: 0.2, color, ring: true });
+      this.addFloatingText(x, y - 26, repair ? '維修道具' : '貨幣箱', color, 650, 15);
+    }
+
     nextTacticCoreId() {
       const current = this.tacticCore?.id;
       const pool = TACTIC_CORE_IDS.filter(id => id !== current);
@@ -943,6 +1184,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       meta.recentRuns = [{
         id: Date.now(), engine: 'Phaser', status: clear ? 'clear' : 'dead', wave: this.wave, kills: this.kills,
         combo: this.bestCombo, surges: this.surgeCount, corePickups: this.tacticPickups, overdrives: this.overdriveCount,
+        missions: this.missionClaims, companions: this.companions.length, purchases: this.shopPurchases, revives: this.reviveCount,
         time: Math.floor(this.runTime), scrap: meta.scrap, score: meta.score
       }, ...(meta.recentRuns || [])].slice(0, 5);
       saveMeta();
@@ -955,10 +1197,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const card = ui.overlay?.querySelector('.card');
       if (!card) return;
       card.classList.add('run-card');
+      setHomePanelsVisible(false);
       card.querySelector('.eyebrow').textContent = clear ? 'SECTOR CLEAR // Phaser runtime' : 'RUN TERMINATED // Phaser runtime';
       card.querySelector('h2').textContent = clear ? '星環核心已回收' : '飛船解體，但資料已保存';
       const p = card.querySelector('p:not(.eyebrow)');
-      if (p) p.textContent = `Engine Phaser｜時間 ${formatTime(this.runTime)}｜第 ${this.wave} 波｜擊殺 ${this.kills}｜最高連殺 ${this.bestCombo}｜戰術核心 ${this.tacticPickups}｜OVERDRIVE ${this.overdriveCount}｜碎晶 ${meta.scrap}`;
+      if (p) p.textContent = `Engine Phaser｜時間 ${formatTime(this.runTime)}｜第 ${this.wave} 波｜擊殺 ${this.kills}｜任務 ${this.missionClaims}｜夥伴 ${this.companions.length}｜購買 ${this.shopPurchases}｜OVERDRIVE ${this.overdriveCount}｜碎晶 ${meta.scrap}`;
+      this.renderOverlayShop(card, clear);
       if (ui.startBtn) {
         ui.startBtn.textContent = '再次出擊';
         ui.startBtn.style.display = '';
@@ -968,13 +1212,118 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       updateMetaPanels();
     }
 
+    runSkillCost(id) {
+      const def = RUN_SKILL_DEFS[id];
+      const level = this.runSkills?.[id] || 0;
+      return Math.ceil((def?.base || 10) * Math.pow(def?.scale || 1.45, level));
+    }
+
+    purchaseRunSkill(id) {
+      const def = RUN_SKILL_DEFS[id];
+      if (!def) return false;
+      const cost = this.runSkillCost(id);
+      if ((meta.scrap || 0) < cost) {
+        flash(`碎晶不足：需要 ${cost}`);
+        return false;
+      }
+      meta.scrap -= cost;
+      this.runSkills[id] = (this.runSkills[id] || 0) + 1;
+      this.shopPurchases++;
+      if (id === 'armor') {
+        this.player.maxHp = playerMaxHp(this);
+        this.player.hp = Math.min(this.player.maxHp, this.player.hp + 18);
+      }
+      if (id === 'companion') {
+        for (const drone of this.companions) drone.hp = Math.min((drone.maxHp || 80) + 30, (drone.hp || 0) + 22);
+      }
+      saveMeta();
+      updateHud(this);
+      flash(`${def.name} Lv.${this.runSkills[id]}｜-${cost} 碎晶`);
+      beep('clear');
+      haptic(18);
+      return true;
+    }
+
+    reviveCost() {
+      return Math.ceil(42 + this.wave * 6 + this.reviveCount * 36 + this.shopPurchases * 4);
+    }
+
+    reviveRun() {
+      if (!this.gameOver) return false;
+      const cost = this.reviveCost();
+      if ((meta.scrap || 0) < cost) {
+        flash(`接關需要 ${cost} 碎晶`);
+        return false;
+      }
+      meta.scrap -= cost;
+      this.reviveCount++;
+      this.gameOver = false;
+      this.running = true;
+      this.pausedRun = false;
+      this.player.maxHp = playerMaxHp(this);
+      this.player.hp = Math.max(44, this.player.maxHp * 0.62);
+      this.player.invuln = 2.4;
+      this.enemyShots = [];
+      for (const e of this.enemies) {
+        const push = angleBetween(this.player.x, this.player.y, e.x, e.y);
+        e.x = clamp(e.x + Math.cos(push) * 96, 60, WORLD.w - 60);
+        e.y = clamp(e.y + Math.sin(push) * 96, 60, WORLD.h - 60);
+      }
+      ui.overlay?.classList.remove('visible');
+      saveMeta();
+      this.comicSplash(this.player.x, this.player.y, 'CONTINUE!', '#62ff91', 1.25);
+      this.addShake(7, 0.18);
+      updateHud(this);
+      flash(`接關成功｜-${cost} 碎晶`);
+      beep('clear');
+      haptic(44);
+      return true;
+    }
+
+    renderOverlayShop(card, clear) {
+      let shop = card.querySelector('.run-shop');
+      if (!shop) {
+        shop = document.createElement('div');
+        shop.className = 'run-shop';
+        card.querySelector('.actions')?.before(shop);
+      }
+      shop.innerHTML = '<strong>當局技能商店｜等級只保留本局，重來會重置</strong><div class="shop-grid"></div>';
+      const grid = shop.querySelector('.shop-grid');
+      if (!clear) {
+        const cost = this.reviveCost();
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'shop-card revive';
+        btn.disabled = (meta.scrap || 0) < cost;
+        btn.innerHTML = `<b>花 ${cost} 碎晶接關</b><small>復活並保留本局夥伴機與已購買技能</small>`;
+        btn.addEventListener('click', () => { if (this.reviveRun()) shop.remove(); });
+        grid.appendChild(btn);
+      }
+      for (const [id, def] of Object.entries(RUN_SKILL_DEFS)) {
+        const cost = this.runSkillCost(id);
+        const level = this.runSkills[id] || 0;
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'shop-card';
+        btn.disabled = (meta.scrap || 0) < cost;
+        btn.style.setProperty('--skill-color', def.color);
+        btn.innerHTML = `<b>${def.name} Lv.${level}</b><small>${def.desc}</small><small>花費 ${cost} 碎晶｜當局有效</small>`;
+        btn.addEventListener('click', () => {
+          if (this.purchaseRunSkill(id)) this.renderOverlayShop(card, clear);
+        });
+        grid.appendChild(btn);
+      }
+    }
+
     drawAll() {
       this.g.clear();
       this.uiG.clear();
       this.drawBackground();
+      this.drawMissionBlocks();
       this.drawDrops();
       this.drawBullets();
       this.drawEnemies();
+      this.drawCompanions();
       this.drawPlayer();
       this.drawParticles();
       this.drawComicOverlay();
@@ -1471,6 +1820,64 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       }
     }
 
+    drawMissionBlocks() {
+      const g = this.g;
+      for (const block of this.missionBlocks) {
+        const def = DRONE_DEFS[block.droneType] || DRONE_DEFS.rapid;
+        const color = colorValue(def.color);
+        const progress = clamp(block.progress / block.target, 0, 1);
+        const pulse = 1 + Math.sin(performance.now() * 0.006 + block.pulse) * 0.08;
+        g.lineStyle(12, COMIC.ink, 0.88);
+        g.strokeCircle(block.x, block.y, block.r * pulse);
+        g.fillStyle(color, 0.16);
+        g.fillCircle(block.x, block.y, block.r * pulse);
+        g.lineStyle(5, color, 0.75);
+        g.strokeCircle(block.x, block.y, block.r * pulse);
+        g.lineStyle(7, COMIC.gold, 0.92);
+        g.beginPath();
+        g.arc(block.x, block.y, block.r + 14, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+        g.strokePath();
+        g.lineStyle(5, COMIC.ink, 0.78);
+        g.strokeRoundedRect(block.x - 50, block.y - 18, 100, 36, 8);
+        g.fillStyle(color, 0.9);
+        g.fillRoundedRect(block.x - 46, block.y - 14, 92, 28, 7);
+      }
+    }
+
+    drawCompanions() {
+      const g = this.g;
+      for (const drone of this.companions) {
+        const def = DRONE_DEFS[drone.type] || DRONE_DEFS.rapid;
+        const color = colorValue(def.color);
+        const lvl = this.companionLevel(drone);
+        const r = 10 + Math.min(8, lvl * 1.2);
+        g.fillStyle(COMIC.shadow, 0.28);
+        g.fillEllipse(drone.x + 4, drone.y + 8, r * 2.5, r * 0.8);
+        g.lineStyle(7, COMIC.ink, 0.95);
+        if (drone.type === 'artillery') {
+          g.fillStyle(color, 0.96);
+          g.fillRoundedRect(drone.x - r * 1.3, drone.y - r * 0.8, r * 2.6, r * 1.6, 7);
+          g.strokeRoundedRect(drone.x - r * 1.3, drone.y - r * 0.8, r * 2.6, r * 1.6, 7);
+          g.lineStyle(5, COMIC.ink, 1);
+          g.lineBetween(drone.x, drone.y, drone.x + r * 2.0, drone.y);
+        } else if (drone.type === 'melee') {
+          g.strokeTriangle(drone.x, drone.y - r * 1.55, drone.x + r * 1.45, drone.y + r * 0.9, drone.x - r * 1.45, drone.y + r * 0.9);
+          g.fillStyle(color, 0.96);
+          g.fillTriangle(drone.x, drone.y - r * 1.55, drone.x + r * 1.45, drone.y + r * 0.9, drone.x - r * 1.45, drone.y + r * 0.9);
+        } else {
+          g.fillStyle(color, 0.96);
+          g.fillCircle(drone.x, drone.y, r);
+          g.strokeCircle(drone.x, drone.y, r);
+        }
+        g.fillStyle(color, 0.96);
+        if (drone.type !== 'melee') g.fillCircle(drone.x, drone.y, r);
+        g.lineStyle(3, COMIC.white, 0.78);
+        g.strokeCircle(drone.x, drone.y, r + 3);
+        g.fillStyle(COMIC.ink, 0.9);
+        g.fillCircle(drone.x + r * 0.35, drone.y - r * 0.18, 2.2);
+      }
+    }
+
     drawDrops() {
       const g = this.g;
       for (const s of this.shards) {
@@ -1488,6 +1895,26 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           g.lineStyle(3, COMIC.gold, 0.78);
           g.lineBetween(s.x - r, s.y, s.x + r, s.y);
           g.lineBetween(s.x, s.y - r, s.x, s.y + r);
+          continue;
+        }
+        if (s.kind === 'repair' || s.kind === 'cash') {
+          const color = colorValue(s.color || (s.kind === 'repair' ? '#62ff91' : '#ffdf68'));
+          const r = s.r + 5 + Math.sin(performance.now() * 0.012 + s.y) * 2;
+          g.lineStyle(6, COMIC.ink, 1);
+          g.strokeCircle(s.x, s.y, r + 3);
+          g.fillStyle(color, 0.96);
+          if (s.kind === 'repair') {
+            g.fillRoundedRect(s.x - r, s.y - r * 0.72, r * 2, r * 1.44, 5);
+            g.lineStyle(3, COMIC.white, 0.9);
+            g.lineBetween(s.x - r * 0.52, s.y, s.x + r * 0.52, s.y);
+            g.lineBetween(s.x, s.y - r * 0.52, s.x, s.y + r * 0.52);
+          } else {
+            g.fillCircle(s.x, s.y, r);
+            g.lineStyle(3, COMIC.ink, 0.76);
+            g.strokeCircle(s.x, s.y, r * 0.55);
+            g.fillStyle(COMIC.white, 0.9);
+            g.fillCircle(s.x - 2, s.y - 3, 2.4);
+          }
           continue;
         }
         const r = s.r + 3;
@@ -1856,11 +2283,14 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   }
 
   function playerDamage(scene = null) {
-    const cannon = meta.upgrades?.cannon || 0;
-    const reactor = meta.upgrades?.reactor || 0;
-    let amount = PLAYER_BASE.damage + cannon * 2.7 + reactor * 2.35;
+    let amount = PLAYER_BASE.damage;
+    if (scene?.runSkills) amount *= 1 + (scene.runSkills.cannon || 0) * 0.14;
     if (scene?.overdriveTimer > 0) amount *= 1.18;
     return amount;
+  }
+
+  function playerMaxHp(scene = null) {
+    return PLAYER_BASE.hp + (scene?.runSkills?.armor || 0) * 18;
   }
 
   function updateHud(scene) {
@@ -1883,13 +2313,39 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         ui.coreHud.textContent = '戰術核心待機｜擊殺掉核心，撿到後武器會變形';
       }
     }
+    if (ui.missionHud) {
+      const nearby = scene.missionBlocks?.map(block => ({ block, d: dist(scene.player.x, scene.player.y, block.x, block.y) })).sort((a, b) => a.d - b.d)[0];
+      const ready = nearby && nearby.d < nearby.block.r + 48;
+      ui.missionHud.classList.toggle('ready', !!ready);
+      if (nearby) {
+        const def = DRONE_DEFS[nearby.block.droneType] || DRONE_DEFS.rapid;
+        const pct = Math.round(clamp(nearby.block.progress / nearby.block.target, 0, 1) * 100);
+        ui.missionHud.textContent = ready
+          ? `任務區塊 ${pct}%｜停住開啟：${def.role} ${def.name}`
+          : `任務區塊 ${Math.round(nearby.d)}m｜靠近停住可開啟 ${def.role}`;
+      } else if (scene.companions?.length) {
+        ui.missionHud.textContent = `夥伴機 ${scene.companions.length} 台｜重複取得升級｜P 可用碎晶買當局技能`;
+      } else {
+        ui.missionHud.textContent = '任務區塊搜尋中｜停在旁邊可開啟夥伴機';
+      }
+    }
+    if (ui.upgradePrompt) {
+      ui.upgradePrompt.hidden = !scene.running || scene.gameOver;
+      ui.upgradePrompt.textContent = '技能商店｜P';
+    }
+    if (ui.upgradeMenuBtn) {
+      ui.upgradeMenuBtn.hidden = !scene.running || scene.gameOver;
+      ui.upgradeMenuBtn.textContent = '當局技能';
+    }
     if (ui.pauseBtn) ui.pauseBtn.textContent = scene.pausedRun ? '繼續' : '暫停';
   }
 
   function togglePause() {
     if (!sceneRef?.running || sceneRef.gameOver) return;
     sceneRef.pausedRun = !sceneRef.pausedRun;
-    flash(sceneRef.pausedRun ? '已暫停' : '繼續出擊');
+    if (sceneRef.pausedRun) openRunShop();
+    else hideUpgradeSurfaces();
+    flash(sceneRef.pausedRun ? '已暫停｜可購買當局技能' : '繼續出擊');
     updateHud(sceneRef);
   }
 
@@ -1931,8 +2387,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     ui.difficultyBtn?.addEventListener('click', cycleDifficulty);
     ui.controlModeBtn?.addEventListener('click', toggleControlMode);
     ui.autoAimBtn?.addEventListener('click', cycleAimAssist);
-    ui.closeUpgradeBtn?.addEventListener('click', hideUpgradeSurfaces);
-    ui.resumeFromUpgradeBtn?.addEventListener('click', hideUpgradeSurfaces);
+    ui.upgradeMenuBtn?.addEventListener('click', openRunShop);
+    ui.closeUpgradeBtn?.addEventListener('click', () => hideUpgradeSurfaces({ resume: true }));
+    ui.resumeFromUpgradeBtn?.addEventListener('click', () => hideUpgradeSurfaces({ resume: true }));
     ui.perfBtn?.addEventListener('click', () => flash('Phaser 版效能面板下一階段接入；目前使用瀏覽器/引擎 profiling。'));
     window.addEventListener('keydown', e => {
       if (e.code === 'KeyP') togglePause();
