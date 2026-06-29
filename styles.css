@@ -202,7 +202,7 @@ h1, h2, p { margin: 0; }
   text-overflow: ellipsis;
 }
 
-.core-hud.overdrive {
+.core-hud.buff-active {
   color: #06101a;
   background: linear-gradient(135deg, var(--gold), #ff8c22 52%, var(--cyan));
   animation: upgradePulse .68s ease-in-out infinite;
@@ -237,6 +237,62 @@ h1, h2, p { margin: 0; }
 .drone-skill-card { border-color: rgba(120, 246, 255, .42); background: linear-gradient(135deg, rgba(120,246,255,.16), rgba(255,223,104,.08)); }
 .drone-skill-card b { color: var(--cyan); }
 .shop-card:disabled { opacity: .44; }
+
+.skill-tree-section {
+  display: grid;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(120, 246, 255, .22);
+  background: rgba(255,255,255,.045);
+}
+.skill-tree-section:first-child { margin-top: 0; }
+.skill-tree-section header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.skill-tree-section strong { color: var(--gold); font-size: 14px; }
+.skill-tree-section small,
+.skill-tree-section p {
+  color: rgba(238,247,255,.72);
+  font-size: 11px;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.skill-tree-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 8px; }
+.skill-tree-card {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--skill-color, var(--cyan)) 48%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--skill-color, var(--cyan)) 22%, transparent), rgba(255,255,255,.05));
+}
+.skill-tree-card b { color: var(--skill-color, var(--cyan)); font-size: 12px; }
+.skill-tree-card small { font-size: 11px; }
+.skill-tree-card em { color: var(--gold); font-size: 10px; font-style: normal; }
+.skill-tree-card:disabled { opacity: .46; filter: grayscale(.18); }
+.drone-tree-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--skill-color, var(--cyan)) 34%, transparent);
+  background: rgba(5,7,18,.36);
+}
+.drone-tree-card h3 {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--skill-color, var(--cyan));
+  font-size: 14px;
+}
+.drone-tree-card h3 span { color: var(--muted); font-size: 11px; }
+.empty-tree-note { color: var(--muted); margin: 0; }
 
 .combat-controls {
   grid-column: 1 / -1;
@@ -351,7 +407,7 @@ h1, h2, p { margin: 0; }
   line-height: 1;
 }
 .muted { color: var(--muted); font-size: 13px; line-height: 1.55; }
-#upgrades { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 16px 0; }
+#upgrades { display: grid; gap: 10px; margin: 16px 0; }
 .settings-list { display: grid; gap: 10px; margin-top: 16px; }
 .setting-row {
   display: grid;
