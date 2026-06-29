@@ -17,7 +17,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.6 夥伴機任務版';
+  const VERSION = 'v7.7 夥伴機技能樹版';
   const WORLD = { w: 3200, h: 2200 };
   const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 14 };
   const MAX_PARTICLES = 320;
@@ -53,12 +53,44 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   };
   const DRONE_IDS = ['tank', 'artillery', 'repair', 'shield', 'rapid', 'melee'];
   const DRONE_DEFS = {
-    tank: { name: '堡壘夥伴機', role: '耐打型', color: '#8aa3ff', hp: 130, orbit: 70, fireRate: 0.95, damage: 8, range: 520 },
-    artillery: { name: '重砲夥伴機', role: '重砲攻擊型', color: '#ff8c22', hp: 76, orbit: 92, fireRate: 1.45, damage: 24, range: 760 },
-    repair: { name: '維修夥伴機', role: '維修型', color: '#62ff91', hp: 70, orbit: 56, fireRate: 2.6, heal: 8, range: 520 },
-    shield: { name: '護盾夥伴機', role: '護盾型', color: '#78f6ff', hp: 88, orbit: 64, fireRate: 1.15, damage: 6, range: 500 },
-    rapid: { name: '蜂針夥伴機', role: '快速攻擊型', color: '#ffd166', hp: 62, orbit: 82, fireRate: 0.38, damage: 7, range: 620 },
-    melee: { name: '斬擊夥伴機', role: '近戰強力型', color: '#ff3df2', hp: 92, orbit: 46, fireRate: 0.42, damage: 18, range: 120 }
+    tank: { name: '堡壘夥伴機', role: '耐打型', icon: 'FORT', color: '#8aa3ff', hp: 150, orbit: 70, fireRate: 0.95, damage: 8, range: 520 },
+    artillery: { name: '重砲夥伴機', role: '重砲攻擊型', icon: 'CANNON', color: '#ff8c22', hp: 76, orbit: 92, fireRate: 1.45, damage: 24, range: 780 },
+    repair: { name: '維修夥伴機', role: '維修型', icon: 'MEDIC', color: '#62ff91', hp: 70, orbit: 56, fireRate: 2.6, heal: 8, range: 520 },
+    shield: { name: '護盾夥伴機', role: '護盾型', icon: 'Aegis', color: '#78f6ff', hp: 88, orbit: 64, fireRate: 1.15, damage: 6, range: 500 },
+    rapid: { name: '蜂針夥伴機', role: '快速攻擊型', icon: 'STING', color: '#ffd166', hp: 62, orbit: 82, fireRate: 0.38, damage: 7, range: 640 },
+    melee: { name: '斬擊夥伴機', role: '近戰強力型', icon: 'BLADE', color: '#ff3df2', hp: 92, orbit: 46, fireRate: 0.42, damage: 18, range: 132 }
+  };
+  const DRONE_SKILL_TREES = {
+    tank: [
+      { id: 'plates', name: '重裝板甲', desc: '本機更耐打，主機受傷減免提升', max: 3 },
+      { id: 'taunt', name: '引力嘲諷', desc: '擴大護衛圈，吸收更多近身壓力', max: 3 },
+      { id: 'shock', name: '震盪反擊', desc: '堡壘彈命中會產生小範圍震波', max: 3 }
+    ],
+    artillery: [
+      { id: 'shell', name: '破甲重彈', desc: '重砲傷害與貫穿提升', max: 3 },
+      { id: 'blast', name: '爆裂彈頭', desc: '命中後濺射附近敵人', max: 3 },
+      { id: 'calibrate', name: '遠距校準', desc: '射程提升，開火間隔縮短', max: 3 }
+    ],
+    repair: [
+      { id: 'medfoam', name: '納米泡沫', desc: '每次維修量提升', max: 3 },
+      { id: 'triage', name: '戰場急救', desc: '低血量時維修更快', max: 3 },
+      { id: 'overheal', name: '過量充能', desc: '補血時給短暫無敵與綠色護環', max: 3 }
+    ],
+    shield: [
+      { id: 'dome', name: '擴張護罩', desc: '擋彈半徑提升', max: 3 },
+      { id: 'reflect', name: '反射稜鏡', desc: '部分擋下的敵彈會轉成友方光彈', max: 3 },
+      { id: 'battery', name: '緊急電池', desc: '擋彈時延長主機無敵時間', max: 3 }
+    ],
+    rapid: [
+      { id: 'twin', name: '雙蜂發射器', desc: '額外發射並列蜂針', max: 3 },
+      { id: 'needle', name: '穿刺針尖', desc: '蜂針傷害與速度提升', max: 3 },
+      { id: 'capacitor', name: '高頻電容', desc: '蜂針射速大幅提升', max: 3 }
+    ],
+    melee: [
+      { id: 'cleave', name: '弧月斬', desc: '斬擊會掃到周圍敵人', max: 3 },
+      { id: 'execute', name: '處決演算', desc: '對低血量與 Boss 造成更高傷害', max: 3 },
+      { id: 'lunge', name: '突進刀翼', desc: '近戰範圍與追擊距離提升', max: 3 }
+    ]
   };
   const RUN_SKILL_DEFS = {
     cannon: { name: '主砲校準', desc: '主機火力 +14%', base: 14, scale: 1.45, color: '#ffdf68' },
@@ -110,6 +142,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     audioStatus: document.getElementById('audioStatus'),
     shakeRange: document.getElementById('shakeRange'),
     shakeValue: document.getElementById('shakeValue'),
+    touchSensitivityRange: document.getElementById('touchSensitivityRange'),
+    touchSensitivityValue: document.getElementById('touchSensitivityValue'),
     difficultyBtn: document.getElementById('difficultyBtn'),
     perfBtn: document.getElementById('perfBtn'),
     controlModeBtn: document.getElementById('controlModeBtn'),
@@ -185,6 +219,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     if (ui.volumeValue) ui.volumeValue.textContent = `${Math.round(meta.volume * 100)}%`;
     if (ui.shakeRange) ui.shakeRange.value = String(Math.round(meta.shakeStrength * 100));
     if (ui.shakeValue) ui.shakeValue.textContent = `${Math.round(meta.shakeStrength * 100)}%`;
+    if (ui.touchSensitivityRange) ui.touchSensitivityRange.value = String(Math.round((meta.touchSensitivity || 1) * 100));
+    if (ui.touchSensitivityValue) ui.touchSensitivityValue.textContent = `${Math.round((meta.touchSensitivity || 1) * 100)}%`;
     if (ui.difficultyBtn) ui.difficultyBtn.textContent = `難度：${difficultyFor(meta.difficulty).name}`;
     if (ui.controlModeBtn) ui.controlModeBtn.textContent = meta.controlMode === 'touch' ? '手機' : '滑鼠';
     if (ui.autoAimBtn) ui.autoAimBtn.textContent = `自瞄：${meta.aimAssist === 'full' ? '完全' : meta.aimAssist === 'off' ? '關閉' : '輔助'}`;
@@ -198,14 +234,15 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 夥伴機任務版';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 夥伴機技能樹版';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.6 新增隨機任務區塊：停在旁邊開啟後取得夥伴機；死亡可花碎晶接關，主機技能改成當局貨幣購買。';
+    if (p) p.textContent = 'v7.7 讓夥伴機不再只是圓圈：六種機體有不同外觀與技能樹；重複取得時可選擇分支升級。本版也保留浮動式虛擬搖桿修正。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
-      ui.startBtn.textContent = '開始 v7.6';
+      ui.startBtn.textContent = '開始 v7.7';
     }
     if (ui.howBtn) ui.howBtn.style.display = '';
+    if (ui.homeSettingsBtn) ui.homeSettingsBtn.style.display = '';
     setHomePanelsVisible(true);
     card.querySelector('.run-shop')?.remove();
   }
@@ -242,7 +279,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   function updateMetaPanels() {
     const style = currentRouteStyle();
     if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜${style.shipName}｜Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.6：地圖會出現任務區塊，停在旁邊開啟可獲得六種夥伴機；重複獲得會升級。主機技能改成用當局碎晶購買，死亡可花碎晶接關。';
+    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.7：六種夥伴機都有獨立造型與技能樹；重複取得同型夥伴機會跳出三選一分支升級，技能等級只保留本局。手機虛擬搖桿可在任意位置生成。';
   }
 
   function hideUpgradeSurfaces({ resume = false } = {}) {
@@ -325,6 +362,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.message = 'Phaser 引擎就緒';
       this.messageTimer = 2.4;
       this.player = { x: WORLD.w / 2, y: WORLD.h / 2, vx: 0, vy: 0, hp: PLAYER_BASE.hp, maxHp: PLAYER_BASE.hp, angle: -Math.PI / 2, invuln: 1.8 };
+      this.touchVector = null;
+      this.touchOrigin = null;
+      this.touchPointerId = null;
       this.enemies = [];
       this.bullets = [];
       this.enemyShots = [];
@@ -344,9 +384,19 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.keys = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SPACE,P,E');
       this.cameras.main.setBounds(0, 0, WORLD.w, WORLD.h);
       this.cameras.main.centerOn(this.player.x, this.player.y);
-      this.input.on('pointerdown', pointer => this.handlePointerDown(pointer));
-      this.input.on('pointerup', () => this.touchVector = null);
-      this.input.on('pointermove', pointer => { if (pointer.isDown && meta.controlMode === 'touch') this.handlePointerDown(pointer); });
+      this.input.on('pointerdown', pointer => this.beginTouchJoystick(pointer));
+      this.input.on('pointermove', pointer => this.updateTouchJoystick(pointer));
+      this.input.on('pointerup', pointer => this.clearTouchJoystick(pointer, true));
+      this.input.on('pointerupoutside', pointer => this.clearTouchJoystick(pointer, true));
+      this.input.on('pointercancel', pointer => this.clearTouchJoystick(pointer, true));
+      window.addEventListener('pointerup', () => this.clearTouchJoystick(null, true));
+      window.addEventListener('pointercancel', () => this.clearTouchJoystick(null, true));
+      window.addEventListener('blur', () => this.clearMovementInput(true));
+      window.addEventListener('pagehide', () => this.clearMovementInput(true));
+      document.addEventListener('visibilitychange', () => { if (document.hidden) this.clearMovementInput(true); });
+      const canvas = this.game?.canvas;
+      canvas?.addEventListener?.('pointerleave', () => this.clearTouchJoystick(null, true));
+      canvas?.addEventListener?.('pointercancel', () => this.clearTouchJoystick(null, true));
       this.scale.on('resize', gameSize => this.onResize(gameSize));
       this.onResize({ width: this.scale.width, height: this.scale.height });
       this.drawAll();
@@ -388,14 +438,53 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       if (!bossKind && (n === 1 || n % 2 === 0 || Math.random() < 0.36)) this.spawnMissionBlock();
     }
 
-    handlePointerDown(pointer) {
-      if (meta.controlMode !== 'touch' || !this.running || this.pausedRun) return;
-      const cx = this.scale.width / 2;
-      const cy = this.scale.height / 2;
-      const dx = pointer.x - cx;
-      const dy = pointer.y - cy;
+    pointerKey(pointer) {
+      return pointer?.id ?? pointer?.pointerId ?? pointer?.identifier ?? 0;
+    }
+
+    beginTouchJoystick(pointer) {
+      if (meta.controlMode !== 'touch' || !this.running || this.pausedRun || this.gameOver) return;
+      const x = clamp(pointer.x, 0, this.scale.width);
+      const y = clamp(pointer.y, 0, this.scale.height);
+      this.touchPointerId = this.pointerKey(pointer);
+      this.touchOrigin = { x, y };
+      this.touchVector = { x: 0, y: 0, force: 0 };
+      pointer.event?.preventDefault?.();
+      this.updateTouchJoystick(pointer);
+    }
+
+    updateTouchJoystick(pointer) {
+      if (meta.controlMode !== 'touch' || !this.running || this.pausedRun || this.gameOver) return;
+      if (!this.touchOrigin) return;
+      if (this.touchPointerId !== null && this.pointerKey(pointer) !== this.touchPointerId) return;
+      const dx = pointer.x - this.touchOrigin.x;
+      const dy = pointer.y - this.touchOrigin.y;
       const len = Math.hypot(dx, dy);
-      this.touchVector = len > 18 ? { x: dx / len, y: dy / len, force: clamp(len / 150, 0.45, 1) } : null;
+      const deadZone = 10;
+      const maxRadius = 76;
+      if (len <= deadZone) {
+        this.touchVector = { x: 0, y: 0, force: 0 };
+      } else {
+        const force = clamp(((len - deadZone) / (maxRadius - deadZone)) * (meta.touchSensitivity || 1), 0.22, 1);
+        this.touchVector = { x: dx / len, y: dy / len, force };
+      }
+      pointer.event?.preventDefault?.();
+    }
+
+    clearTouchJoystick(pointer = null, resetVelocity = false) {
+      if (pointer && this.touchPointerId !== null && this.pointerKey(pointer) !== this.touchPointerId) return;
+      this.touchVector = null;
+      this.touchOrigin = null;
+      this.touchPointerId = null;
+      if (resetVelocity && this.player) {
+        this.player.vx = 0;
+        this.player.vy = 0;
+      }
+    }
+
+    clearMovementInput(resetVelocity = false) {
+      this.clearTouchJoystick(null, resetVelocity);
+      this.input?.keyboard?.resetKeys?.();
     }
 
     update(time, deltaMs) {
@@ -583,11 +672,13 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       let drone = this.companions.find(item => item.type === safeType);
       if (drone) {
         drone.level++;
-        drone.hp = Math.min(drone.maxHp + def.hp * 0.18, (drone.maxHp || def.hp) + def.hp * 0.35);
-        this.addFloatingText(drone.x, drone.y - 30, `${def.name} Lv.${this.companionLevel(drone)}`, def.color, 900, 16);
+        drone.skillPoints = (drone.skillPoints || 0) + 1;
+        drone.hp = Math.min(drone.maxHp + def.hp * 0.30, (drone.hp || 0) + def.hp * 0.35);
+        this.addFloatingText(drone.x, drone.y - 30, `${def.name} 技能點 +1`, def.color, 900, 16);
+        this.showCompanionUpgradeChoice(drone);
       } else {
         const idx = this.companions.length;
-        drone = { type: safeType, level: 1, x, y, angle: idx * Math.PI * 2 / 6, fireClock: 0.2, hp: def.hp, maxHp: def.hp, slashClock: 0 };
+        drone = { type: safeType, level: 1, skillPoints: 0, upgrades: {}, x, y, angle: idx * Math.PI * 2 / 6, fireClock: 0.2, hp: def.hp, maxHp: def.hp, slashClock: 0 };
         this.companions.push(drone);
         this.addFloatingText(x, y - 30, `${def.name} 加入`, def.color, 1000, 17);
       }
@@ -602,13 +693,89 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       return Math.max(1, (drone?.level || 1) + (this.runSkills?.companion || 0));
     }
 
+    companionSkillLevel(drone, id) {
+      return Math.max(0, Number(drone?.upgrades?.[id] || 0));
+    }
+
+    companionSkillSummary(drone) {
+      const tree = DRONE_SKILL_TREES[drone?.type] || [];
+      const picked = tree.filter(skill => this.companionSkillLevel(drone, skill.id) > 0);
+      if (!picked.length) return '尚未分支';
+      return picked.map(skill => `${skill.name}${this.companionSkillLevel(drone, skill.id)}`).join(' / ');
+    }
+
+    showCompanionUpgradeChoice(drone) {
+      const def = DRONE_DEFS[drone?.type] || DRONE_DEFS.rapid;
+      const tree = DRONE_SKILL_TREES[drone?.type] || [];
+      if (!tree.length) return;
+      const card = ui.overlay?.querySelector('.card');
+      if (!card) return;
+      this.pausedRun = true;
+      setHomePanelsVisible(false);
+      card.classList.add('run-card');
+      card.querySelector('.eyebrow').textContent = 'COMPANION DUPLICATE // Skill Tree';
+      card.querySelector('h2').textContent = `${def.name} 技能樹`;
+      const p = card.querySelector('p:not(.eyebrow)');
+      if (p) p.textContent = `重複取得 ${def.role}，選擇一個分支升級。每台夥伴機都有自己的技能樹，本局有效。`;
+      if (ui.startBtn) ui.startBtn.style.display = 'none';
+      if (ui.howBtn) ui.howBtn.style.display = 'none';
+      if (ui.homeSettingsBtn) ui.homeSettingsBtn.style.display = 'none';
+      let shop = card.querySelector('.run-shop');
+      if (!shop) {
+        shop = document.createElement('div');
+        shop.className = 'run-shop drone-skill-shop';
+        card.querySelector('.actions')?.before(shop);
+      }
+      shop.classList.add('drone-skill-shop');
+      shop.innerHTML = `<strong>${def.role}｜Lv.${this.companionLevel(drone)}｜技能點 ${drone.skillPoints || 1}</strong><div class="shop-grid"></div>`;
+      const grid = shop.querySelector('.shop-grid');
+      for (const skill of tree) {
+        const level = this.companionSkillLevel(drone, skill.id);
+        const maxed = level >= (skill.max || 3);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'shop-card drone-skill-card';
+        btn.disabled = maxed;
+        btn.innerHTML = `<b>${skill.name} Lv.${level}/${skill.max || 3}</b><small>${skill.desc}</small><small>${maxed ? '已滿級' : '選擇此分支升級'}</small>`;
+        btn.addEventListener('click', () => this.applyCompanionUpgrade(drone.type, skill.id));
+        grid.appendChild(btn);
+      }
+      ui.overlay?.classList.add('visible');
+      updateHud(this);
+    }
+
+    applyCompanionUpgrade(type, skillId) {
+      const drone = this.companions.find(item => item.type === type);
+      const tree = DRONE_SKILL_TREES[type] || [];
+      const skill = tree.find(item => item.id === skillId);
+      if (!drone || !skill) return false;
+      drone.upgrades ||= {};
+      const current = this.companionSkillLevel(drone, skillId);
+      if (current >= (skill.max || 3)) return false;
+      drone.upgrades[skillId] = current + 1;
+      drone.skillPoints = Math.max(0, (drone.skillPoints || 1) - 1);
+      const def = DRONE_DEFS[type] || DRONE_DEFS.rapid;
+      this.addFloatingText(drone.x, drone.y - 36, `${skill.name} Lv.${drone.upgrades[skillId]}`, def.color, 1000, 16);
+      this.message = `${def.name}｜${skill.name} Lv.${drone.upgrades[skillId]}`;
+      this.messageTimer = 1.8;
+      ui.overlay?.classList.remove('visible');
+      ui.overlay?.querySelector('.drone-skill-shop')?.remove();
+      if (ui.homeSettingsBtn) ui.homeSettingsBtn.style.display = '';
+      this.pausedRun = false;
+      updateHud(this);
+      beep('clear');
+      haptic(28);
+      return true;
+    }
+
     updateCompanions(dt) {
       const count = Math.max(1, this.companions.length);
       this.companions.forEach((drone, index) => {
         const def = DRONE_DEFS[drone.type] || DRONE_DEFS.rapid;
         const lvl = this.companionLevel(drone);
+        const skill = id => this.companionSkillLevel(drone, id);
         drone.angle += dt * (0.82 + index * 0.04);
-        const orbit = def.orbit + Math.min(34, lvl * 5) + index * 8;
+        const orbit = def.orbit + Math.min(34, lvl * 5) + index * 8 + skill('taunt') * 8;
         const slot = drone.angle + index * Math.PI * 2 / count;
         const tx = this.player.x + Math.cos(slot) * orbit;
         const ty = this.player.y + Math.sin(slot) * orbit * 0.72;
@@ -616,48 +783,87 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         drone.y += (ty - drone.y) * Math.min(1, dt * 7.5);
         drone.fireClock -= dt;
         if (drone.type === 'repair') {
+          const lowHpBoost = this.player.hp < playerMaxHp(this) * 0.45 ? skill('triage') * 0.18 : 0;
           if (drone.fireClock <= 0) {
-            const heal = (def.heal || 7) + lvl * 2;
+            const heal = (def.heal || 7) + lvl * 2 + skill('medfoam') * 7;
             const before = this.player.hp;
             this.player.hp = Math.min(playerMaxHp(this), this.player.hp + heal);
+            if (skill('overheal') > 0 && this.player.hp >= playerMaxHp(this) * 0.92) {
+              this.player.invuln = Math.max(this.player.invuln, 0.16 + skill('overheal') * 0.13);
+              this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 20, grow: 130 + skill('overheal') * 36, life: 0.3, max: 0.3, color: def.color, ring: true });
+            }
             if (this.player.hp > before) this.addFloatingText(this.player.x, this.player.y - 48, `+${Math.round(this.player.hp - before)}`, def.color, 650, 16);
-            drone.fireClock = Math.max(0.8, def.fireRate - lvl * 0.12);
+            drone.fireClock = Math.max(0.46, def.fireRate - lvl * 0.12 - skill('triage') * 0.22 - lowHpBoost);
             this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 12, grow: 120, life: 0.28, max: 0.28, color: def.color, ring: true });
           }
           return;
         }
         if (drone.type === 'shield') {
           let blocked = 0;
+          const radius = 92 + lvl * 12 + skill('dome') * 28;
           for (const shot of this.enemyShots) {
-            if (dist(shot.x, shot.y, this.player.x, this.player.y) < 92 + lvl * 12) { shot.dead = true; blocked++; }
+            if (dist(shot.x, shot.y, this.player.x, this.player.y) < radius) {
+              shot.dead = true;
+              blocked++;
+              if (skill('reflect') > 0) {
+                const target = this.nearestEnemyFrom(shot.x, shot.y, 620 + skill('reflect') * 100);
+                const a = target ? angleBetween(shot.x, shot.y, target.x, target.y) : angleBetween(this.player.x, this.player.y, shot.x, shot.y);
+                this.bullets.push({ x: shot.x, y: shot.y, vx: Math.cos(a) * 760, vy: Math.sin(a) * 760, life: 0.8, r: 4.5, damage: 6 + lvl * 2.4 + skill('reflect') * 4, color: def.color, core: 'drone-reflect', pierce: skill('reflect') >= 3 ? 1 : 0, hitIds: skill('reflect') >= 3 ? new Set() : null });
+              }
+            }
           }
           if (blocked) {
-            this.player.invuln = Math.max(this.player.invuln, 0.18);
-            this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 18, grow: 150, life: 0.24, max: 0.24, color: def.color, ring: true });
+            this.player.invuln = Math.max(this.player.invuln, 0.18 + skill('battery') * 0.10);
+            this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 18, grow: radius * 1.7, life: 0.24, max: 0.24, color: def.color, ring: true });
           }
         }
-        const target = this.nearestEnemyFrom(drone.x, drone.y, def.range + lvl * 18);
+        const targetRange = def.range + lvl * 18 + skill('calibrate') * 90 + skill('lunge') * 38;
+        const target = this.nearestEnemyFrom(drone.x, drone.y, targetRange);
         if (!target) return;
         if (drone.type === 'melee') {
-          if (dist(drone.x, drone.y, target.x, target.y) < 126 + lvl * 6 && drone.fireClock <= 0) {
-            const damage = def.damage + lvl * 5;
-            target.hp -= damage * (target.type === 'boss' ? 0.42 : 1);
+          const range = 126 + lvl * 6 + skill('lunge') * 34;
+          if (dist(drone.x, drone.y, target.x, target.y) < range && drone.fireClock <= 0) {
+            const execute = target.hp < target.maxHp * 0.35 ? 1 + skill('execute') * 0.24 : 1;
+            const bossMult = target.type === 'boss' ? 0.42 + skill('execute') * 0.04 : 1;
+            const damage = (def.damage + lvl * 5 + skill('execute') * 4) * execute;
+            target.hp -= damage * bossMult;
             target.hit = 0.14;
-            this.comicImpact(target.x, target.y, def.color, angleBetween(drone.x, drone.y, target.x, target.y), 0.86);
-            this.addFloatingText(target.x, target.y - target.r - 10, '斬擊', def.color, 420, 14);
+            this.comicImpact(target.x, target.y, def.color, angleBetween(drone.x, drone.y, target.x, target.y), 0.86 + skill('cleave') * 0.08);
+            if (skill('cleave') > 0) {
+              const cleaveRadius = 82 + skill('cleave') * 32;
+              for (const other of this.enemies) {
+                if (other.dead || other === target) continue;
+                if (dist(target.x, target.y, other.x, other.y) > cleaveRadius + other.r) continue;
+                other.hp -= damage * 0.42;
+                other.hit = 0.12;
+                if (other.hp <= 0) this.killEnemy(other);
+              }
+              this.particles.push({ x: target.x, y: target.y, vx: 0, vy: 0, r: 12, grow: cleaveRadius * 2, life: 0.18, max: 0.18, color: def.color, ring: true });
+            }
+            this.addFloatingText(target.x, target.y - target.r - 10, skill('execute') && execute > 1 ? '處決' : '斬擊', def.color, 420, 14);
             if (target.hp <= 0) this.killEnemy(target);
-            drone.fireClock = Math.max(0.18, def.fireRate - lvl * 0.028);
+            drone.fireClock = Math.max(0.16, def.fireRate - lvl * 0.028 - skill('lunge') * 0.018);
           }
           return;
         }
         if (drone.fireClock <= 0) {
           const a = angleBetween(drone.x, drone.y, target.x, target.y);
-          const damage = (def.damage || 8) + lvl * (drone.type === 'artillery' ? 6 : 2.2);
-          const speed = drone.type === 'artillery' ? 620 : drone.type === 'rapid' ? 820 : 680;
-          const radius = drone.type === 'artillery' ? 7.5 : drone.type === 'tank' ? 5.5 : 4;
-          this.bullets.push({ x: drone.x, y: drone.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, life: drone.type === 'artillery' ? 1.25 : 0.95, r: radius, damage, color: def.color, core: 'drone', pierce: drone.type === 'artillery' ? 1 : 0, hitIds: drone.type === 'artillery' ? new Set() : null });
-          this.companionShots++;
-          drone.fireClock = Math.max(0.16, def.fireRate - lvl * (drone.type === 'rapid' ? 0.032 : 0.045));
+          const artillery = drone.type === 'artillery';
+          const rapid = drone.type === 'rapid';
+          const tank = drone.type === 'tank';
+          const damage = (def.damage || 8) + lvl * (artillery ? 6 : 2.2) + skill('shell') * 8 + skill('needle') * 2.7 + skill('shock') * 1.8;
+          const speed = artillery ? 620 + skill('shell') * 28 : rapid ? 820 + skill('needle') * 55 : 680;
+          const radius = artillery ? 7.5 + skill('blast') * 0.8 : tank ? 6.5 : rapid ? 4.2 : 4;
+          const pierce = artillery ? 1 + skill('shell') : tank && skill('shock') >= 2 ? 1 : 0;
+          const blast = artillery ? skill('blast') * 58 : tank ? skill('shock') * 34 : 0;
+          const shotCount = rapid ? 1 + Math.min(2, skill('twin')) : 1;
+          for (let i = 0; i < shotCount; i++) {
+            const off = shotCount === 1 ? 0 : (i - (shotCount - 1) / 2) * 0.13;
+            this.bullets.push({ x: drone.x, y: drone.y, vx: Math.cos(a + off) * speed, vy: Math.sin(a + off) * speed, life: artillery ? 1.32 : 0.95, r: radius, damage, color: def.color, core: `drone-${drone.type}`, pierce, blast, hitIds: pierce > 0 ? new Set() : null });
+            this.companionShots++;
+          }
+          const cooldownBonus = skill('capacitor') * 0.055 + skill('calibrate') * 0.075;
+          drone.fireClock = Math.max(0.12, def.fireRate - lvl * (rapid ? 0.032 : 0.045) - cooldownBonus);
         }
       });
       this.enemyShots = this.enemyShots.filter(s => !s.dead && s.life > 0);
@@ -681,7 +887,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       if (this.keys.S.isDown || this.keys.DOWN.isDown) my += 1;
       if (this.keys.A.isDown || this.keys.LEFT.isDown) mx -= 1;
       if (this.keys.D.isDown || this.keys.RIGHT.isDown) mx += 1;
-      if (this.touchVector) {
+      if (this.touchVector && this.touchVector.force > 0) {
         mx = this.touchVector.x * this.touchVector.force;
         my = this.touchVector.y * this.touchVector.force;
       }
@@ -780,6 +986,18 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           this.burst(b.x, b.y, b.color || '#bdfcff', 5, 0.45);
           this.comicImpact(b.x, b.y, e.hp <= 0 ? (b.color || '#ffdf68') : '#f6f2dc', hitAngle, e.hp <= 0 ? 1.05 : 0.72);
           if (e.hp <= 0) this.killEnemy(e);
+          if (b.blast > 0) {
+            let splashHits = 0;
+            for (const other of this.enemies) {
+              if (other.dead || other === e) continue;
+              if (dist(b.x, b.y, other.x, other.y) > b.blast + other.r) continue;
+              other.hp -= b.damage * (other.type === 'boss' ? 0.18 : 0.42);
+              other.hit = 0.1;
+              splashHits++;
+              if (other.hp <= 0) this.killEnemy(other);
+            }
+            if (splashHits) this.particles.push({ x: b.x, y: b.y, vx: 0, vy: 0, r: 10, grow: b.blast * 2.2, life: 0.22, max: 0.22, color: b.color || '#ffdf68', ring: true });
+          }
           break;
         }
       }
@@ -1015,7 +1233,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       if (this.player.invuln > 0 || this.gameOver) return;
       const shieldDrone = this.companions.find(d => d.type === 'shield');
       const guardDrone = this.companions.find(d => d.type === 'tank');
-      const reduction = 1 - Math.min(0.34, (this.runSkills.armor || 0) * 0.045 + (shieldDrone ? this.companionLevel(shieldDrone) * 0.025 : 0) + (guardDrone ? this.companionLevel(guardDrone) * 0.015 : 0));
+      const guardSkill = guardDrone ? this.companionSkillLevel(guardDrone, 'plates') : 0;
+      const shieldSkill = shieldDrone ? this.companionSkillLevel(shieldDrone, 'battery') : 0;
+      const reduction = 1 - Math.min(0.46, (this.runSkills.armor || 0) * 0.045 + (shieldDrone ? this.companionLevel(shieldDrone) * 0.025 + shieldSkill * 0.018 : 0) + (guardDrone ? this.companionLevel(guardDrone) * 0.015 + guardSkill * 0.028 : 0));
       const finalAmount = amount * reduction;
       this.player.hp -= finalAmount;
       this.player.invuln = 0.42;
@@ -1184,7 +1404,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       meta.recentRuns = [{
         id: Date.now(), engine: 'Phaser', status: clear ? 'clear' : 'dead', wave: this.wave, kills: this.kills,
         combo: this.bestCombo, surges: this.surgeCount, corePickups: this.tacticPickups, overdrives: this.overdriveCount,
-        missions: this.missionClaims, companions: this.companions.length, purchases: this.shopPurchases, revives: this.reviveCount,
+        missions: this.missionClaims, companions: this.companions.length, companionTrees: this.companions.map(d => `${DRONE_DEFS[d.type]?.name || d.type}:${this.companionSkillSummary(d)}`), purchases: this.shopPurchases, revives: this.reviveCount,
         time: Math.floor(this.runTime), scrap: meta.scrap, score: meta.score
       }, ...(meta.recentRuns || [])].slice(0, 5);
       saveMeta();
@@ -1201,12 +1421,13 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       card.querySelector('.eyebrow').textContent = clear ? 'SECTOR CLEAR // Phaser runtime' : 'RUN TERMINATED // Phaser runtime';
       card.querySelector('h2').textContent = clear ? '星環核心已回收' : '飛船解體，但資料已保存';
       const p = card.querySelector('p:not(.eyebrow)');
-      if (p) p.textContent = `Engine Phaser｜時間 ${formatTime(this.runTime)}｜第 ${this.wave} 波｜擊殺 ${this.kills}｜任務 ${this.missionClaims}｜夥伴 ${this.companions.length}｜購買 ${this.shopPurchases}｜OVERDRIVE ${this.overdriveCount}｜碎晶 ${meta.scrap}`;
+      if (p) p.textContent = `Engine Phaser｜時間 ${formatTime(this.runTime)}｜第 ${this.wave} 波｜擊殺 ${this.kills}｜任務 ${this.missionClaims}｜夥伴 ${this.companions.length}｜技能樹 ${this.companions.filter(d => Object.keys(d.upgrades || {}).length).length}｜購買 ${this.shopPurchases}｜碎晶 ${meta.scrap}`;
       this.renderOverlayShop(card, clear);
       if (ui.startBtn) {
         ui.startBtn.textContent = '再次出擊';
         ui.startBtn.style.display = '';
       }
+      if (ui.homeSettingsBtn) ui.homeSettingsBtn.style.display = '';
       if (ui.howBtn) ui.howBtn.style.display = '';
       ui.overlay.classList.add('visible');
       updateMetaPanels();
@@ -1851,30 +2072,71 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         const color = colorValue(def.color);
         const lvl = this.companionLevel(drone);
         const r = 10 + Math.min(8, lvl * 1.2);
+        const skillCount = Object.values(drone.upgrades || {}).reduce((sum, n) => sum + Number(n || 0), 0);
         g.fillStyle(COMIC.shadow, 0.28);
-        g.fillEllipse(drone.x + 4, drone.y + 8, r * 2.5, r * 0.8);
-        g.lineStyle(7, COMIC.ink, 0.95);
-        if (drone.type === 'artillery') {
+        g.fillEllipse(drone.x + 4, drone.y + 8, r * 2.6, r * 0.85);
+        g.lineStyle(6, COMIC.ink, 0.96);
+        if (drone.type === 'tank') {
+          g.fillStyle(color, 0.95);
+          g.fillRoundedRect(drone.x - r * 1.45, drone.y - r, r * 2.9, r * 2, 6);
+          g.strokeRoundedRect(drone.x - r * 1.45, drone.y - r, r * 2.9, r * 2, 6);
+          g.lineStyle(4, COMIC.ink, 0.9);
+          g.lineBetween(drone.x - r * 1.25, drone.y, drone.x + r * 1.25, drone.y);
+          g.lineBetween(drone.x, drone.y - r, drone.x, drone.y + r);
+          g.fillStyle(COMIC.white, 0.82);
+          g.fillRect(drone.x - r * 0.62, drone.y - 2, r * 1.24, 4);
+        } else if (drone.type === 'artillery') {
           g.fillStyle(color, 0.96);
-          g.fillRoundedRect(drone.x - r * 1.3, drone.y - r * 0.8, r * 2.6, r * 1.6, 7);
-          g.strokeRoundedRect(drone.x - r * 1.3, drone.y - r * 0.8, r * 2.6, r * 1.6, 7);
-          g.lineStyle(5, COMIC.ink, 1);
-          g.lineBetween(drone.x, drone.y, drone.x + r * 2.0, drone.y);
+          g.fillRoundedRect(drone.x - r * 1.45, drone.y - r * 0.75, r * 2.5, r * 1.5, 7);
+          g.strokeRoundedRect(drone.x - r * 1.45, drone.y - r * 0.75, r * 2.5, r * 1.5, 7);
+          g.lineStyle(8, COMIC.ink, 1);
+          g.lineBetween(drone.x + r * 0.4, drone.y, drone.x + r * 2.8, drone.y - r * 0.08);
+          g.lineStyle(4, COMIC.gold, 0.95);
+          g.lineBetween(drone.x + r * 0.6, drone.y, drone.x + r * 2.7, drone.y - r * 0.08);
+          g.fillStyle(COMIC.white, 0.86);
+          g.fillCircle(drone.x - r * 0.62, drone.y, 3.5);
+        } else if (drone.type === 'repair') {
+          g.fillStyle(color, 0.94);
+          g.fillRoundedRect(drone.x - r * 1.0, drone.y - r * 1.25, r * 2.0, r * 2.5, 9);
+          g.strokeRoundedRect(drone.x - r * 1.0, drone.y - r * 1.25, r * 2.0, r * 2.5, 9);
+          g.fillStyle(COMIC.white, 0.92);
+          g.fillRect(drone.x - r * 0.18, drone.y - r * 0.72, r * 0.36, r * 1.44);
+          g.fillRect(drone.x - r * 0.72, drone.y - r * 0.18, r * 1.44, r * 0.36);
+        } else if (drone.type === 'shield') {
+          g.fillStyle(color, 0.18);
+          g.fillCircle(drone.x, drone.y, r * 1.55);
+          g.lineStyle(7, COMIC.ink, 0.92);
+          g.strokeCircle(drone.x, drone.y, r * 1.55);
+          g.lineStyle(4, color, 0.92);
+          g.strokeCircle(drone.x, drone.y, r * 1.2);
+          g.fillStyle(color, 0.96);
+          g.fillTriangle(drone.x, drone.y - r * 1.1, drone.x + r, drone.y + r * 0.7, drone.x - r, drone.y + r * 0.7);
+        } else if (drone.type === 'rapid') {
+          g.fillStyle(color, 0.96);
+          g.fillTriangle(drone.x + r * 1.45, drone.y, drone.x - r * 1.0, drone.y - r * 0.9, drone.x - r * 0.42, drone.y);
+          g.fillTriangle(drone.x + r * 1.45, drone.y, drone.x - r * 1.0, drone.y + r * 0.9, drone.x - r * 0.42, drone.y);
+          g.strokeTriangle(drone.x + r * 1.45, drone.y, drone.x - r * 1.0, drone.y - r * 0.9, drone.x - r * 0.42, drone.y);
+          g.strokeTriangle(drone.x + r * 1.45, drone.y, drone.x - r * 1.0, drone.y + r * 0.9, drone.x - r * 0.42, drone.y);
+          g.lineStyle(3, COMIC.white, 0.86);
+          g.lineBetween(drone.x - r * 0.2, drone.y, drone.x + r * 1.35, drone.y);
         } else if (drone.type === 'melee') {
-          g.strokeTriangle(drone.x, drone.y - r * 1.55, drone.x + r * 1.45, drone.y + r * 0.9, drone.x - r * 1.45, drone.y + r * 0.9);
           g.fillStyle(color, 0.96);
-          g.fillTriangle(drone.x, drone.y - r * 1.55, drone.x + r * 1.45, drone.y + r * 0.9, drone.x - r * 1.45, drone.y + r * 0.9);
-        } else {
-          g.fillStyle(color, 0.96);
-          g.fillCircle(drone.x, drone.y, r);
-          g.strokeCircle(drone.x, drone.y, r);
+          g.fillTriangle(drone.x, drone.y - r * 1.85, drone.x + r * 0.6, drone.y + r * 1.45, drone.x - r * 0.6, drone.y + r * 1.45);
+          g.strokeTriangle(drone.x, drone.y - r * 1.85, drone.x + r * 0.6, drone.y + r * 1.45, drone.x - r * 0.6, drone.y + r * 1.45);
+          g.lineStyle(4, COMIC.white, 0.84);
+          g.lineBetween(drone.x, drone.y - r * 1.45, drone.x, drone.y + r * 1.05);
+          g.lineStyle(3, color, 0.28);
+          g.strokeCircle(drone.x, drone.y, r * 2.05);
         }
-        g.fillStyle(color, 0.96);
-        if (drone.type !== 'melee') g.fillCircle(drone.x, drone.y, r);
-        g.lineStyle(3, COMIC.white, 0.78);
-        g.strokeCircle(drone.x, drone.y, r + 3);
-        g.fillStyle(COMIC.ink, 0.9);
-        g.fillCircle(drone.x + r * 0.35, drone.y - r * 0.18, 2.2);
+        g.lineStyle(2, COMIC.white, 0.68);
+        g.strokeCircle(drone.x, drone.y, r + 5);
+        if (skillCount > 0) {
+          for (let i = 0; i < Math.min(6, skillCount); i++) {
+            const a = -Math.PI / 2 + i * 0.42;
+            g.fillStyle(COMIC.white, 0.95);
+            g.fillCircle(drone.x + Math.cos(a) * (r + 12), drone.y + Math.sin(a) * (r + 12), 2.2);
+          }
+        }
       }
     }
 
@@ -2070,17 +2332,21 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       } else if (this.bannerText) {
         this.bannerText.setVisible(false);
       }
-      if (meta.controlMode === 'touch' && this.touchVector) {
-        const cx = this.scale.width / 2;
-        const cy = this.scale.height / 2;
+      if (meta.controlMode === 'touch' && this.touchOrigin && this.touchVector) {
+        const cx = this.touchOrigin.x;
+        const cy = this.touchOrigin.y;
+        const knobX = cx + this.touchVector.x * 42 * this.touchVector.force;
+        const knobY = cy + this.touchVector.y * 42 * this.touchVector.force;
         g.lineStyle(7, COMIC.ink, 0.74);
         g.strokeCircle(cx, cy, 54);
         g.lineStyle(3, COMIC.cyan, 0.55);
         g.strokeCircle(cx, cy, 54);
+        g.lineStyle(2, COMIC.white, 0.32);
+        g.lineBetween(cx, cy, knobX, knobY);
         g.fillStyle(COMIC.gold, 0.34);
-        g.fillCircle(cx + this.touchVector.x * 42 * this.touchVector.force, cy + this.touchVector.y * 42 * this.touchVector.force, 16);
+        g.fillCircle(knobX, knobY, 16);
         g.lineStyle(4, COMIC.ink, 0.8);
-        g.strokeCircle(cx + this.touchVector.x * 42 * this.touchVector.force, cy + this.touchVector.y * 42 * this.touchVector.force, 16);
+        g.strokeCircle(knobX, knobY, 16);
       }
     }
   }
@@ -2324,7 +2590,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           ? `任務區塊 ${pct}%｜停住開啟：${def.role} ${def.name}`
           : `任務區塊 ${Math.round(nearby.d)}m｜靠近停住可開啟 ${def.role}`;
       } else if (scene.companions?.length) {
-        ui.missionHud.textContent = `夥伴機 ${scene.companions.length} 台｜重複取得升級｜P 可用碎晶買當局技能`;
+        const lead = scene.companions[0];
+        const def = DRONE_DEFS[lead?.type] || DRONE_DEFS.rapid;
+        ui.missionHud.textContent = `夥伴機 ${scene.companions.length} 台｜重複取得可選 ${def.name} 技能樹｜P 買主機技能`;
       } else {
         ui.missionHud.textContent = '任務區塊搜尋中｜停在旁邊可開啟夥伴機';
       }
@@ -2366,10 +2634,11 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   }
 
   function toggleControlMode() {
+    sceneRef?.clearMovementInput?.(true);
     meta.controlMode = meta.controlMode === 'touch' ? 'keyboard' : 'touch';
     saveMeta();
     updateSettingsLabels();
-    flash(meta.controlMode === 'touch' ? '手機模式：按住螢幕推進' : '滑鼠鍵盤模式');
+    flash(meta.controlMode === 'touch' ? '手機模式：在任意位置按住生成虛擬搖桿' : '滑鼠鍵盤模式');
   }
 
   function bindUi() {
@@ -2384,6 +2653,11 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     ui.testSoundBtn?.addEventListener('click', () => { beep('clear'); if (ui.audioStatus) ui.audioStatus.textContent = 'Phaser 版音效 OK'; });
     ui.volumeRange?.addEventListener('input', e => { meta.volume = Number(e.target.value) / 100; saveMeta(); updateSettingsLabels(); });
     ui.shakeRange?.addEventListener('input', e => { meta.shakeStrength = Number(e.target.value) / 100; saveMeta(); updateSettingsLabels(); });
+    ui.touchSensitivityRange?.addEventListener('input', e => {
+      meta.touchSensitivity = clamp(Number(e.target.value) / 100, 0.55, 1.6);
+      saveMeta();
+      updateSettingsLabels();
+    });
     ui.difficultyBtn?.addEventListener('click', cycleDifficulty);
     ui.controlModeBtn?.addEventListener('click', toggleControlMode);
     ui.autoAimBtn?.addEventListener('click', cycleAimAssist);

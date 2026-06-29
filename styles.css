@@ -233,6 +233,9 @@ h1, h2, p { margin: 0; }
 .shop-card b { font-size: 13px; }
 .shop-card small { color: rgba(238,247,255,.72); font-size: 11px; line-height: 1.35; text-transform: none; letter-spacing: 0; }
 .shop-card.revive { grid-column: 1 / -1; background: linear-gradient(135deg, #62ff91, #ffdf68); color: #06101a; }
+.drone-skill-shop { border-color: rgba(120, 246, 255, .34); }
+.drone-skill-card { border-color: rgba(120, 246, 255, .42); background: linear-gradient(135deg, rgba(120,246,255,.16), rgba(255,223,104,.08)); }
+.drone-skill-card b { color: var(--cyan); }
 .shop-card:disabled { opacity: .44; }
 
 .combat-controls {
