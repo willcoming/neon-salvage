@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=7.7" />
+  <link rel="stylesheet" href="./styles.css?v=7.8" />
 </head>
 <body>
   <div id="app">
@@ -107,16 +107,16 @@
 
     <div id="overlay" class="glass visible">
       <div class="card">
-        <p class="eyebrow">BETA DEMO // 夥伴機技能樹版</p>
+        <p class="eyebrow">BETA DEMO // 浮動搖桿與縮小主機版</p>
         <h2>霓虹拾荒者 Neon Salvage</h2>
-        <p>v7.7 讓夥伴機不再只是圓圈：六種機體有不同外觀與技能樹；重複取得時可選擇分支升級。本版也保留浮動式虛擬搖桿修正。</p>
+        <p>v7.8 讓手機操作更直覺：按下哪裡，虛擬搖桿就出現在那裡；主機視覺與碰撞半徑縮小 50%，戰場視野更乾淨。</p>
         <div class="version-card">
-          <strong>v7.7 夥伴機技能樹版</strong>
+          <strong>v7.8 浮動搖桿與縮小主機版</strong>
           <ul>
-            <li>六種夥伴機改成不同外觀：堡壘、重砲、維修、護盾、蜂針、斬擊都有明確剪影。</li>
-            <li>重複取得同型夥伴機時，會暫停並跳出該機體專屬三分支技能樹。</li>
-            <li>不同技能樹會實際改變玩法：反射、濺射、過量治療、弧月斬、雙蜂發射等。</li>
-            <li>保留 v7.6.1 浮動虛擬搖桿：手機模式可在任意位置按下生成搖桿。</li>
+            <li>手機模式：虛擬搖桿基座會直接定位在手指按下的位置，不再像固定區塊。</li>
+            <li>拖曳時搖桿旋鈕同步偏移，放開 / 取消 / 離開畫面會立即清掉輸入。</li>
+            <li>主機視覺、外框、駕駛艙、噴焰與碰撞半徑都縮小到原本 50%。</li>
+            <li>保留 v7.7 六種夥伴機外觀與各自技能樹。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
@@ -138,7 +138,7 @@
 目標：
 - 完成地圖目標、撐過事件、組出技能流派。
 - 第 5 波是 Boss 檢查，第 10 波擊破「星環核心主宰」即可撤離成功。
-- v7.7 重點：六種夥伴機不再只是圓圈，各自有不同外觀與專屬技能樹。重複取得同型夥伴機時會跳出三個分支讓你選擇，本局有效。手機虛擬搖桿仍可在任意位置生成。
+- v7.8 重點：手機虛擬搖桿會出現在按下位置；主機視覺與碰撞半徑縮小 50%。夥伴機仍保留不同外觀與專屬技能樹。
 
 操作：
 - WASD / 方向鍵：移動。
@@ -150,7 +150,7 @@
 - 設定：操作模式、音量、震動、難度與測試音效；效能面板下一階段接入 Phaser profiling。
 
 手機：
-- 切到手機模式後，戰鬥中按住任意位置會在該處出現浮動方向鍵；拖曳方向就是推進方向。
+- 切到手機模式後，戰鬥中按下哪裡，浮動方向鍵就會在該處出現；拖曳方向就是推進方向。
 - 手機模式預設使用自動瞄準，沒有衝刺鍵。
 - 手機版使用 Phaser pointer 輸入：按住螢幕推進，射擊維持自動瞄準。
 - 若手機沒聲音，先到設定點「測試音效」喚醒音訊。
@@ -203,12 +203,17 @@
     </div>
 
     <div id="touchControls" aria-label="手機觸控操作">
-
+      <div id="floatingJoystick" class="floating-joystick" hidden aria-hidden="true">
+        <span class="joystick-ring"></span>
+        <span class="joystick-cross joystick-cross-x"></span>
+        <span class="joystick-cross joystick-cross-y"></span>
+        <span id="floatingJoystickKnob" class="joystick-knob"></span>
+      </div>
     </div>
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./vendor/phaser.min.js?v=7.7"></script>
-  <script type="module" src="./phaser-game.js?v=7.7"></script>
+  <script src="./vendor/phaser.min.js?v=7.8"></script>
+  <script type="module" src="./phaser-game.js?v=7.8"></script>
 </body>
 </html>

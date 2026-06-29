@@ -17,9 +17,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.7 夥伴機技能樹版';
+  const VERSION = 'v7.8 浮動搖桿與縮小主機版';
   const WORLD = { w: 3200, h: 2200 };
-  const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 14 };
+  const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 7 };
+  const PLAYER_VISUAL_SCALE = 0.5;
+  const PLAYER_MUZZLE_OFFSET = 12;
+  const TOUCH_JOYSTICK_MAX_RADIUS = 76;
   const MAX_PARTICLES = 320;
   const ZONE_DEFS = [
     { id: 'random', name: '隨機航線', desc: '每局抽一個星域，保持新鮮感。', color: '#bdfcff' },
@@ -151,6 +154,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     zonePanel: document.getElementById('zonePanel'),
     achievementPanel: document.getElementById('achievementPanel'),
     offlineNotice: document.getElementById('offlineNotice'),
+    touchControls: document.getElementById('touchControls'),
+    floatingJoystick: document.getElementById('floatingJoystick'),
+    floatingJoystickKnob: document.getElementById('floatingJoystickKnob'),
     toast: document.getElementById('toast')
   };
 
@@ -234,12 +240,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 夥伴機技能樹版';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 浮動搖桿與縮小主機版';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.7 讓夥伴機不再只是圓圈：六種機體有不同外觀與技能樹；重複取得時可選擇分支升級。本版也保留浮動式虛擬搖桿修正。';
+    if (p) p.textContent = 'v7.8 讓手機操作更直覺：按下哪裡，虛擬搖桿就出現在那裡；主機視覺與碰撞半徑縮小 50%。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
-      ui.startBtn.textContent = '開始 v7.7';
+      ui.startBtn.textContent = '開始 v7.8';
     }
     if (ui.howBtn) ui.howBtn.style.display = '';
     if (ui.homeSettingsBtn) ui.homeSettingsBtn.style.display = '';
@@ -279,7 +285,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   function updateMetaPanels() {
     const style = currentRouteStyle();
     if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜${style.shipName}｜Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.7：六種夥伴機都有獨立造型與技能樹；重複取得同型夥伴機會跳出三選一分支升級，技能等級只保留本局。手機虛擬搖桿可在任意位置生成。';
+    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.8：浮動虛擬搖桿會直接出現在按下的位置；主機視覺與碰撞半徑縮小 50%，手機走位更清楚。';
   }
 
   function hideUpgradeSurfaces({ resume = false } = {}) {
@@ -397,6 +403,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const canvas = this.game?.canvas;
       canvas?.addEventListener?.('pointerleave', () => this.clearTouchJoystick(null, true));
       canvas?.addEventListener?.('pointercancel', () => this.clearTouchJoystick(null, true));
+      const app = document.getElementById('app');
+      const touchOptions = { passive: false, capture: true };
+      app?.addEventListener?.('pointerdown', event => this.handleDomTouchJoystick(event, 'down'), touchOptions);
+      app?.addEventListener?.('pointermove', event => this.handleDomTouchJoystick(event, 'move'), touchOptions);
+      window.addEventListener('pointerup', event => this.handleDomTouchJoystick(event, 'up'), { passive: false });
+      window.addEventListener('pointercancel', event => this.handleDomTouchJoystick(event, 'up'), { passive: false });
       this.scale.on('resize', gameSize => this.onResize(gameSize));
       this.onResize({ width: this.scale.width, height: this.scale.height });
       this.drawAll();
@@ -439,16 +451,84 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     }
 
     pointerKey(pointer) {
-      return pointer?.id ?? pointer?.pointerId ?? pointer?.identifier ?? 0;
+      return pointer?.event?.pointerId ?? pointer?.pointerId ?? pointer?.id ?? pointer?.identifier ?? 0;
+    }
+
+    touchPointFromPointer(pointer) {
+      const rect = ui.touchControls?.getBoundingClientRect?.()
+        || this.game?.canvas?.getBoundingClientRect?.()
+        || { left: 0, top: 0, width: this.scale.width, height: this.scale.height };
+      const event = pointer?.event;
+      const rawX = Number.isFinite(event?.clientX) ? event.clientX : pointer?.x;
+      const rawY = Number.isFinite(event?.clientY) ? event.clientY : pointer?.y;
+      const width = Math.max(1, rect.width || this.scale.width || 1);
+      const height = Math.max(1, rect.height || this.scale.height || 1);
+      return {
+        x: clamp((rawX ?? 0) - (rect.left || 0), 0, width),
+        y: clamp((rawY ?? 0) - (rect.top || 0), 0, height)
+      };
+    }
+
+    syncTouchJoystickVisual() {
+      const root = ui.floatingJoystick;
+      const knob = ui.floatingJoystickKnob;
+      if (!root || !knob) return;
+      if (meta.controlMode !== 'touch' || !this.touchOrigin || !this.touchVector) {
+        root.hidden = true;
+        root.classList.remove('active');
+        root.style.removeProperty('left');
+        root.style.removeProperty('top');
+        root.style.removeProperty('--knob-x');
+        root.style.removeProperty('--knob-y');
+        return;
+      }
+      const knobDistance = this.touchVector.force * 42;
+      root.hidden = false;
+      root.classList.add('active');
+      root.style.left = `${this.touchOrigin.x}px`;
+      root.style.top = `${this.touchOrigin.y}px`;
+      root.style.setProperty('--knob-x', `${this.touchVector.x * knobDistance}px`);
+      root.style.setProperty('--knob-y', `${this.touchVector.y * knobDistance}px`);
+    }
+
+    shouldIgnoreDomTouch(event) {
+      const target = event?.target;
+      if (!target?.closest) return false;
+      return !!target.closest('button, input, select, textarea, a, [role="button"], .modal-backdrop, #overlay.visible');
+    }
+
+    domPointer(event) {
+      return {
+        id: event?.pointerId ?? 0,
+        pointerId: event?.pointerId ?? 0,
+        x: event?.clientX ?? 0,
+        y: event?.clientY ?? 0,
+        event
+      };
+    }
+
+    handleDomTouchJoystick(event, phase) {
+      if (meta.controlMode !== 'touch') return;
+      if (phase === 'down') {
+        if (this.shouldIgnoreDomTouch(event)) return;
+        this.beginTouchJoystick(this.domPointer(event));
+        return;
+      }
+      if (phase === 'move') {
+        if (!this.touchOrigin) return;
+        this.updateTouchJoystick(this.domPointer(event));
+        return;
+      }
+      this.clearTouchJoystick(this.domPointer(event), true);
     }
 
     beginTouchJoystick(pointer) {
       if (meta.controlMode !== 'touch' || !this.running || this.pausedRun || this.gameOver) return;
-      const x = clamp(pointer.x, 0, this.scale.width);
-      const y = clamp(pointer.y, 0, this.scale.height);
+      const { x, y } = this.touchPointFromPointer(pointer);
       this.touchPointerId = this.pointerKey(pointer);
       this.touchOrigin = { x, y };
       this.touchVector = { x: 0, y: 0, force: 0 };
+      this.syncTouchJoystickVisual();
       pointer.event?.preventDefault?.();
       this.updateTouchJoystick(pointer);
     }
@@ -457,17 +537,19 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       if (meta.controlMode !== 'touch' || !this.running || this.pausedRun || this.gameOver) return;
       if (!this.touchOrigin) return;
       if (this.touchPointerId !== null && this.pointerKey(pointer) !== this.touchPointerId) return;
-      const dx = pointer.x - this.touchOrigin.x;
-      const dy = pointer.y - this.touchOrigin.y;
+      const point = this.touchPointFromPointer(pointer);
+      const dx = point.x - this.touchOrigin.x;
+      const dy = point.y - this.touchOrigin.y;
       const len = Math.hypot(dx, dy);
       const deadZone = 10;
-      const maxRadius = 76;
+      const maxRadius = TOUCH_JOYSTICK_MAX_RADIUS;
       if (len <= deadZone) {
         this.touchVector = { x: 0, y: 0, force: 0 };
       } else {
         const force = clamp(((len - deadZone) / (maxRadius - deadZone)) * (meta.touchSensitivity || 1), 0.22, 1);
         this.touchVector = { x: dx / len, y: dy / len, force };
       }
+      this.syncTouchJoystickVisual();
       pointer.event?.preventDefault?.();
     }
 
@@ -476,6 +558,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.touchVector = null;
       this.touchOrigin = null;
       this.touchPointerId = null;
+      this.syncTouchJoystickVisual();
       if (resetVelocity && this.player) {
         this.player.vx = 0;
         this.player.vy = 0;
@@ -582,8 +665,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     firePlayerBullet(angle, opts = {}) {
       const speed = opts.speed || PLAYER_BASE.bulletSpeed;
       this.bullets.push({
-        x: this.player.x + Math.cos(angle) * (opts.offset || 22),
-        y: this.player.y + Math.sin(angle) * (opts.offset || 22),
+        x: this.player.x + Math.cos(angle) * (opts.offset || PLAYER_MUZZLE_OFFSET),
+        y: this.player.y + Math.sin(angle) * (opts.offset || PLAYER_MUZZLE_OFFSET),
         vx: Math.cos(angle) * speed,
         vy: Math.sin(angle) * speed,
         life: opts.life || 1.25,
@@ -1717,22 +1800,25 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const accent = colorValue(style.accent);
       const secondary = colorValue(style.secondary);
       const a = p.angle;
-      const nose = point(p.x, p.y, a, 27);
-      const left = point(p.x, p.y, a + 2.46, 21);
-      const right = point(p.x, p.y, a - 2.46, 21);
-      const tail = point(p.x, p.y, a + Math.PI, 18);
-      const leftWing = point(p.x, p.y, a + 2.92, 31);
-      const rightWing = point(p.x, p.y, a - 2.92, 31);
-      const leftGun = point(p.x, p.y, a + 2.76, 22);
-      const rightGun = point(p.x, p.y, a - 2.76, 22);
+      const S = PLAYER_VISUAL_SCALE;
+      const R = value => value * S;
+      const L = value => Math.max(1, value * S);
+      const nose = point(p.x, p.y, a, R(27));
+      const left = point(p.x, p.y, a + 2.46, R(21));
+      const right = point(p.x, p.y, a - 2.46, R(21));
+      const tail = point(p.x, p.y, a + Math.PI, R(18));
+      const leftWing = point(p.x, p.y, a + 2.92, R(31));
+      const rightWing = point(p.x, p.y, a - 2.92, R(31));
+      const leftGun = point(p.x, p.y, a + 2.76, R(22));
+      const rightGun = point(p.x, p.y, a - 2.76, R(22));
 
-      // Route skin: chunky ink silhouette + visible cockpit, fins, guns, route-color plating.
-      g.lineStyle(15, COMIC.ink, 1);
+      // Route skin: same readable silhouette, scaled to 50% of the previous ship size.
+      g.lineStyle(L(15), COMIC.ink, 1);
       g.strokeTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
       g.fillStyle(accent, 0.98);
       g.fillTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
 
-      g.lineStyle(10, COMIC.ink, 1);
+      g.lineStyle(L(10), COMIC.ink, 1);
       g.strokeTriangle(tail.x, tail.y, leftWing.x, leftWing.y, left.x, left.y);
       g.strokeTriangle(tail.x, tail.y, rightWing.x, rightWing.y, right.x, right.y);
       g.fillStyle(COMIC.red, style.id === 'rift' ? 1 : 0.86);
@@ -1740,59 +1826,60 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       g.fillStyle(secondary, 0.94);
       g.fillTriangle(tail.x, tail.y, rightWing.x, rightWing.y, right.x, right.y);
 
-      g.lineStyle(7, COMIC.ink, 0.92);
+      g.lineStyle(L(7), COMIC.ink, 0.92);
       g.lineBetween(leftGun.x, leftGun.y, nose.x, nose.y);
       g.lineBetween(rightGun.x, rightGun.y, nose.x, nose.y);
-      g.lineStyle(3, COMIC.white, 0.86);
-      g.lineBetween(point(leftGun.x, leftGun.y, a, 4).x, point(leftGun.x, leftGun.y, a, 4).y, point(nose.x, nose.y, a + Math.PI, 8).x, point(nose.x, nose.y, a + Math.PI, 8).y);
-      g.lineBetween(point(rightGun.x, rightGun.y, a, 4).x, point(rightGun.x, rightGun.y, a, 4).y, point(nose.x, nose.y, a + Math.PI, 8).x, point(nose.x, nose.y, a + Math.PI, 8).y);
+      g.lineStyle(L(3), COMIC.white, 0.86);
+      g.lineBetween(point(leftGun.x, leftGun.y, a, R(4)).x, point(leftGun.x, leftGun.y, a, R(4)).y, point(nose.x, nose.y, a + Math.PI, R(8)).x, point(nose.x, nose.y, a + Math.PI, R(8)).y);
+      g.lineBetween(point(rightGun.x, rightGun.y, a, R(4)).x, point(rightGun.x, rightGun.y, a, R(4)).y, point(nose.x, nose.y, a + Math.PI, R(8)).x, point(nose.x, nose.y, a + Math.PI, R(8)).y);
 
-      const canopy = point(p.x, p.y, a, 4);
-      g.lineStyle(6, COMIC.ink, 1);
+      const canopy = point(p.x, p.y, a, R(4));
+      g.lineStyle(L(6), COMIC.ink, 1);
       g.fillStyle(COMIC.white, 1);
-      g.fillCircle(canopy.x, canopy.y, 8);
-      g.strokeCircle(canopy.x, canopy.y, 8);
+      g.fillCircle(canopy.x, canopy.y, R(8));
+      g.strokeCircle(canopy.x, canopy.y, R(8));
       g.fillStyle(COMIC.ink, 0.72);
-      g.fillCircle(point(canopy.x, canopy.y, a, 2).x, point(canopy.x, canopy.y, a, 2).y, 3.2);
-      g.lineStyle(4, secondary, 0.9);
-      g.lineBetween(point(tail.x, tail.y, a, 5).x, point(tail.x, tail.y, a, 5).y, point(nose.x, nose.y, a + Math.PI, 5).x, point(nose.x, nose.y, a + Math.PI, 5).y);
+      g.fillCircle(point(canopy.x, canopy.y, a, R(2)).x, point(canopy.x, canopy.y, a, R(2)).y, R(3.2));
+      g.lineStyle(L(4), secondary, 0.9);
+      g.lineBetween(point(tail.x, tail.y, a, R(5)).x, point(tail.x, tail.y, a, R(5)).y, point(nose.x, nose.y, a + Math.PI, R(5)).x, point(nose.x, nose.y, a + Math.PI, R(5)).y);
 
-      const badge = point(p.x, p.y, a + Math.PI, 4);
-      g.lineStyle(3, COMIC.ink, 0.9);
-      g.strokeTriangle(badge.x, badge.y - 5, badge.x + 6, badge.y, badge.x, badge.y + 5);
-      g.strokeTriangle(badge.x, badge.y - 5, badge.x - 6, badge.y, badge.x, badge.y + 5);
+      const badge = point(p.x, p.y, a + Math.PI, R(4));
+      g.lineStyle(L(3), COMIC.ink, 0.9);
+      g.strokeTriangle(badge.x, badge.y - R(5), badge.x + R(6), badge.y, badge.x, badge.y + R(5));
+      g.strokeTriangle(badge.x, badge.y - R(5), badge.x - R(6), badge.y, badge.x, badge.y + R(5));
       g.fillStyle(secondary, 0.90);
-      g.fillTriangle(badge.x, badge.y - 5, badge.x + 6, badge.y, badge.x, badge.y + 5);
-      g.fillTriangle(badge.x, badge.y - 5, badge.x - 6, badge.y, badge.x, badge.y + 5);
+      g.fillTriangle(badge.x, badge.y - R(5), badge.x + R(6), badge.y, badge.x, badge.y + R(5));
+      g.fillTriangle(badge.x, badge.y - R(5), badge.x - R(6), badge.y, badge.x, badge.y + R(5));
 
-      const flare1 = point(p.x, p.y, a + Math.PI, 30);
-      const flare2 = point(p.x, p.y, a + Math.PI + 0.28, 46);
-      const flare3 = point(p.x, p.y, a + Math.PI - 0.28, 46);
-      g.lineStyle(5, COMIC.ink, 0.9);
+      const flare1 = point(p.x, p.y, a + Math.PI, R(30));
+      const flare2 = point(p.x, p.y, a + Math.PI + 0.28, R(46));
+      const flare3 = point(p.x, p.y, a + Math.PI - 0.28, R(46));
+      g.lineStyle(L(5), COMIC.ink, 0.9);
       g.strokeTriangle(tail.x, tail.y, flare2.x, flare2.y, flare3.x, flare3.y);
       g.fillStyle(style.id === 'crystal' ? COMIC.gold : COMIC.orange, 0.76);
       g.fillTriangle(tail.x, tail.y, flare2.x, flare2.y, flare3.x, flare3.y);
       g.fillStyle(secondary, 0.9);
-      g.fillCircle(flare1.x, flare1.y, 7);
+      g.fillCircle(flare1.x, flare1.y, R(7));
 
-      g.lineStyle(4, COMIC.ink, 0.52);
-      g.strokeCircle(p.x, p.y, 26 + Math.sin(performance.now() * 0.006) * 2);
-      g.lineStyle(2, accent, 0.28);
-      g.strokeCircle(p.x, p.y, 29 + Math.sin(performance.now() * 0.006) * 2);
+      const pulse = Math.sin(performance.now() * 0.006) * R(2);
+      g.lineStyle(L(4), COMIC.ink, 0.52);
+      g.strokeCircle(p.x, p.y, R(26) + pulse);
+      g.lineStyle(L(2), accent, 0.28);
+      g.strokeCircle(p.x, p.y, R(29) + pulse);
       const core = this.activeTacticDef();
       if (core) {
         const c = colorValue(core.color);
         const t = performance.now() * 0.006;
         const overdrive = this.overdriveTimer > 0;
-        g.lineStyle(overdrive ? 8 : 5, COMIC.ink, overdrive ? 0.82 : 0.54);
-        g.strokeCircle(p.x, p.y, (overdrive ? 50 : 39) + Math.sin(t) * 4);
-        g.lineStyle(overdrive ? 4 : 3, c, overdrive ? 0.92 : 0.58);
-        g.strokeCircle(p.x, p.y, (overdrive ? 55 : 43) + Math.sin(t) * 4);
+        g.lineStyle(overdrive ? L(8) : L(5), COMIC.ink, overdrive ? 0.82 : 0.54);
+        g.strokeCircle(p.x, p.y, R(overdrive ? 50 : 39) + Math.sin(t) * R(4));
+        g.lineStyle(overdrive ? L(4) : L(3), c, overdrive ? 0.92 : 0.58);
+        g.strokeCircle(p.x, p.y, R(overdrive ? 55 : 43) + Math.sin(t) * R(4));
         if (core.label === 'HALO') {
           for (let i = 0; i < 3; i++) {
-            const orb = point(p.x, p.y, t * 1.7 + i * Math.PI * 2 / 3, overdrive ? 42 : 34);
+            const orb = point(p.x, p.y, t * 1.7 + i * Math.PI * 2 / 3, R(overdrive ? 42 : 34));
             g.fillStyle(c, 0.86);
-            g.fillCircle(orb.x, orb.y, overdrive ? 7 : 5);
+            g.fillCircle(orb.x, orb.y, R(overdrive ? 7 : 5));
           }
         }
       }
@@ -2332,7 +2419,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       } else if (this.bannerText) {
         this.bannerText.setVisible(false);
       }
-      if (meta.controlMode === 'touch' && this.touchOrigin && this.touchVector) {
+      if (meta.controlMode === 'touch' && !ui.floatingJoystick && this.touchOrigin && this.touchVector) {
         const cx = this.touchOrigin.x;
         const cy = this.touchOrigin.y;
         const knobX = cx + this.touchVector.x * 42 * this.touchVector.force;
