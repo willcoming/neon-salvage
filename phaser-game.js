@@ -17,8 +17,10 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.9 固定主砲與夥伴整備版';
+  const VERSION = 'v8.0 99波長局技能樹版';
   const WORLD = { w: 3200, h: 2200 };
+  const SECTOR_CLEAR_WAVE = 99;
+  const BOSS_INTERVAL = 5;
   const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 7 };
   const PLAYER_VISUAL_SCALE = 0.5;
   const PLAYER_MUZZLE_OFFSET = 12;
@@ -91,15 +93,30 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       { id: 'lunge', name: '突進刀翼', desc: '近戰範圍與追擊距離提升', max: 3 }
     ]
   };
+  const SHIP_SKILL_BRANCHES = [
+    { id: 'fire', name: '火力線', desc: '固定主砲不換武器，靠彈芯、射速與 Boss 專精撐到第 99 波。' },
+    { id: 'survival', name: '生存線', desc: '長局容錯，提升護盾、裝甲與自動維修。' },
+    { id: 'salvage', name: '拾荒線', desc: '提高移動、吸附、道具與碎晶效率，讓長局資源循環成形。' },
+    { id: 'companion', name: '夥伴線', desc: '強化無人夥伴機的等級、火控與耐久，支撐後段清場。' }
+  ];
   const SHIP_SKILL_TREE = {
-    cannon: { name: '主砲線圈', desc: '固定主砲傷害 +8%', base: 18, scale: 1.42, color: '#ffdf68' },
-    reactor: { name: '反應爐節拍', desc: '固定主砲射速 +5%', base: 20, scale: 1.46, color: '#ff8c22' },
-    shield: { name: '護盾容量', desc: '最大護盾 +12', base: 16, scale: 1.38, color: '#8aa3ff' },
-    armor: { name: '裝甲鍍層', desc: '受到傷害 -2.5%', base: 18, scale: 1.44, color: '#bdfcff' },
-    engine: { name: '推進調校', desc: '移動速度 +4.5%', base: 16, scale: 1.40, color: '#78f6ff' },
-    magnet: { name: '拾荒磁場', desc: '道具與碎晶吸附範圍 +12%', base: 14, scale: 1.36, color: '#62ff91' },
-    survey: { name: '戰場掃描', desc: '護甲 / 增效道具掉落率提升', base: 22, scale: 1.48, color: '#ff3df2' },
-    drone: { name: '夥伴連線', desc: '所有夥伴機等級 +1', base: 24, scale: 1.52, color: '#ffd166' }
+    cannon: { branch: 'fire', name: '主砲線圈', desc: '固定主砲傷害 +6%', base: 18, scale: 1.34, max: 25, color: '#ffdf68' },
+    reactor: { branch: 'fire', name: '反應爐節拍', desc: '固定主砲射速 +4%', base: 20, scale: 1.36, max: 22, color: '#ff8c22' },
+    pierce: { branch: 'fire', name: '貫穿彈芯', desc: '每 4 級主砲貫穿 +1', base: 26, scale: 1.42, max: 12, color: '#78f6ff' },
+    blast: { branch: 'fire', name: '爆裂彈芯', desc: '主砲命中產生小範圍濺射', base: 28, scale: 1.44, max: 15, color: '#ff4d6d' },
+    boss: { branch: 'fire', name: '撤離演算', desc: '對 Boss / 第99波主宰傷害 +3%', base: 34, scale: 1.46, max: 20, color: '#ffd166' },
+    shield: { branch: 'survival', name: '護盾容量', desc: '最大護盾 +10', base: 16, scale: 1.32, max: 30, color: '#8aa3ff' },
+    armor: { branch: 'survival', name: '裝甲鍍層', desc: '受到傷害 -2%', base: 18, scale: 1.36, max: 22, color: '#bdfcff' },
+    regen: { branch: 'survival', name: '自修迴路', desc: '每秒緩慢修復護盾', base: 24, scale: 1.40, max: 20, color: '#62ff91' },
+    supply: { branch: 'survival', name: '道具延展', desc: '護甲 / 增效 / 磁吸持續時間 +8%', base: 20, scale: 1.38, max: 12, color: '#ff8c22' },
+    engine: { branch: 'salvage', name: '推進調校', desc: '移動速度 +3.5%', base: 16, scale: 1.32, max: 22, color: '#78f6ff' },
+    magnet: { branch: 'salvage', name: '拾荒磁場', desc: '道具與碎晶吸附範圍 +10%', base: 14, scale: 1.30, max: 22, color: '#62ff91' },
+    survey: { branch: 'salvage', name: '戰場掃描', desc: '護甲 / 增效道具掉落率提升', base: 22, scale: 1.38, max: 16, color: '#ff3df2' },
+    refinery: { branch: 'salvage', name: '碎晶精煉', desc: '碎晶與貨幣箱收益提高', base: 18, scale: 1.34, max: 18, color: '#ffdf68' },
+    mission: { branch: 'salvage', name: '任務天線', desc: '任務區塊更常出現，開啟速度提升', base: 24, scale: 1.40, max: 12, color: '#bdfcff' },
+    drone: { branch: 'companion', name: '夥伴連線', desc: '所有夥伴機等級 +1', base: 24, scale: 1.44, max: 10, color: '#ffd166' },
+    droneFire: { branch: 'companion', name: '同步火控', desc: '夥伴機傷害與開火節奏提升', base: 28, scale: 1.42, max: 15, color: '#ff8c22' },
+    droneGuard: { branch: 'companion', name: '護衛裝甲', desc: '夥伴機耐久提升', base: 22, scale: 1.38, max: 12, color: '#8aa3ff' }
   };
   const SUPPLY_ITEM_DEFS = {
     repair: { name: '維修包', label: '維修', color: '#62ff91', value: 22, duration: 0, desc: '立即回復護盾' },
@@ -203,12 +220,18 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   function shipSkillCost(id) {
     const def = SHIP_SKILL_TREE[id];
     const level = upgradeLevel(id);
+    if (def?.max && level >= def.max) return 0;
     return Math.ceil((def?.base || 12) * Math.pow(def?.scale || 1.42, level));
   }
 
   function purchaseShipSkill(id) {
     const def = SHIP_SKILL_TREE[id];
     if (!def) return false;
+    const level = upgradeLevel(id);
+    if (def.max && level >= def.max) {
+      flash(`${def.name} 已滿級`);
+      return false;
+    }
     const cost = shipSkillCost(id);
     if ((meta.scrap || 0) < cost) {
       flash(`碎晶不足：${def.name} 需要 ${cost}`);
@@ -216,10 +239,17 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     }
     meta.scrap -= cost;
     meta.upgrades ||= {};
-    meta.upgrades[id] = upgradeLevel(id) + 1;
-    if (sceneRef?.player && (id === 'shield' || id === 'armor')) {
+    meta.upgrades[id] = level + 1;
+    if (sceneRef?.player && (id === 'shield' || id === 'armor' || id === 'regen')) {
       sceneRef.player.maxHp = playerMaxHp(sceneRef);
-      sceneRef.player.hp = Math.min(sceneRef.player.maxHp, sceneRef.player.hp + (id === 'shield' ? 12 : 6));
+      sceneRef.player.hp = Math.min(sceneRef.player.maxHp, sceneRef.player.hp + (id === 'shield' ? 10 : id === 'regen' ? 5 : 4));
+    }
+    if (sceneRef?.companions?.length && (id === 'droneGuard' || id === 'drone')) {
+      for (const drone of sceneRef.companions) {
+        const defn = DRONE_DEFS[drone.type] || DRONE_DEFS.rapid;
+        drone.maxHp = companionMaxHp(defn);
+        drone.hp = Math.min(drone.maxHp, (drone.hp || 0) + 12);
+      }
     }
     saveMeta();
     updateHud(sceneRef);
@@ -243,20 +273,28 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   function renderShipSkillTree(container, rerender = () => {}) {
     if (!container) return;
     const wrap = document.createElement('section');
-    wrap.className = 'skill-tree-section ship-tree-section';
-    wrap.innerHTML = `<header><strong>主機技能樹｜永久升級</strong><small>武器固定為主砲；花貨幣提升主機數值，不再撿到不同武器。</small></header><div class="skill-tree-grid"></div>`;
-    const grid = wrap.querySelector('.skill-tree-grid');
-    for (const [id, def] of Object.entries(SHIP_SKILL_TREE)) {
-      const level = upgradeLevel(id);
-      const cost = shipSkillCost(id);
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'skill-tree-card ship-skill-card';
-      btn.disabled = (meta.scrap || 0) < cost;
-      btn.style.setProperty('--skill-color', def.color);
-      btn.innerHTML = `<b>${def.name} Lv.${level}</b><small>${def.desc}</small><em>${btn.disabled ? `需要 ${cost} 碎晶` : `花 ${cost} 碎晶升級`}</em>`;
-      btn.addEventListener('click', () => { if (purchaseShipSkill(id)) rerender(); });
-      grid.appendChild(btn);
+    wrap.className = 'skill-tree-section ship-tree-section long-run-tree';
+    wrap.innerHTML = `<header><strong>主機技能樹｜99 波永久升級</strong><small>長局分成火力 / 生存 / 拾荒 / 夥伴四條線；武器固定主砲，靠永久技能撐到第 ${SECTOR_CLEAR_WAVE} 波撤離。</small></header>`;
+    for (const branch of SHIP_SKILL_BRANCHES) {
+      const branchEl = document.createElement('div');
+      branchEl.className = 'skill-branch';
+      branchEl.innerHTML = `<h3>${branch.name}<span>${branch.desc}</span></h3><div class="skill-tree-grid"></div>`;
+      const grid = branchEl.querySelector('.skill-tree-grid');
+      for (const [id, def] of Object.entries(SHIP_SKILL_TREE).filter(([, item]) => item.branch === branch.id)) {
+        const level = upgradeLevel(id);
+        const max = def.max || 99;
+        const maxed = level >= max;
+        const cost = shipSkillCost(id);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'skill-tree-card ship-skill-card';
+        btn.disabled = maxed || (meta.scrap || 0) < cost;
+        btn.style.setProperty('--skill-color', def.color);
+        btn.innerHTML = `<b>${def.name} Lv.${level}/${max}</b><small>${def.desc}</small><em>${maxed ? '已滿級' : btn.disabled ? `需要 ${cost} 碎晶` : `花 ${cost} 碎晶升級`}</em>`;
+        btn.addEventListener('click', () => { if (purchaseShipSkill(id)) rerender(); });
+        grid.appendChild(btn);
+      }
+      wrap.appendChild(branchEl);
     }
     container.appendChild(wrap);
   }
@@ -350,21 +388,23 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 固定主砲與夥伴整備版';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 99波長局技能樹版';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.9 改成固定主砲，不再撿到會換武器的核心；暫停/結算可看主機永久技能樹與夥伴機技能樹。';
+    if (p) p.textContent = 'v8.0 改成 99 波撤離長局；主機技能樹拆成火力 / 生存 / 拾荒 / 夥伴四條線，支撐長局 roguelite 生存。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
-      ui.startBtn.textContent = '開始 v7.9';
+      ui.startBtn.textContent = '開始 v8.0';
     }
     if (ui.howBtn) ui.howBtn.style.display = '';
     if (ui.homeSettingsBtn) ui.homeSettingsBtn.style.display = '';
     setHomePanelsVisible(true);
     card.querySelector('.run-shop')?.remove();
     card.querySelector('.home-ship-tree')?.remove();
+    const actions = card.querySelector('.actions');
+    if (actions) card.querySelector('.beta-summary')?.after(actions);
     const homeTree = document.createElement('div');
     homeTree.className = 'home-ship-tree';
-    card.querySelector('.actions')?.before(homeTree);
+    (card.querySelector('#zonePanel') || actions)?.after(homeTree);
     renderShipSkillTree(homeTree, () => setCardForHome());
   }
 
@@ -399,8 +439,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
 
   function updateMetaPanels() {
     const style = currentRouteStyle();
-    if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜${style.shipName}｜Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.9：主砲固定，子彈比例縮小；護甲/增效/磁吸道具回歸，暫停可查看主機永久技能樹與無人夥伴機技能樹。';
+    if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}/${SECTOR_CLEAR_WAVE}｜累積碎晶 ${meta.scrap || 0}｜${style.shipName}｜Phaser 3.90`;
+    if (ui.offlineNotice) ui.offlineNotice.textContent = `v8.0：99 波撤離長局；主機技能樹拆成四條長線，固定主砲 + 夥伴機 + 道具循環撐到第 ${SECTOR_CLEAR_WAVE} 波。`;
   }
 
   function hideUpgradeSurfaces({ resume = false } = {}) {
@@ -529,9 +569,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       ui.overlay?.classList.remove('visible');
       hideUpgradeSurfaces();
       this.startWave(1);
-      this.message = '固定主砲上線｜靠任務找夥伴機與道具強化';
+      this.message = `99波長局啟動｜第 ${SECTOR_CLEAR_WAVE} 波撤離，靠技能樹撐到最後`;
       this.messageTimer = 2.0;
-      flash('固定主砲出擊｜武器不再隨掉落改變');
+      flash(`99 波撤離長局｜第 ${SECTOR_CLEAR_WAVE} 波才算通關`);
       beep('clear');
       haptic(18);
     }
@@ -540,16 +580,17 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.wave = n;
       this.waveSpawned = 0;
       this.waveBudget = waveEnemyBudgetValue({ wave: n, controlMode: meta.controlMode, difficulty: difficultyFor(meta.difficulty), route: zoneRouteEffect() });
-      if (n % 5 === 0) this.waveBudget = 1;
+      if (isBossWave(n)) this.waveBudget = 1;
       this.spawnClock = 0.05;
-      const bossKind = n % 5 === 0 ? bossKindForWave(n) : null;
-      this.message = bossKind ? `第 ${n} 波｜${bossName(bossKind)}` : `第 ${n} 波｜敵群 ${this.waveBudget}`;
+      const bossKind = isBossWave(n) ? bossKindForWave(n) : null;
+      this.message = bossKind ? `第 ${n}/${SECTOR_CLEAR_WAVE} 波｜${bossName(bossKind)}` : `第 ${n}/${SECTOR_CLEAR_WAVE} 波｜敵群 ${this.waveBudget}`;
       this.messageTimer = 2.2;
       flash(this.message);
       this.screenFlash = Math.max(this.screenFlash, bossKind ? 0.24 : 0.13);
       this.screenFlashColor = bossKind ? bossColor(bossKind) : '#ffdf68';
       this.comicSplash(this.player.x, this.player.y, bossKind ? 'BOSS!!' : 'WAVE!', bossKind ? bossColor(bossKind) : '#ffdf68');
-      if (!bossKind && (n === 1 || n % 2 === 0 || Math.random() < 0.36)) this.spawnMissionBlock();
+      const missionChance = 0.28 + upgradeLevel('mission') * 0.025 + (n % 10 === 0 ? 0.18 : 0);
+      if (!bossKind && (n === 1 || n % 2 === 0 || Math.random() < missionChance)) this.spawnMissionBlock();
     }
 
     pointerKey(pointer) {
@@ -702,6 +743,10 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.armorBuffTimer = Math.max(0, (this.armorBuffTimer || 0) - dt);
       this.boostTimer = Math.max(0, (this.boostTimer || 0) - dt);
       this.magnetTimer = Math.max(0, (this.magnetTimer || 0) - dt);
+      const regen = upgradeLevel('regen');
+      if (regen > 0 && this.player?.hp > 0 && this.player.hp < playerMaxHp(this)) {
+        this.player.hp = Math.min(playerMaxHp(this), this.player.hp + regen * 0.22 * dt);
+      }
     }
 
     firePlayerBullet(angle, opts = {}) {
@@ -716,7 +761,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         damage: opts.damage || playerDamage(this),
         color: opts.color,
         source: opts.source || opts.core || 'player',
+        bossDamageMult: opts.bossDamageMult || 1,
         pierce: opts.pierce || 0,
+        blast: opts.blast || 0,
         hitIds: opts.pierce ? new Set() : null
       });
     }
@@ -729,7 +776,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const y = clamp(this.player.y + Math.sin(a) * r, 150, WORLD.h - 150);
       const droneType = forceType || DRONE_IDS[PhaserLib.Math.Between(0, DRONE_IDS.length - 1)] || 'rapid';
       const def = DRONE_DEFS[droneType] || DRONE_DEFS.rapid;
-      const block = { id: this.nextMissionId++, x, y, r: 62, progress: 0, target: 2.05, droneType, color: def.color, pulse: Math.random() * 10 };
+      const openTime = Math.max(1.1, 2.05 - upgradeLevel('mission') * 0.07);
+      const block = { id: this.nextMissionId++, x, y, r: 62, progress: 0, target: openTime, droneType, color: def.color, pulse: Math.random() * 10 };
       this.missionBlocks.push(block);
       this.message = `偵測任務區塊｜${def.role}`;
       this.messageTimer = 1.8;
@@ -760,7 +808,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     openMissionBlock(block) {
       const def = DRONE_DEFS[block.droneType] || DRONE_DEFS.rapid;
       this.grantCompanion(block.droneType, block.x, block.y);
-      meta.scrap += 8;
+      meta.scrap += scrapValue(8);
       meta.score += 240;
       this.missionClaims++;
       this.dropSupplyItem(block.x + 18, block.y, 'cash', 12);
@@ -774,16 +822,18 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     grantCompanion(type = 'rapid', x = this.player.x, y = this.player.y) {
       const safeType = DRONE_DEFS[type] ? type : 'rapid';
       const def = DRONE_DEFS[safeType];
+      const maxHp = companionMaxHp(def);
       let drone = this.companions.find(item => item.type === safeType);
       if (drone) {
         drone.level++;
         drone.skillPoints = (drone.skillPoints || 0) + 1;
+        drone.maxHp = maxHp;
         drone.hp = Math.min(drone.maxHp + def.hp * 0.30, (drone.hp || 0) + def.hp * 0.35);
         this.addFloatingText(drone.x, drone.y - 30, `${def.name} 技能點 +1`, def.color, 900, 16);
         this.showCompanionUpgradeChoice(drone);
       } else {
         const idx = this.companions.length;
-        drone = { type: safeType, level: 1, skillPoints: 0, upgrades: {}, x, y, angle: idx * Math.PI * 2 / 6, fireClock: 0.2, hp: def.hp, maxHp: def.hp, slashClock: 0 };
+        drone = { type: safeType, level: 1, skillPoints: 0, upgrades: {}, x, y, angle: idx * Math.PI * 2 / 6, fireClock: 0.2, hp: maxHp, maxHp, slashClock: 0 };
         this.companions.push(drone);
         this.addFloatingText(x, y - 30, `${def.name} 加入`, def.color, 1000, 17);
       }
@@ -882,6 +932,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         const def = DRONE_DEFS[drone.type] || DRONE_DEFS.rapid;
         const lvl = this.companionLevel(drone);
         const skill = id => this.companionSkillLevel(drone, id);
+        const droneFire = upgradeLevel('droneFire');
+        const droneDamageMult = 1 + droneFire * 0.055;
         drone.angle += dt * (0.44 + index * 0.035 + lvl * 0.01);
         const orbit = def.orbit + 30 + Math.min(54, lvl * 6) + index * 14 + skill('taunt') * 10;
         const slot = drone.angle + index * Math.PI * 2 / count;
@@ -903,7 +955,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
               this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 20, grow: 130 + skill('overheal') * 36, life: 0.3, max: 0.3, color: def.color, ring: true });
             }
             if (this.player.hp > before) this.addFloatingText(this.player.x, this.player.y - 48, `+${Math.round(this.player.hp - before)}`, def.color, 650, 16);
-            drone.fireClock = Math.max(0.46, def.fireRate - lvl * 0.12 - skill('triage') * 0.22 - lowHpBoost);
+            drone.fireClock = Math.max(0.42, def.fireRate - lvl * 0.12 - skill('triage') * 0.22 - lowHpBoost - droneFire * 0.018);
             this.particles.push({ x: this.player.x, y: this.player.y, vx: 0, vy: 0, r: 12, grow: 120, life: 0.28, max: 0.28, color: def.color, ring: true });
           }
           return;
@@ -918,7 +970,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
               if (skill('reflect') > 0) {
                 const target = this.nearestEnemyFrom(shot.x, shot.y, 620 + skill('reflect') * 100);
                 const a = target ? angleBetween(shot.x, shot.y, target.x, target.y) : angleBetween(this.player.x, this.player.y, shot.x, shot.y);
-                this.bullets.push({ x: shot.x, y: shot.y, vx: Math.cos(a) * 760, vy: Math.sin(a) * 760, life: 0.8, r: 2.3, damage: 6 + lvl * 2.4 + skill('reflect') * 4, color: def.color, source: 'drone-reflect', pierce: skill('reflect') >= 3 ? 1 : 0, hitIds: skill('reflect') >= 3 ? new Set() : null });
+                this.bullets.push({ x: shot.x, y: shot.y, vx: Math.cos(a) * 760, vy: Math.sin(a) * 760, life: 0.8, r: 2.3, damage: (6 + lvl * 2.4 + skill('reflect') * 4) * droneDamageMult, color: def.color, source: 'drone-reflect', pierce: skill('reflect') >= 3 ? 1 : 0, hitIds: skill('reflect') >= 3 ? new Set() : null });
               }
             }
           }
@@ -935,7 +987,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           if (dist(drone.x, drone.y, target.x, target.y) < range && drone.fireClock <= 0) {
             const execute = target.hp < target.maxHp * 0.35 ? 1 + skill('execute') * 0.24 : 1;
             const bossMult = target.type === 'boss' ? 0.42 + skill('execute') * 0.04 : 1;
-            const damage = (def.damage + lvl * 5 + skill('execute') * 4) * execute;
+            const damage = (def.damage + lvl * 5 + skill('execute') * 4) * execute * droneDamageMult;
             target.hp -= damage * bossMult;
             target.hit = 0.14;
             drone.x += (target.x - drone.x) * 0.28;
@@ -954,7 +1006,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
             }
             this.addFloatingText(target.x, target.y - target.r - 10, skill('execute') && execute > 1 ? '處決' : '斬擊', def.color, 420, 14);
             if (target.hp <= 0) this.killEnemy(target);
-            drone.fireClock = Math.max(0.16, def.fireRate - lvl * 0.028 - skill('lunge') * 0.018);
+            drone.fireClock = Math.max(0.14, def.fireRate - lvl * 0.028 - skill('lunge') * 0.018 - droneFire * 0.008);
           }
           return;
         }
@@ -963,7 +1015,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           const artillery = drone.type === 'artillery';
           const rapid = drone.type === 'rapid';
           const tank = drone.type === 'tank';
-          const damage = (def.damage || 8) + lvl * (artillery ? 6 : 2.2) + skill('shell') * 8 + skill('needle') * 2.7 + skill('shock') * 1.8;
+          const damage = ((def.damage || 8) + lvl * (artillery ? 6 : 2.2) + skill('shell') * 8 + skill('needle') * 2.7 + skill('shock') * 1.8) * droneDamageMult;
           const speed = artillery ? 620 + skill('shell') * 28 : rapid ? 820 + skill('needle') * 55 : 680;
           const radius = artillery ? 3.8 + skill('blast') * 0.35 : tank ? 3.3 : rapid ? 2.1 : 2.2;
           const pierce = artillery ? 1 + skill('shell') : tank && skill('shock') >= 2 ? 1 : 0;
@@ -974,7 +1026,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
             this.bullets.push({ x: drone.x, y: drone.y, vx: Math.cos(a + off) * speed, vy: Math.sin(a + off) * speed, life: artillery ? 1.32 : 0.95, r: radius, damage, color: def.color, source: `drone-${drone.type}`, pierce, blast, hitIds: pierce > 0 ? new Set() : null });
             this.companionShots++;
           }
-          const cooldownBonus = skill('capacitor') * 0.055 + skill('calibrate') * 0.075;
+          const cooldownBonus = skill('capacitor') * 0.055 + skill('calibrate') * 0.075 + droneFire * 0.012;
           drone.fireClock = Math.max(0.12, def.fireRate - lvl * (rapid ? 0.032 : 0.045) - cooldownBonus);
         }
       });
@@ -1014,7 +1066,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       }
       const zoneSpeed = meta.selectedZone === 'rift' ? 1.03 : 1;
       const coreSpeed = this.boostTimer > 0 ? 1.06 : 1;
-      const runSpeed = 1 + upgradeLevel('engine') * 0.045;
+      const runSpeed = 1 + upgradeLevel('engine') * 0.035;
       const speed = PLAYER_BASE.speed * zoneSpeed * coreSpeed * runSpeed * (meta.controlMode === 'touch' ? 0.92 : 1);
       this.player.vx = mx * speed;
       this.player.vy = my * speed;
@@ -1027,7 +1079,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.spawnClock -= dt;
       const cap = enemyCapValue({ wave: this.wave, controlMode: meta.controlMode, difficulty: difficultyFor(meta.difficulty) });
       if (this.spawnClock <= 0 && this.enemies.length < cap) {
-        this.spawnEnemy(this.wave % 5 === 0 ? 'boss' : pickEnemyType(this.wave));
+        this.spawnEnemy(isBossWave(this.wave) ? 'boss' : pickEnemyType(this.wave));
         this.waveSpawned++;
         this.spawnClock = spawnIntervalForWaveValue({ wave: this.wave, controlMode: meta.controlMode });
       }
@@ -1064,7 +1116,17 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       if (Number.isNaN(a)) a = this.player.angle;
       this.player.angle = smoothAngle(this.player.angle, a, 0.8);
       this.shotCounter++;
-      this.firePlayerBullet(a, { damage: playerDamage(this), r: PLAYER_BULLET_RADIUS, color: '#ffdf68', source: 'fixed-main' });
+      const pierce = Math.floor(upgradeLevel('pierce') / 4);
+      const blastLevel = upgradeLevel('blast');
+      this.firePlayerBullet(a, {
+        damage: playerDamage(this),
+        r: PLAYER_BULLET_RADIUS,
+        color: '#ffdf68',
+        source: 'fixed-main',
+        pierce,
+        blast: blastLevel > 0 ? 18 + blastLevel * 6 : 0,
+        bossDamageMult: 1 + upgradeLevel('boss') * 0.03
+      });
       this.fireClock = playerFireRate(this);
       beep(this.boostTimer > 0 ? 'surge' : 'shot');
     }
@@ -1078,7 +1140,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           if (e.dead || dist(b.x, b.y, e.x, e.y) > b.r + e.r) continue;
           if (b.hitIds?.has(e.id)) continue;
           if (b.hitIds) b.hitIds.add(e.id);
-          e.hp -= b.damage;
+          const hitDamage = b.damage * (e.type === 'boss' ? (b.bossDamageMult || 1) : 1);
+          e.hp -= hitDamage;
           e.hit = 0.12;
           if (b.pierce > 0) b.pierce--;
           else b.dead = true;
@@ -1091,7 +1154,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
             for (const other of this.enemies) {
               if (other.dead || other === e) continue;
               if (dist(b.x, b.y, other.x, other.y) > b.blast + other.r) continue;
-              other.hp -= b.damage * (other.type === 'boss' ? 0.18 : 0.42);
+              const splashDamage = b.damage * (other.type === 'boss' ? 0.18 * (b.bossDamageMult || 1) : 0.42);
+              other.hp -= splashDamage;
               other.hit = 0.1;
               splashHits++;
               if (other.hp <= 0) this.killEnemy(other);
@@ -1257,10 +1321,10 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       for (const s of this.shards) {
         const isSupply = !!SUPPLY_ITEM_DEFS[s.kind];
         const d = dist(s.x, s.y, this.player.x, this.player.y);
-        const magnet = (isSupply ? 215 : 170) * (1 + upgradeLevel('magnet') * 0.12 + (this.magnetTimer > 0 ? 0.55 : 0));
+        const magnet = (isSupply ? 215 : 170) * (1 + upgradeLevel('magnet') * 0.10 + (this.magnetTimer > 0 ? 0.55 : 0));
         if (d < magnet) {
           const a = angleBetween(s.x, s.y, this.player.x, this.player.y);
-          const pull = (isSupply ? 640 : 520) * (1 + upgradeLevel('magnet') * 0.08 + (this.magnetTimer > 0 ? 0.35 : 0));
+          const pull = (isSupply ? 640 : 520) * (1 + upgradeLevel('magnet') * 0.07 + (this.magnetTimer > 0 ? 0.35 : 0));
           s.vx += Math.cos(a) * pull * dt;
           s.vy += Math.sin(a) * pull * dt;
           if (Math.random() < (isSupply ? 0.42 : 0.18)) this.particles.push({ x: s.x, y: s.y, vx: -Math.cos(a) * 45, vy: -Math.sin(a) * 45, r: isSupply ? 2.5 : 2.1, life: 0.22, max: 0.22, color: s.color || '#ffdf68', kind: 'spark' });
@@ -1274,8 +1338,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           if (isSupply) {
             this.applySupplyItem(s, s.x, s.y);
           } else {
-            meta.scrap += s.value;
-            meta.score += s.value * 4;
+            const gained = scrapValue(s.value || 1);
+            meta.scrap += gained;
+            meta.score += gained * 4;
             this.comicImpact(s.x, s.y, '#ffdf68', angleBetween(s.x, s.y, this.player.x, this.player.y), 0.45);
           }
         }
@@ -1293,19 +1358,20 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         this.player.hp = Math.min(playerMaxHp(this), this.player.hp + value);
         this.addFloatingText(this.player.x, this.player.y - 42, `維修 +${Math.round(this.player.hp - before)}`, color, 780, 15);
       } else if (item.kind === 'cash') {
-        meta.scrap += value || 8;
-        meta.score += (value || 8) * 7;
-        this.addFloatingText(x, y - 20, `貨幣 +${value || 8}`, color, 780, 15);
+        const gained = scrapValue(value || 8);
+        meta.scrap += gained;
+        meta.score += gained * 7;
+        this.addFloatingText(x, y - 20, `貨幣 +${gained}`, color, 780, 15);
         saveMeta();
       } else if (item.kind === 'armor') {
-        this.armorBuffTimer = Math.max(this.armorBuffTimer || 0, item.duration || def.duration || 10);
+        this.armorBuffTimer = Math.max(this.armorBuffTimer || 0, buffDuration(item.duration || def.duration || 10));
         this.player.invuln = Math.max(this.player.invuln, 0.28);
         this.addFloatingText(this.player.x, this.player.y - 44, `護甲 ${Math.ceil(this.armorBuffTimer)}s`, color, 780, 15);
       } else if (item.kind === 'boost') {
-        this.boostTimer = Math.max(this.boostTimer || 0, item.duration || def.duration || 8);
+        this.boostTimer = Math.max(this.boostTimer || 0, buffDuration(item.duration || def.duration || 8));
         this.addFloatingText(this.player.x, this.player.y - 44, `增效 ${Math.ceil(this.boostTimer)}s`, color, 780, 15);
       } else if (item.kind === 'magnet') {
-        this.magnetTimer = Math.max(this.magnetTimer || 0, item.duration || def.duration || 10);
+        this.magnetTimer = Math.max(this.magnetTimer || 0, buffDuration(item.duration || def.duration || 10));
         this.addFloatingText(this.player.x, this.player.y - 44, `磁吸 ${Math.ceil(this.magnetTimer)}s`, color, 780, 15);
       }
       this.comicImpact(x, y, color, angleBetween(x, y, this.player.x, this.player.y), 0.46);
@@ -1333,7 +1399,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
 
     updateWaveProgress() {
       if (this.waveSpawned < this.waveBudget || this.enemies.length) return;
-      if (this.wave >= 10) return this.clearRun();
+      if (this.wave >= SECTOR_CLEAR_WAVE) return this.clearRun();
       this.startWave(this.wave + 1);
     }
 
@@ -1355,7 +1421,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const guardSkill = guardDrone ? this.companionSkillLevel(guardDrone, 'plates') : 0;
       const shieldSkill = shieldDrone ? this.companionSkillLevel(shieldDrone, 'battery') : 0;
       const armorItem = this.armorBuffTimer > 0 ? 0.20 : 0;
-      const reduction = 1 - Math.min(0.64, armorItem + upgradeLevel('armor') * 0.025 + (shieldDrone ? this.companionLevel(shieldDrone) * 0.025 + shieldSkill * 0.018 : 0) + (guardDrone ? this.companionLevel(guardDrone) * 0.015 + guardSkill * 0.028 : 0));
+      const reduction = 1 - Math.min(0.68, armorItem + upgradeLevel('armor') * 0.02 + (shieldDrone ? this.companionLevel(shieldDrone) * 0.025 + shieldSkill * 0.018 : 0) + (guardDrone ? this.companionLevel(guardDrone) * 0.015 + guardSkill * 0.028 : 0));
       const finalAmount = amount * reduction;
       this.player.hp -= finalAmount;
       this.player.invuln = 0.42;
@@ -1384,7 +1450,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.screenFlash = Math.max(this.screenFlash, boss ? 0.22 : 0.08);
       this.screenFlashColor = boss ? color : '#78f6ff';
       this.dropShards(e.x, e.y, boss ? 18 : PhaserLib.Math.Between(2, 4));
-      const supplyChance = boss ? 1 : 0.11 + upgradeLevel('survey') * 0.025 + (this.player.hp < playerMaxHp(this) * 0.45 ? 0.12 : 0);
+      const supplyChance = boss ? 1 : Math.min(0.52, 0.11 + upgradeLevel('survey') * 0.022 + (this.player.hp < playerMaxHp(this) * 0.45 ? 0.12 : 0));
       if (boss || Math.random() < supplyChance) {
         const count = boss ? 3 : 1;
         for (let i = 0; i < count; i++) {
@@ -1523,8 +1589,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       if (!card) return;
       card.classList.add('run-card');
       setHomePanelsVisible(false);
-      card.querySelector('.eyebrow').textContent = clear ? 'SECTOR CLEAR // Phaser runtime' : 'RUN TERMINATED // Phaser runtime';
-      card.querySelector('h2').textContent = clear ? '星環核心已回收' : '飛船解體，但資料已保存';
+      card.querySelector('.eyebrow').textContent = clear ? '99 WAVE EXTRACTION // Phaser runtime' : 'RUN TERMINATED // Phaser runtime';
+      card.querySelector('h2').textContent = clear ? '第99波撤離成功' : '飛船解體，但資料已保存';
       const p = card.querySelector('p:not(.eyebrow)');
       if (p) p.textContent = `Engine Phaser｜時間 ${formatTime(this.runTime)}｜第 ${this.wave} 波｜擊殺 ${this.kills}｜任務 ${this.missionClaims}｜夥伴 ${this.companions.length}｜技能樹 ${this.companions.filter(d => Object.keys(d.upgrades || {}).length).length}｜道具 ${this.supplyPickups || 0}｜碎晶 ${meta.scrap}`;
       this.renderOverlayShop(card, clear);
@@ -2545,8 +2611,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     return 'chaser';
   }
 
+  function isBossWave(wave) {
+    return wave === SECTOR_CLEAR_WAVE || wave % BOSS_INTERVAL === 0;
+  }
+
   function bossKindForWave(wave) {
-    if (wave >= 10) {
+    if (wave >= SECTOR_CLEAR_WAVE) {
       if (meta.selectedZone === 'rift') return 'riftlord';
       if (meta.selectedZone === 'crystal') return 'crystalQueen';
       return 'starcore';
@@ -2588,20 +2658,32 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
 
   function playerFireRate(scene) {
     let rate = PLAYER_BASE.fireRate;
-    rate *= 1 - Math.min(0.45, upgradeLevel('reactor') * 0.05);
-    if (scene?.boostTimer > 0) rate *= 0.76;
+    rate *= 1 - Math.min(0.56, upgradeLevel('reactor') * 0.04);
+    if (scene?.boostTimer > 0) rate *= Math.max(0.58, 0.76 - upgradeLevel('supply') * 0.008);
     return Math.max(0.075, rate);
   }
 
   function playerDamage(scene = null) {
     let amount = PLAYER_BASE.damage;
-    amount *= 1 + upgradeLevel('cannon') * 0.08;
-    if (scene?.boostTimer > 0) amount *= 1.22;
+    amount *= 1 + upgradeLevel('cannon') * 0.06;
+    if (scene?.boostTimer > 0) amount *= 1.22 + upgradeLevel('supply') * 0.012;
     return amount;
   }
 
   function playerMaxHp(scene = null) {
-    return PLAYER_BASE.hp + upgradeLevel('shield') * 12;
+    return PLAYER_BASE.hp + upgradeLevel('shield') * 10;
+  }
+
+  function companionMaxHp(def = DRONE_DEFS.rapid) {
+    return (def.hp || 70) * (1 + upgradeLevel('droneGuard') * 0.08);
+  }
+
+  function scrapValue(value = 1) {
+    return Math.max(1, Math.round((value || 1) * (1 + upgradeLevel('refinery') * 0.08)));
+  }
+
+  function buffDuration(seconds = 0) {
+    return seconds * (1 + upgradeLevel('supply') * 0.08);
   }
 
   function updateHud(scene) {

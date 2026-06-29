@@ -19,7 +19,7 @@ test('base state preserves current save schema defaults', () => {
   assert.equal(meta.aimAssist, 'assist');
   assert.equal(meta.autoAim, true);
   assert.equal(meta.difficulty, 'standard');
-  assert.deepEqual(Object.keys(meta.upgrades).sort(), ['armor', 'cannon', 'drone', 'engine', 'magnet', 'reactor', 'shield', 'survey']);
+  assert.deepEqual(Object.keys(meta.upgrades).sort(), ['armor', 'blast', 'boss', 'cannon', 'drone', 'droneFire', 'droneGuard', 'engine', 'magnet', 'mission', 'pierce', 'reactor', 'refinery', 'regen', 'shield', 'supply', 'survey']);
 });
 
 test('normalizeSave migrates partial legacy records safely', () => {

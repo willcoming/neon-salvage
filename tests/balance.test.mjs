@@ -36,11 +36,11 @@ test('difficulty fallback keeps old saves playable', () => {
 
 test('run stage and late-game scale are deterministic tuning helpers', () => {
   assert.equal(stageKeyForWave(1), 'warmup');
-  assert.equal(stageKeyForWave(4), 'build');
-  assert.equal(stageKeyForWave(7), 'pressure');
-  assert.equal(stageKeyForWave(10), 'final');
+  assert.equal(stageKeyForWave(10), 'build');
+  assert.equal(stageKeyForWave(30), 'pressure');
+  assert.equal(stageKeyForWave(99), 'final');
   assert.equal(lateGameScaleForWave(4), 1);
-  assert.equal(lateGameScaleForWave(20), .64);
+  assert.equal(lateGameScaleForWave(20), .94);
   assert.equal(compactWorldFeatureTargetValue({ wave: 1 }), 22);
 });
 
@@ -75,13 +75,13 @@ test('difficulty, touch mode, anomaly and route effects feed pacing helpers', ()
   assert.equal(eventChanceForWaveValue({ wave: 2 }), 0);
   assert.equal(eventChanceForWaveValue({ wave: 6, anomaly: { eventBoost: .12 }, route: { eventBoost: .05 } }), .42 + .17);
   assert.equal(spawnIntervalForWaveValue({ wave: 1, controlMode: 'keyboard' }), .19 * SWARM_PRESSURE_DEF.spawnIntervalMult.warmup);
-  assert.equal(enemyCapValue({ wave: 10, controlMode: 'touch', difficulty: DIFFICULTY_DEFS.standard }), Math.round(Math.max(24, (30 + 3 - 3 * 1.15) * .86)));
+  assert.equal(enemyCapValue({ wave: 10, controlMode: 'touch', difficulty: DIFFICULTY_DEFS.standard }), Math.round(Math.max(24, (30 + 4 - 1) * 1)));
 });
 
 test('swarm pressure helper raises enemy density while preserving mobile easing', () => {
   const warmup = swarmPressureForWave({ wave: 1 });
-  const pressure = swarmPressureForWave({ wave: 8 });
-  const mobilePressure = swarmPressureForWave({ wave: 8, controlMode: 'touch' });
+  const pressure = swarmPressureForWave({ wave: 30 });
+  const mobilePressure = swarmPressureForWave({ wave: 30, controlMode: 'touch' });
   assert.equal(warmup.budgetMult, SWARM_PRESSURE_DEF.budgetMult.warmup);
   assert.ok(pressure.budgetMult > warmup.budgetMult);
   assert.equal(mobilePressure.budgetMult, SWARM_PRESSURE_DEF.budgetMult.pressure * SWARM_PRESSURE_DEF.touchBudgetMult);

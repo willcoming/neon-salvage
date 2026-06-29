@@ -35,16 +35,16 @@ export const DIFFICULTY_DEFS = Object.freeze({
 });
 
 export const RUN_STAGE_DEFS = Object.freeze({
-  warmup: { name: '暖機', waves: '1-3', color: '#bdfcff', desc: '操作 / 目標暖機' },
-  build: { name: 'Build 成形', waves: '4-6', color: '#ffd166', desc: '技能核心與第一個 Boss' },
-  pressure: { name: '高壓選擇', waves: '7-9', color: '#ff9f1c', desc: '戰術、事件與終局整備' },
-  final: { name: '終局考驗', waves: '10', color: '#ff4d6d', desc: '星環核心 Boss' }
+  warmup: { name: '暖機巡航', waves: '1-9', color: '#bdfcff', desc: '操作 / 任務區塊 / 夥伴機暖機' },
+  build: { name: 'Build 成形', waves: '10-29', color: '#ffd166', desc: '主機四線技能樹開始成形' },
+  pressure: { name: '深層高壓', waves: '30-89', color: '#ff9f1c', desc: '長局資源循環與夥伴機技能樹壓力測試' },
+  final: { name: '撤離終局', waves: '90-99', color: '#ff4d6d', desc: '第99波撤離 Boss' }
 });
 
 export const SWARM_PRESSURE_DEF = Object.freeze({
-  budgetMult: Object.freeze({ warmup: 1.18, build: 1.24, pressure: 1.30, final: 1 }),
-  capBonus: Object.freeze({ warmup: 3, build: 5, pressure: 7, final: 4 }),
-  spawnIntervalMult: Object.freeze({ warmup: .92, build: .88, pressure: .84, final: .90 }),
+  budgetMult: Object.freeze({ warmup: 1.05, build: 1.14, pressure: 1.25, final: 1.34 }),
+  capBonus: Object.freeze({ warmup: 2, build: 4, pressure: 7, final: 9 }),
+  spawnIntervalMult: Object.freeze({ warmup: .96, build: .91, pressure: .86, final: .82 }),
   touchBudgetMult: .94,
   touchCapBonus: -1
 });
@@ -118,14 +118,14 @@ export function combatSurgeShockwaveDamage({ wave = 1, combo = 0, def = COMBAT_S
   return Math.round((def.shockwaveDamageBase || 0) + Math.max(1, wave || 1) * (def.shockwaveDamagePerWave || 0) + comboBonus);
 }
 
-export function stageKeyForWave(wave, sectorClearWave = 10) {
-  if (wave >= sectorClearWave) return 'final';
-  if (wave >= 7) return 'pressure';
-  if (wave >= 4) return 'build';
+export function stageKeyForWave(wave, sectorClearWave = 99) {
+  if (wave >= Math.max(1, sectorClearWave - 9)) return 'final';
+  if (wave >= 30) return 'pressure';
+  if (wave >= 10) return 'build';
   return 'warmup';
 }
 
-export function runStageForWaveValue(wave, sectorClearWave = 10) {
+export function runStageForWaveValue(wave, sectorClearWave = 99) {
   return RUN_STAGE_DEFS[stageKeyForWave(wave, sectorClearWave)];
 }
 
@@ -141,12 +141,12 @@ export function swarmPressureForWave({ wave = 1, controlMode = 'keyboard', def =
 }
 
 export function lateGameScaleForWave(wave) {
-  return clamp(1 - Math.max(0, wave - 4) * .055, .64, 1);
+  return clamp(1 - Math.max(0, wave - 10) * .006, .62, 1);
 }
 
 export function enemyCapValue({ wave, controlMode = 'keyboard', difficulty = DIFFICULTY_DEFS.standard } = {}) {
   const base = controlMode === 'touch' ? 30 : 36;
-  const pressureCut = Math.max(0, wave - 7) * 1.15;
+  const pressureCut = Math.max(0, wave - 10) * .18;
   const stageKey = stageKeyForWave(wave);
   const pressure = swarmPressureForWave({ wave, controlMode });
   const stageEase = stageKey === 'warmup' ? .88 : stageKey === 'final' ? .86 : stageKey === 'pressure' ? .94 : 1;

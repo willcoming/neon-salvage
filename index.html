@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>霓虹拾荒者 Neon Salvage｜Beta Demo</title>
-  <link rel="stylesheet" href="./styles.css?v=7.9" />
+  <link rel="stylesheet" href="./styles.css?v=8.0" />
 </head>
 <body>
   <div id="app">
@@ -107,21 +107,21 @@
 
     <div id="overlay" class="glass visible">
       <div class="card">
-        <p class="eyebrow">BETA DEMO // 固定主砲與夥伴整備版</p>
+        <p class="eyebrow">BETA DEMO // 99波長局技能樹版</p>
         <h2>霓虹拾荒者 Neon Salvage</h2>
-        <p>v7.9 固定主砲、縮小子彈比例；護甲 / 增效 / 磁吸道具回歸，暫停與結算可查看主機與夥伴技能樹。</p>
+        <p>v8.0 轉成 99 波撤離的長局 roguelite 生存；主機永久技能樹拆成火力、生存、拾荒與夥伴四條長線。</p>
         <div class="version-card">
-          <strong>v7.9 固定主砲與夥伴整備版</strong>
+          <strong>v8.0 99波長局技能樹版</strong>
           <ul>
-            <li>主武器固定為主砲，不再因撿到掉落物而變成其他武器。</li>
-            <li>玩家與敵方子彈尾焰、碰撞半徑與視覺比例縮小，配合 v7.8 小主機尺寸。</li>
-            <li>擊殺會掉落維修、貨幣、護甲、增效、磁吸等道具，強化本局戰鬥節奏。</li>
-            <li>暫停 / 結算 / 首頁可看主機永久技能樹；暫停可看夥伴機技能樹並消耗重複取得的技能點。</li>
-            <li>無人夥伴機改成環繞主機巡航攻擊 / 支援，不再像黏在主機身上。</li>
+            <li>撤離目標由 10 波短局改為 99 波長局，第 5 波起每 5 波是 Boss 檢查，第 99 波為撤離主宰。</li>
+            <li>主機永久技能樹拆成火力、生存、拾荒、夥伴四條線，共 17 個可長期投資節點。</li>
+            <li>火力線追加貫穿彈芯、爆裂彈芯與撤離演算，固定主砲能在後期繼續成長。</li>
+            <li>生存線加入自修迴路與道具延展，支援長時間護盾、護甲、增效與磁吸循環。</li>
+            <li>拾荒線與夥伴線提升碎晶收益、任務區塊、無人機火控與護衛裝甲，形成長局 roguelite build。</li>
           </ul>
         </div>
         <div class="beta-summary" aria-label="Beta Demo 摘要">
-          <span><b>10 波撤離</b>短局 roguelite 生存</span>
+          <span><b>99 波撤離</b>長局 roguelite 生存</span>
           <span><b>夥伴機任務</b>停在區塊旁開啟支援機</span>
           <span><b>主機技能樹</b>用貨幣永久升級</span>
           <span><b>手機可玩</b>單手觸控與自動瞄準</span>
@@ -137,9 +137,9 @@
         <pre id="how" hidden>Beta Demo 速讀
 
 目標：
-- 撐過 10 波敵群與 Boss，途中收集碎晶、道具與夥伴機。
-- 第 5 波是 Boss 檢查，第 10 波擊破星環主宰即可撤離成功。
-- v7.9 重點：武器固定主砲、子彈比例縮小；掉落物改為護甲 / 增效 / 磁吸 / 維修 / 貨幣。
+- 撐過 99 波敵群與 Boss，途中收集碎晶、道具與夥伴機。
+- 每 5 波是 Boss 檢查；第 99 波擊破撤離主宰才算通關。
+- v8.0 重點：長局 roguelite 生存，主機永久技能樹拆成火力 / 生存 / 拾荒 / 夥伴四條線。
 
 操作：
 - WASD / 方向鍵：移動。
@@ -154,15 +154,19 @@
 - 拖曳方向就是推進方向；放開後方向鍵會隱藏並清除移動輸入。
 - 手機模式建議使用自動瞄準；若手機沒聲音，先到設定點「測試音效」。
 
-戰鬥重點：
+戰鬥與養成重點：
 - 主武器固定為主砲，不會再因掉落物變成霰彈、穿甲或環刃。
+- 火力線：主砲傷害、射速、貫穿、爆裂與 Boss 傷害專精。
+- 生存線：護盾容量、裝甲鍍層、自修迴路與道具延展。
+- 拾荒線：推進、磁吸、掉落、碎晶精煉與任務區塊效率。
+- 夥伴線：夥伴等級、同步火控與護衛裝甲。
 - 擊殺敵人會掉落維修包、貨幣箱、護甲板、增效核心與磁吸增幅。
 - 護甲板短時間減傷；增效核心短時間提高主砲傷害與射速；磁吸增幅提高拾取範圍。
 - 3.6 秒內 5 連殺會觸發「擊破爆發」，用金色衝擊波清附近敵人。
 - 任務區塊會出現在地圖上，靠近並停住可開啟無人夥伴機。
 - 無人夥伴機會環繞主機巡航攻擊 / 支援，不會黏在主機身上。
 - 重複取得同型夥伴機會獲得技能點，可在暫停 / 結算整備中升級該機專屬技能樹。
-- 暫停、首頁或結算可以花碎晶升級主機永久技能樹，例如主砲線圈、反應爐、護盾、裝甲、推進、拾荒磁場與夥伴連線。
+- 暫停、首頁或結算可以花碎晶升級主機永久技能樹，長線投資會保留到下一局。
 - 失敗後可花碎晶接關；若選擇重新出擊，夥伴機與本局技能點會歸零，主機永久技能保留。</pre>
       </div>
     </div>
@@ -178,7 +182,7 @@
 
     <div id="toast" role="status"></div>
   </div>
-  <script src="./vendor/phaser.min.js?v=7.9"></script>
-  <script type="module" src="./phaser-game.js?v=7.9"></script>
+  <script src="./vendor/phaser.min.js?v=8.0"></script>
+  <script type="module" src="./phaser-game.js?v=8.0"></script>
 </body>
 </html>

@@ -4,12 +4,21 @@ export const LEGACY_SAVE_KEYS = ['neon-salvage-save-v1'];
 export const DEFAULT_UPGRADES = Object.freeze({
   cannon: 0,
   reactor: 0,
+  pierce: 0,
+  blast: 0,
+  boss: 0,
   shield: 0,
   armor: 0,
+  regen: 0,
+  supply: 0,
   engine: 0,
   magnet: 0,
   survey: 0,
-  drone: 0
+  refinery: 0,
+  mission: 0,
+  drone: 0,
+  droneFire: 0,
+  droneGuard: 0
 });
 
 const AIM_ASSIST_MODES = new Set(['off', 'assist', 'full']);
