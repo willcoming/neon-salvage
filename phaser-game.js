@@ -17,7 +17,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.0 Phaser 引擎版';
+  const VERSION = 'v7.1 美式漫畫火線版';
   const WORLD = { w: 3200, h: 2200 };
   const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 14 };
   const MAX_PARTICLES = 220;
@@ -27,6 +27,19 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     { id: 'crystal', name: '晶礦雲帶', desc: '資源較多，高速敵人較常出現。', color: '#ffd166' },
     { id: 'rift', name: '裂隙邊界', desc: '危險裂隙較多，但目標獎勵更高。', color: '#ff4d6d' }
   ];
+  const COMIC = {
+    ink: 0x07080c,
+    paper: 0x111426,
+    shadow: 0x000000,
+    blue: 0x1d5cff,
+    cyan: 0x78f6ff,
+    red: 0xe83b3b,
+    orange: 0xff8c22,
+    gold: 0xffdf68,
+    magenta: 0xff3df2,
+    green: 0x62ff91,
+    white: 0xf6f2dc
+  };
   const ui = {
     wave: document.getElementById('wave'),
     hp: document.getElementById('hp'),
@@ -143,9 +156,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // Phaser engine migration';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // American comic combat style';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.0 已切到 Phaser 引擎：保留飛船生存、敵群清場、波次推進與擊破爆發，先把核心手感搬到可擴充的遊戲引擎。';
+    if (p) p.textContent = 'v7.1 套用美式漫畫戰鬥風格：粗黑描線、半色調網點、強烈紅藍橘色塊，以及少量但有壓迫感的交叉火線。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
       ui.startBtn.textContent = '開始 Phaser 版';
@@ -173,8 +186,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   }
 
   function updateMetaPanels() {
-    if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜Engine Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = '舊 Canvas 版仍保留在 game.js 供回滾；目前首頁載入 Phaser runtime。';
+    if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜Comic Phaser 3.90`;
+    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.1：Phaser runtime 加上美式漫畫描線、網點與火線視覺；舊 Canvas 版仍保留在 game.js 供回滾。';
   }
 
   function hideUpgradeSurfaces() {
@@ -626,16 +639,50 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
 
     drawBackground() {
       const g = this.g;
-      g.fillStyle(0x050712, 1);
+      g.fillStyle(COMIC.paper, 1);
       g.fillRect(0, 0, WORLD.w, WORLD.h);
-      g.lineStyle(1, 0x12304d, 0.34);
-      for (let x = 0; x <= WORLD.w; x += 120) g.lineBetween(x, 0, x, WORLD.h);
-      for (let y = 0; y <= WORLD.h; y += 120) g.lineBetween(0, y, WORLD.w, y);
-      g.lineStyle(2, 0x37f6ff, 0.22);
+
+      // Bold comic-book panel wedges: less neon fog, more printed ink shapes.
+      g.fillStyle(0x173b76, 0.48);
+      g.fillTriangle(0, 0, 980, 0, 0, WORLD.h);
+      g.fillStyle(0x822c2d, 0.38);
+      g.fillTriangle(WORLD.w, 0, WORLD.w, WORLD.h, WORLD.w - 760, WORLD.h);
+      g.fillStyle(0x24172d, 0.44);
+      g.fillTriangle(WORLD.w * 0.18, WORLD.h, WORLD.w * 0.62, 0, WORLD.w * 0.92, WORLD.h);
+
+      g.lineStyle(8, COMIC.ink, 0.78);
+      g.lineBetween(0, WORLD.h, 980, 0);
+      g.lineBetween(WORLD.w - 760, WORLD.h, WORLD.w, 0);
+      g.lineBetween(WORLD.w * 0.18, WORLD.h, WORLD.w * 0.62, 0);
+      g.lineBetween(WORLD.w * 0.92, WORLD.h, WORLD.w * 0.62, 0);
+
+      // Sparse halftone dots, visible enough to read as American comic print.
+      for (let y = 110; y < WORLD.h; y += 132) {
+        for (let x = 90; x < WORLD.w; x += 132) {
+          const wave = Math.sin(x * 0.006 + y * 0.011);
+          const radius = 3 + Math.max(0, wave) * 7;
+          const warmSide = x > WORLD.w * 0.62;
+          g.fillStyle(warmSide ? COMIC.orange : COMIC.cyan, warmSide ? 0.15 : 0.13);
+          g.fillCircle(x, y, radius);
+        }
+      }
+
+      // Graphic speed lines / battlefield seams.
+      g.lineStyle(3, 0xffffff, 0.08);
+      for (let y = 180; y <= WORLD.h; y += 220) g.lineBetween(80, y, WORLD.w - 80, y - 96);
+      g.lineStyle(2, COMIC.ink, 0.46);
+      for (let x = 0; x <= WORLD.w; x += 320) g.lineBetween(x, 0, x - 170, WORLD.h);
+
+      g.lineStyle(7, COMIC.ink, 0.95);
       g.strokeRect(24, 24, WORLD.w - 48, WORLD.h - 48);
+      g.lineStyle(3, COMIC.gold, 0.62);
+      g.strokeRect(34, 34, WORLD.w - 68, WORLD.h - 68);
+
       const zone = ZONE_DEFS.find(z => z.id === meta.selectedZone) || ZONE_DEFS[0];
-      g.fillStyle(PhaserLib.Display.Color.HexStringToColor(zone.color).color, 0.06);
-      g.fillCircle(WORLD.w * 0.5, WORLD.h * 0.5, 520);
+      g.lineStyle(10, COMIC.ink, 0.72);
+      g.strokeCircle(WORLD.w * 0.5, WORLD.h * 0.5, 460);
+      g.fillStyle(PhaserLib.Display.Color.HexStringToColor(zone.color).color, 0.10);
+      g.fillCircle(WORLD.w * 0.5, WORLD.h * 0.5, 450);
     }
 
     drawPlayer() {
@@ -644,58 +691,162 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const flicker = p.invuln > 0 && Math.sin(performance.now() * 0.04) > 0;
       if (flicker) return;
       const a = p.angle;
-      const nose = point(p.x, p.y, a, 24);
-      const left = point(p.x, p.y, a + 2.45, 17);
-      const right = point(p.x, p.y, a - 2.45, 17);
-      g.fillStyle(0xbdfcff, 1);
-      g.fillTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
-      g.lineStyle(2, 0xffffff, 0.85);
+      const nose = point(p.x, p.y, a, 27);
+      const left = point(p.x, p.y, a + 2.46, 21);
+      const right = point(p.x, p.y, a - 2.46, 21);
+      const tail = point(p.x, p.y, a + Math.PI, 18);
+      const leftWing = point(p.x, p.y, a + 2.92, 31);
+      const rightWing = point(p.x, p.y, a - 2.92, 31);
+
+      // Superhero-comic ship silhouette: chunky ink, flat color blocks, hard rim lights.
+      g.lineStyle(13, COMIC.ink, 1);
       g.strokeTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
-      g.lineStyle(2, 0x37f6ff, 0.28);
-      g.strokeCircle(p.x, p.y, 34 + Math.sin(performance.now() * 0.006) * 4);
+      g.fillStyle(COMIC.blue, 1);
+      g.fillTriangle(nose.x, nose.y, left.x, left.y, right.x, right.y);
+
+      g.lineStyle(9, COMIC.ink, 1);
+      g.strokeTriangle(tail.x, tail.y, leftWing.x, leftWing.y, left.x, left.y);
+      g.strokeTriangle(tail.x, tail.y, rightWing.x, rightWing.y, right.x, right.y);
+      g.fillStyle(COMIC.red, 0.98);
+      g.fillTriangle(tail.x, tail.y, leftWing.x, leftWing.y, left.x, left.y);
+      g.fillStyle(COMIC.gold, 0.96);
+      g.fillTriangle(tail.x, tail.y, rightWing.x, rightWing.y, right.x, right.y);
+
+      const canopy = point(p.x, p.y, a, 4);
+      g.lineStyle(5, COMIC.ink, 1);
+      g.fillStyle(COMIC.white, 1);
+      g.fillCircle(canopy.x, canopy.y, 7);
+      g.strokeCircle(canopy.x, canopy.y, 7);
+      g.lineStyle(4, COMIC.cyan, 0.9);
+      g.lineBetween(tail.x, tail.y, nose.x, nose.y);
+
+      const flare1 = point(p.x, p.y, a + Math.PI, 30);
+      const flare2 = point(p.x, p.y, a + Math.PI + 0.28, 46);
+      const flare3 = point(p.x, p.y, a + Math.PI - 0.28, 46);
+      g.lineStyle(5, COMIC.ink, 0.9);
+      g.strokeTriangle(tail.x, tail.y, flare2.x, flare2.y, flare3.x, flare3.y);
+      g.fillStyle(COMIC.orange, 0.74);
+      g.fillTriangle(tail.x, tail.y, flare2.x, flare2.y, flare3.x, flare3.y);
+      g.fillStyle(COMIC.gold, 0.9);
+      g.fillCircle(flare1.x, flare1.y, 7);
+
+      g.lineStyle(4, COMIC.ink, 0.68);
+      g.strokeCircle(p.x, p.y, 35 + Math.sin(performance.now() * 0.006) * 3);
+      g.lineStyle(2, COMIC.cyan, 0.32);
+      g.strokeCircle(p.x, p.y, 38 + Math.sin(performance.now() * 0.006) * 3);
     }
 
     drawEnemies() {
       const g = this.g;
       for (const e of this.enemies) {
-        const color = PhaserLib.Display.Color.HexStringToColor(e.hit > 0 ? '#ffffff' : e.color).color;
-        g.fillStyle(color, e.type === 'boss' ? 0.95 : 0.88);
+        const base = PhaserLib.Display.Color.HexStringToColor(e.hit > 0 ? '#f6f2dc' : e.color).color;
+        g.fillStyle(COMIC.shadow, 0.32);
+        g.fillEllipse(e.x + 5, e.y + 9, e.r * 2.2, e.r * 0.8);
+
         if (e.type === 'sprinter') {
-          g.fillTriangle(e.x + e.r, e.y, e.x - e.r, e.y - e.r * 0.8, e.x - e.r, e.y + e.r * 0.8);
+          g.lineStyle(8, COMIC.ink, 1);
+          g.strokeTriangle(e.x + e.r * 1.35, e.y, e.x - e.r * 1.05, e.y - e.r, e.x - e.r * 1.05, e.y + e.r);
+          g.fillStyle(COMIC.orange, 1);
+          g.fillTriangle(e.x + e.r * 1.35, e.y, e.x - e.r * 1.05, e.y - e.r, e.x - e.r * 1.05, e.y + e.r);
+          g.lineStyle(3, COMIC.gold, 0.9);
+          g.lineBetween(e.x - e.r * 0.55, e.y, e.x + e.r * 0.9, e.y);
         } else if (e.type === 'shooter') {
-          g.fillStyle(color, 0.86);
+          g.lineStyle(8, COMIC.ink, 1);
+          g.fillStyle(COMIC.magenta, 0.98);
           g.fillCircle(e.x, e.y, e.r);
-          g.lineStyle(2, 0xff3df2, 0.55);
-          g.strokeCircle(e.x, e.y, e.r + 5);
+          g.strokeCircle(e.x, e.y, e.r);
+          g.lineStyle(4, COMIC.white, 0.78);
+          g.lineBetween(e.x - e.r, e.y, e.x + e.r, e.y);
+          g.lineBetween(e.x, e.y - e.r, e.x, e.y + e.r);
+          g.lineStyle(3, COMIC.gold, 0.62);
+          g.strokeCircle(e.x, e.y, e.r + 7);
+        } else if (e.type === 'tank') {
+          g.lineStyle(9, COMIC.ink, 1);
+          g.fillStyle(0x334a9b, 1);
+          g.fillRoundedRect(e.x - e.r * 1.1, e.y - e.r * 0.82, e.r * 2.2, e.r * 1.64, 8);
+          g.strokeRoundedRect(e.x - e.r * 1.1, e.y - e.r * 0.82, e.r * 2.2, e.r * 1.64, 8);
+          g.fillStyle(COMIC.cyan, 0.85);
+          g.fillRect(e.x - e.r * 0.6, e.y - 3, e.r * 1.2, 6);
         } else if (e.type === 'boss') {
-          g.fillStyle(0xff4d6d, 0.9);
+          g.lineStyle(12, COMIC.ink, 1);
+          g.fillStyle(COMIC.red, 1);
           g.fillCircle(e.x, e.y, e.r);
-          g.lineStyle(4, 0xffd166, 0.72);
-          g.strokeCircle(e.x, e.y, e.r + 10);
+          g.strokeCircle(e.x, e.y, e.r);
+          g.lineStyle(6, COMIC.gold, 0.94);
+          g.strokeCircle(e.x, e.y, e.r + 12);
+          g.lineStyle(5, COMIC.ink, 0.86);
+          g.lineBetween(e.x - e.r * 0.75, e.y - e.r * 0.25, e.x + e.r * 0.75, e.y - e.r * 0.25);
+          g.fillStyle(COMIC.white, 1);
+          g.fillCircle(e.x - e.r * 0.32, e.y - e.r * 0.18, 5);
+          g.fillCircle(e.x + e.r * 0.32, e.y - e.r * 0.18, 5);
         } else {
+          g.lineStyle(8, COMIC.ink, 1);
+          g.fillStyle(base, 0.98);
           g.fillCircle(e.x, e.y, e.r);
+          g.strokeCircle(e.x, e.y, e.r);
+          g.lineStyle(3, COMIC.white, 0.54);
+          g.lineBetween(e.x - e.r * 0.5, e.y - e.r * 0.35, e.x + e.r * 0.45, e.y + e.r * 0.35);
         }
+
         if (e.hp < e.maxHp) {
-          g.fillStyle(0x07101f, 0.75);
-          g.fillRect(e.x - e.r, e.y - e.r - 10, e.r * 2, 4);
-          g.fillStyle(0x4dff88, 0.9);
-          g.fillRect(e.x - e.r, e.y - e.r - 10, e.r * 2 * clamp(e.hp / e.maxHp, 0, 1), 4);
+          g.lineStyle(3, COMIC.ink, 1);
+          g.fillStyle(COMIC.ink, 0.95);
+          g.fillRect(e.x - e.r - 2, e.y - e.r - 15, e.r * 2 + 4, 8);
+          g.fillStyle(COMIC.green, 0.98);
+          g.fillRect(e.x - e.r, e.y - e.r - 13, e.r * 2 * clamp(e.hp / e.maxHp, 0, 1), 4);
         }
       }
     }
 
     drawBullets() {
       const g = this.g;
-      g.fillStyle(0xbdfcff, 0.96);
-      for (const b of this.bullets) g.fillCircle(b.x, b.y, b.r);
-      g.fillStyle(0xff3df2, 0.9);
-      for (const s of this.enemyShots) g.fillCircle(s.x, s.y, s.r);
+      for (const b of this.bullets) {
+        const speed = Math.hypot(b.vx, b.vy) || 1;
+        const nx = b.vx / speed;
+        const ny = b.vy / speed;
+        const tailX = b.x - nx * 56;
+        const tailY = b.y - ny * 56;
+        // Few but strong tracer lanes: black ink edge + hot comic core.
+        g.lineStyle(16, COMIC.ink, 0.95);
+        g.lineBetween(tailX, tailY, b.x + nx * 8, b.y + ny * 8);
+        g.lineStyle(10, COMIC.orange, 0.96);
+        g.lineBetween(tailX, tailY, b.x + nx * 7, b.y + ny * 7);
+        g.lineStyle(3, COMIC.white, 1);
+        g.lineBetween(tailX + nx * 10, tailY + ny * 10, b.x + nx * 9, b.y + ny * 9);
+        g.fillStyle(COMIC.gold, 1);
+        g.fillCircle(b.x, b.y, b.r + 1.2);
+      }
+      for (const s of this.enemyShots) {
+        const speed = Math.hypot(s.vx, s.vy) || 1;
+        const nx = s.vx / speed;
+        const ny = s.vy / speed;
+        const tailX = s.x - nx * 70;
+        const tailY = s.y - ny * 70;
+        g.lineStyle(17, COMIC.ink, 0.96);
+        g.lineBetween(tailX, tailY, s.x + nx * 6, s.y + ny * 6);
+        g.lineStyle(10, COMIC.red, 0.94);
+        g.lineBetween(tailX, tailY, s.x + nx * 6, s.y + ny * 6);
+        g.lineStyle(3, COMIC.gold, 1);
+        g.lineBetween(tailX + nx * 14, tailY + ny * 14, s.x + nx * 8, s.y + ny * 8);
+        g.fillStyle(COMIC.magenta, 0.96);
+        g.fillCircle(s.x, s.y, s.r + 1.4);
+      }
     }
 
     drawDrops() {
       const g = this.g;
-      g.fillStyle(0xffd166, 0.95);
-      for (const s of this.shards) g.fillCircle(s.x, s.y, s.r);
+      for (const s of this.shards) {
+        const r = s.r + 3;
+        g.lineStyle(4, COMIC.ink, 1);
+        g.strokeTriangle(s.x, s.y - r, s.x + r, s.y, s.x, s.y + r);
+        g.strokeTriangle(s.x, s.y - r, s.x - r, s.y, s.x, s.y + r);
+        g.fillStyle(COMIC.gold, 0.98);
+        g.fillTriangle(s.x, s.y - r, s.x + r, s.y, s.x, s.y + r);
+        g.fillStyle(COMIC.orange, 0.94);
+        g.fillTriangle(s.x, s.y - r, s.x - r, s.y, s.x, s.y + r);
+        g.fillStyle(COMIC.white, 0.88);
+        g.fillCircle(s.x + 1, s.y - 2, 2);
+      }
     }
 
     drawParticles() {
@@ -704,11 +855,23 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         const alpha = clamp(p.life / (p.max || 0.5), 0, 1);
         const color = PhaserLib.Display.Color.HexStringToColor(p.color || '#ffffff').color;
         if (p.ring) {
-          g.lineStyle(4, color, alpha * 0.82);
+          g.lineStyle(9, COMIC.ink, alpha * 0.78);
           g.strokeCircle(p.x, p.y, p.r);
+          g.lineStyle(5, color, alpha * 0.92);
+          g.strokeCircle(p.x, p.y, p.r);
+          g.lineStyle(2, COMIC.white, alpha * 0.6);
+          g.strokeCircle(p.x, p.y, p.r + 7);
         } else {
+          const tail = Math.min(24, Math.hypot(p.vx, p.vy) * 0.045);
+          const speed = Math.hypot(p.vx, p.vy) || 1;
+          const tx = p.x - (p.vx / speed) * tail;
+          const ty = p.y - (p.vy / speed) * tail;
+          g.lineStyle(Math.max(3, p.r + 4), COMIC.ink, alpha * 0.78);
+          g.lineBetween(tx, ty, p.x, p.y);
+          g.lineStyle(Math.max(2, p.r), color, alpha);
+          g.lineBetween(tx, ty, p.x, p.y);
           g.fillStyle(color, alpha);
-          g.fillCircle(p.x, p.y, p.r);
+          g.fillCircle(p.x, p.y, Math.max(2, p.r));
         }
       }
     }
@@ -739,14 +902,23 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     drawScreenHints() {
       const g = this.uiG;
       if (this.messageTimer > 0) {
-        g.fillStyle(0x050712, 0.58);
-        g.fillRoundedRect(this.scale.width / 2 - 190, 86, 380, 34, 14);
-        g.lineStyle(1, 0x37f6ff, 0.48);
-        g.strokeRoundedRect(this.scale.width / 2 - 190, 86, 380, 34, 14);
+        g.fillStyle(COMIC.ink, 0.88);
+        g.fillRoundedRect(this.scale.width / 2 - 214, 82, 428, 42, 10);
+        g.lineStyle(4, COMIC.gold, 0.92);
+        g.strokeRoundedRect(this.scale.width / 2 - 214, 82, 428, 42, 10);
+        g.lineStyle(2, COMIC.red, 0.75);
+        g.lineBetween(this.scale.width / 2 - 194, 123, this.scale.width / 2 + 194, 83);
         if (this.bannerText) {
           this.bannerText.setVisible(true);
-          this.bannerText.setText(this.message);
+          this.bannerText.setText(`★ ${this.message} ★`);
           this.bannerText.setPosition(this.scale.width / 2, 103);
+          this.bannerText.setStyle({
+            fontFamily: 'Impact, ui-sans-serif, system-ui, sans-serif',
+            fontSize: '17px',
+            color: '#ffdf68',
+            stroke: '#07080c',
+            strokeThickness: 6
+          });
         }
       } else if (this.bannerText) {
         this.bannerText.setVisible(false);
@@ -754,10 +926,14 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       if (meta.controlMode === 'touch' && this.touchVector) {
         const cx = this.scale.width / 2;
         const cy = this.scale.height / 2;
-        g.lineStyle(3, 0xbdfcff, 0.34);
+        g.lineStyle(7, COMIC.ink, 0.74);
         g.strokeCircle(cx, cy, 54);
-        g.fillStyle(0xbdfcff, 0.26);
-        g.fillCircle(cx + this.touchVector.x * 42 * this.touchVector.force, cy + this.touchVector.y * 42 * this.touchVector.force, 14);
+        g.lineStyle(3, COMIC.cyan, 0.55);
+        g.strokeCircle(cx, cy, 54);
+        g.fillStyle(COMIC.gold, 0.34);
+        g.fillCircle(cx + this.touchVector.x * 42 * this.touchVector.force, cy + this.touchVector.y * 42 * this.touchVector.force, 16);
+        g.lineStyle(4, COMIC.ink, 0.8);
+        g.strokeCircle(cx + this.touchVector.x * 42 * this.touchVector.force, cy + this.touchVector.y * 42 * this.touchVector.force, 16);
       }
     }
   }
