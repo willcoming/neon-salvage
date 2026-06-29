@@ -17,7 +17,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.3 背景造型版';
+  const VERSION = 'v7.4 造型與多 Boss 版';
   const WORLD = { w: 3200, h: 2200 };
   const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 14 };
   const MAX_PARTICLES = 320;
@@ -175,12 +175,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 背景造型版';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // 造型與多 Boss 版';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.3 加上星域背景、漂浮殘骸、晶礦裂隙與路線塗裝；飛船和敵人不再只是幾何圖形，而是有清楚輪廓與部件。';
+    if (p) p.textContent = 'v7.4 加強飛機與敵人造型，敵人有不同攻擊方式，Boss 會依星域與波次變成不同型態。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
-      ui.startBtn.textContent = '開始 v7.3';
+      ui.startBtn.textContent = '開始 v7.4';
     }
     if (ui.howBtn) ui.howBtn.style.display = '';
   }
@@ -208,7 +208,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   function updateMetaPanels() {
     const style = currentRouteStyle();
     if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜${style.shipName}｜Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.3：新增星域遠景、殘骸/晶礦/裂隙地景、路線塗裝、飛船艙蓋與敵人部件造型；舊 Canvas 版仍保留在 game.js 供回滾。';
+    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.4：強化飛機/敵人造型，新增爆破者、坦克散彈、射手預瞄、閃擊衝刺提示與多 Boss 型態；同時延續滿版舞台修正。';
   }
 
   function hideUpgradeSurfaces() {
@@ -275,8 +275,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     }
 
     onResize(gameSize) {
-      document.documentElement.style.setProperty('--app-height', `${gameSize.height}px`);
-      this.cameras.main.setViewport(0, 0, gameSize.width, gameSize.height);
+      const size = syncViewportVars(gameSize);
+      this.cameras.main.setViewport(0, 0, size.width, size.height);
     }
 
     startRun() {
@@ -298,12 +298,13 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.waveBudget = waveEnemyBudgetValue({ wave: n, controlMode: meta.controlMode, difficulty: difficultyFor(meta.difficulty), route: zoneRouteEffect() });
       if (n % 5 === 0) this.waveBudget = 1;
       this.spawnClock = 0.05;
-      this.message = n % 5 === 0 ? `第 ${n} 波｜核心守衛` : `第 ${n} 波｜敵群 ${this.waveBudget}`;
+      const bossKind = n % 5 === 0 ? bossKindForWave(n) : null;
+      this.message = bossKind ? `第 ${n} 波｜${bossName(bossKind)}` : `第 ${n} 波｜敵群 ${this.waveBudget}`;
       this.messageTimer = 2.2;
       flash(this.message);
-      this.screenFlash = Math.max(this.screenFlash, n % 5 === 0 ? 0.24 : 0.13);
-      this.screenFlashColor = n % 5 === 0 ? '#e83b3b' : '#ffdf68';
-      this.comicSplash(this.player.x, this.player.y, n % 5 === 0 ? 'BOSS!!' : 'WAVE!', n % 5 === 0 ? '#e83b3b' : '#ffdf68');
+      this.screenFlash = Math.max(this.screenFlash, bossKind ? 0.24 : 0.13);
+      this.screenFlashColor = bossKind ? bossColor(bossKind) : '#ffdf68';
+      this.comicSplash(this.player.x, this.player.y, bossKind ? 'BOSS!!' : 'WAVE!', bossKind ? bossColor(bossKind) : '#ffdf68');
     }
 
     handlePointerDown(pointer) {
@@ -384,11 +385,14 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const px = clamp(this.player.x + Math.cos(angle) * radius, 80, WORLD.w - 80);
       const py = clamp(this.player.y + Math.sin(angle) * radius, 80, WORLD.h - 80);
       const boss = type === 'boss';
+      const bossKind = boss ? bossKindForWave(this.wave) : null;
       const hpScale = difficultyFor(meta.difficulty).enemy || 1;
-      const def = enemyDef(type, this.wave);
+      const def = enemyDef(type, this.wave, bossKind);
       const enemy = {
-        type, x: px, y: py, vx: 0, vy: 0, r: boss ? 38 : def.r, hp: def.hp * hpScale, maxHp: def.hp * hpScale,
-        speed: def.speed * (difficultyFor(meta.difficulty).speed || 1), color: def.color, shotClock: PhaserLib.Math.FloatBetween(0.4, 1.6), dashClock: 0, hit: 0
+        type, bossKind, x: px, y: py, vx: 0, vy: 0, r: def.r, hp: def.hp * hpScale, maxHp: def.hp * hpScale,
+        speed: def.speed * (difficultyFor(meta.difficulty).speed || 1), color: def.color,
+        shotClock: PhaserLib.Math.FloatBetween(boss ? 0.8 : 0.4, boss ? 1.7 : 1.6), dashClock: 0,
+        blastClock: 0, attackFlash: 0, phase: PhaserLib.Math.FloatBetween(0, Math.PI * 2), hit: 0
       };
       this.enemies.push(enemy);
       return enemy;
@@ -443,42 +447,139 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     updateEnemies(dt) {
       for (const e of this.enemies) {
         e.hit = Math.max(0, e.hit - dt);
+        e.attackFlash = Math.max(0, (e.attackFlash || 0) - dt);
+        e.phase = (e.phase || 0) + dt;
         const a = angleBetween(e.x, e.y, this.player.x, this.player.y);
         const d = dist(e.x, e.y, this.player.x, this.player.y);
         let desired = a;
         let speed = e.speed;
-        if (e.type === 'shooter' && d < 420) desired = a + Math.PI;
+
+        if (e.type === 'shooter' && d < 440) desired = a + Math.PI;
+        if (e.type === 'tank' && d < 280) desired = a + Math.PI;
+        if (e.type === 'bomber') {
+          if (d < 190) {
+            speed *= 0.58;
+            e.blastClock = Math.min(1.05, (e.blastClock || 0) + dt);
+          } else {
+            e.blastClock = Math.max(0, (e.blastClock || 0) - dt * 0.5);
+          }
+        }
         if (e.type === 'sprinter') {
           e.dashClock -= dt;
           if (e.dashClock <= -1.0) e.dashClock = 0.42;
           if (e.dashClock > 0) {
-            speed *= 1.85;
+            speed *= 1.92;
             e.dashClock -= dt;
           }
         }
-        if (e.type === 'boss') speed *= d > 360 ? 0.72 : 0.18;
+        if (e.type === 'boss') {
+          const kind = e.bossKind || 'warden';
+          const far = d > (kind === 'artillery' ? 520 : 360);
+          const bossSpeed = kind === 'ironclad' ? (far ? 0.42 : 0.12)
+            : kind === 'riftlord' ? (far ? 0.86 : 0.24)
+              : kind === 'crystalQueen' ? (far ? 0.66 : 0.16)
+                : (far ? 0.72 : 0.18);
+          speed *= bossSpeed;
+          if (kind === 'artillery' && d < 620) desired = a + Math.PI * 0.72;
+        }
+
         e.vx = Math.cos(desired) * speed;
         e.vy = Math.sin(desired) * speed;
         e.x = clamp(e.x + e.vx * dt, 35, WORLD.w - 35);
         e.y = clamp(e.y + e.vy * dt, 35, WORLD.h - 35);
 
-        if ((e.type === 'shooter' || e.type === 'boss') && d < 780) {
-          e.shotClock -= dt;
-          if (e.shotClock <= 0) {
-            const spread = e.type === 'boss' ? [-0.22, 0, 0.22] : [0];
-            for (const off of spread) this.enemyShots.push({ x: e.x, y: e.y, vx: Math.cos(a + off) * 260, vy: Math.sin(a + off) * 260, life: 3.2, r: 5, damage: e.type === 'boss' ? 16 : 9 });
-            e.shotClock = e.type === 'boss' ? 1.15 : 1.7;
-          }
+        if (e.type === 'bomber' && e.blastClock >= 0.95) {
+          this.enemyBlast(e);
+          continue;
         }
 
+        this.updateEnemyAttacks(e, a, d, dt);
+
         if (d < e.r + PLAYER_BASE.radius) {
-          this.damagePlayer(e.type === 'boss' ? 22 : 13, e.x, e.y);
+          this.damagePlayer(e.type === 'boss' ? 22 : e.type === 'bomber' ? 18 : 13, e.x, e.y);
           const push = angleBetween(e.x, e.y, this.player.x, this.player.y);
           this.player.x = clamp(this.player.x + Math.cos(push) * 28, 60, WORLD.w - 60);
           this.player.y = clamp(this.player.y + Math.sin(push) * 28, 60, WORLD.h - 60);
         }
       }
       this.enemies = this.enemies.filter(e => !e.dead);
+    }
+
+    updateEnemyAttacks(e, a, d, dt) {
+      if (e.type === 'shooter' && d < 840) {
+        e.shotClock -= dt;
+        if (e.shotClock <= 0) {
+          const spread = this.wave >= 6 ? [-0.16, 0, 0.16] : [0];
+          for (const off of spread) this.enemyShot(e, a + off, 310, 3.25, 5, 9, '#ff3df2');
+          e.attackFlash = 0.22;
+          e.shotClock = 1.35;
+        }
+      }
+      if (e.type === 'tank' && d < 680) {
+        e.shotClock -= dt;
+        if (e.shotClock <= 0) {
+          for (const off of [-0.48, 0, 0.48]) this.enemyShot(e, a + off, 220, 3.7, 6, 11, '#8aa3ff');
+          e.attackFlash = 0.28;
+          e.shotClock = 2.05;
+        }
+      }
+      if (e.type === 'boss' && d < 940) this.bossAttack(e, a, dt);
+    }
+
+    bossAttack(e, a, dt) {
+      e.shotClock -= dt;
+      if (e.shotClock > 0) return;
+      const kind = e.bossKind || 'warden';
+      e.attackFlash = 0.42;
+      if (kind === 'artillery') {
+        for (const off of [-0.64, -0.32, 0, 0.32, 0.64]) this.enemyShot(e, a + off, 245, 4.2, 7, 13, '#ff8c22');
+        this.enemyShot(e, a, 170, 5.0, 11, 18, '#ffd166');
+        e.shotClock = 1.75;
+      } else if (kind === 'riftlord') {
+        for (const off of [-0.72, -0.36, 0.36, 0.72]) this.enemyShot(e, a + off, 300, 3.0, 5, 12, '#ff3df2');
+        for (const dir of [0, Math.PI * 0.5, Math.PI, Math.PI * 1.5]) this.enemyShot(e, dir + e.phase * 0.28, 230, 3.4, 5.5, 10, '#ff4d6d');
+        e.shotClock = 1.25;
+      } else if (kind === 'crystalQueen') {
+        for (let i = 0; i < 8; i++) this.enemyShot(e, e.phase * 0.35 + i * Math.PI * 2 / 8, 210, 4.1, 5, 10, i % 2 ? '#62ff91' : '#ffd166');
+        this.enemyShot(e, a, 330, 2.7, 5, 12, '#ffd166');
+        e.shotClock = 1.45;
+      } else if (kind === 'ironclad') {
+        for (const off of [-0.38, 0, 0.38]) this.enemyShot(e, a + off, 190, 4.8, 9, 17, '#8aa3ff');
+        e.shotClock = 2.15;
+      } else if (kind === 'starcore') {
+        for (let i = 0; i < 12; i++) this.enemyShot(e, e.phase * 0.22 + i * Math.PI * 2 / 12, 235, 3.7, 5, 11, '#ffdf68');
+        for (const off of [-0.18, 0, 0.18]) this.enemyShot(e, a + off, 300, 3.1, 5, 14, '#ff4d6d');
+        e.shotClock = 1.18;
+      } else {
+        for (const off of [-0.34, 0, 0.34]) this.enemyShot(e, a + off, 270, 3.4, 5, 13, '#ff4d6d');
+        e.shotClock = 1.32;
+      }
+      this.addFloatingText(e.x, e.y - e.r - 18, bossName(kind), bossColor(kind), 520, 15);
+    }
+
+    enemyShot(e, angle, speed, life, radius, damage, color = '#ff4d6d') {
+      this.enemyShots.push({
+        x: e.x + Math.cos(angle) * (e.r + 8),
+        y: e.y + Math.sin(angle) * (e.r + 8),
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life,
+        r: radius,
+        damage,
+        color
+      });
+    }
+
+    enemyBlast(e) {
+      if (e.dead) return;
+      e.dead = true;
+      const radius = 146;
+      this.particles.push({ x: e.x, y: e.y, vx: 0, vy: 0, r: 20, grow: radius * 3.2, life: 0.32, max: 0.32, color: '#ff8c22', ring: true });
+      this.comicSplash(e.x, e.y, 'BOOM!', '#ff8c22', 1.08);
+      this.addShake(5, 0.16);
+      beep('hurt');
+      haptic(20);
+      if (dist(e.x, e.y, this.player.x, this.player.y) < radius + PLAYER_BASE.radius) this.damagePlayer(24, e.x, e.y);
     }
 
     updateDrops(dt) {
@@ -560,11 +661,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       const boss = e.type === 'boss';
       this.kills++;
       meta.score += boss ? 550 : 70;
-      this.addFloatingText(e.x, e.y - e.r, boss ? 'CORE BREAK' : '+KILL', boss ? '#ffd166' : '#bdfcff', 800);
-      this.burst(e.x, e.y, boss ? '#ffd166' : e.color, boss ? 34 : 13, boss ? 1.45 : 0.8);
-      this.comicSplash(e.x, e.y, boss ? 'KRAK!!' : 'BLAM!', boss ? '#ffdf68' : e.color, boss ? 1.28 : 0.82);
+      const color = boss ? bossColor(e.bossKind || 'warden') : e.color;
+      this.addFloatingText(e.x, e.y - e.r, boss ? bossName(e.bossKind || 'warden') : '+KILL', boss ? color : '#bdfcff', 800);
+      this.burst(e.x, e.y, color, boss ? 34 : 13, boss ? 1.45 : 0.8);
+      this.comicSplash(e.x, e.y, boss ? 'KRAK!!' : 'BLAM!', boss ? color : e.color, boss ? 1.28 : 0.82);
       this.screenFlash = Math.max(this.screenFlash, boss ? 0.22 : 0.08);
-      this.screenFlashColor = boss ? '#ffdf68' : '#78f6ff';
+      this.screenFlashColor = boss ? color : '#78f6ff';
       this.dropShards(e.x, e.y, boss ? 18 : PhaserLib.Math.Between(2, 4));
       beep(boss ? 'surge' : 'hit');
       haptic(boss ? 38 : 10);
@@ -935,6 +1037,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         const base = PhaserLib.Display.Color.HexStringToColor(e.hit > 0 ? '#f6f2dc' : e.color).color;
         g.fillStyle(COMIC.shadow, 0.32);
         g.fillEllipse(e.x + 5, e.y + 9, e.r * 2.2, e.r * 0.8);
+        this.drawEnemyTelegraph(e);
 
         if (e.type === 'sprinter') {
           g.lineStyle(8, COMIC.ink, 1);
@@ -960,13 +1063,42 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           g.strokeRoundedRect(e.x - e.r * 1.1, e.y - e.r * 0.82, e.r * 2.2, e.r * 1.64, 8);
           g.fillStyle(COMIC.cyan, 0.85);
           g.fillRect(e.x - e.r * 0.6, e.y - 3, e.r * 1.2, 6);
+        } else if (e.type === 'bomber') {
+          const pulse = 1 + (e.blastClock || 0) * 0.28;
+          g.lineStyle(8, COMIC.ink, 1);
+          g.fillStyle(0xff8c22, 0.98);
+          g.fillTriangle(e.x, e.y - e.r * 1.35 * pulse, e.x + e.r * 1.25, e.y, e.x, e.y + e.r * 1.35 * pulse);
+          g.fillTriangle(e.x, e.y - e.r * 1.35 * pulse, e.x - e.r * 1.25, e.y, e.x, e.y + e.r * 1.35 * pulse);
+          g.strokeTriangle(e.x, e.y - e.r * 1.35 * pulse, e.x + e.r * 1.25, e.y, e.x, e.y + e.r * 1.35 * pulse);
+          g.strokeTriangle(e.x, e.y - e.r * 1.35 * pulse, e.x - e.r * 1.25, e.y, e.x, e.y + e.r * 1.35 * pulse);
+          g.fillStyle(COMIC.red, 0.88);
+          g.fillCircle(e.x, e.y, e.r * 0.45);
         } else if (e.type === 'boss') {
+          const kind = e.bossKind || 'warden';
+          const bossBase = colorValue(bossColor(kind));
           g.lineStyle(12, COMIC.ink, 1);
-          g.fillStyle(COMIC.red, 1);
-          g.fillCircle(e.x, e.y, e.r);
-          g.strokeCircle(e.x, e.y, e.r);
-          g.lineStyle(6, COMIC.gold, 0.94);
-          g.strokeCircle(e.x, e.y, e.r + 12);
+          g.fillStyle(bossBase, 1);
+          if (kind === 'ironclad') {
+            g.fillRoundedRect(e.x - e.r * 1.18, e.y - e.r * 0.82, e.r * 2.36, e.r * 1.64, 14);
+            g.strokeRoundedRect(e.x - e.r * 1.18, e.y - e.r * 0.82, e.r * 2.36, e.r * 1.64, 14);
+          } else if (kind === 'crystalQueen') {
+            g.fillTriangle(e.x, e.y - e.r * 1.32, e.x + e.r * 1.12, e.y, e.x, e.y + e.r * 1.32);
+            g.fillTriangle(e.x, e.y - e.r * 1.32, e.x - e.r * 1.12, e.y, e.x, e.y + e.r * 1.32);
+            g.strokeTriangle(e.x, e.y - e.r * 1.32, e.x + e.r * 1.12, e.y, e.x, e.y + e.r * 1.32);
+            g.strokeTriangle(e.x, e.y - e.r * 1.32, e.x - e.r * 1.12, e.y, e.x, e.y + e.r * 1.32);
+          } else if (kind === 'riftlord') {
+            g.fillCircle(e.x, e.y, e.r);
+            g.strokeCircle(e.x, e.y, e.r);
+            g.lineStyle(9, COMIC.ink, 0.92);
+            g.lineBetween(e.x - e.r * 0.9, e.y + e.r * 0.8, e.x + e.r * 0.9, e.y - e.r * 0.8);
+            g.lineStyle(5, COMIC.magenta, 0.95);
+            g.lineBetween(e.x - e.r * 0.9, e.y + e.r * 0.8, e.x + e.r * 0.9, e.y - e.r * 0.8);
+          } else {
+            g.fillCircle(e.x, e.y, e.r);
+            g.strokeCircle(e.x, e.y, e.r);
+          }
+          g.lineStyle(6, COMIC.gold, e.attackFlash > 0 ? 1 : 0.72);
+          g.strokeCircle(e.x, e.y, e.r + 12 + (e.attackFlash || 0) * 18);
           g.lineStyle(5, COMIC.ink, 0.86);
           g.lineBetween(e.x - e.r * 0.75, e.y - e.r * 0.25, e.x + e.r * 0.75, e.y - e.r * 0.25);
           g.fillStyle(COMIC.white, 1);
@@ -990,6 +1122,47 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           g.fillStyle(COMIC.green, 0.98);
           g.fillRect(e.x - e.r, e.y - e.r - 13, e.r * 2 * clamp(e.hp / e.maxHp, 0, 1), 4);
         }
+      }
+    }
+
+    drawEnemyTelegraph(e) {
+      const g = this.g;
+      if (e.type === 'sprinter' && e.dashClock < -0.62) {
+        const a = angleBetween(e.x, e.y, this.player.x, this.player.y);
+        const end = point(e.x, e.y, a, 150);
+        g.lineStyle(10, COMIC.ink, 0.34);
+        g.lineBetween(e.x, e.y, end.x, end.y);
+        g.lineStyle(4, COMIC.orange, 0.56);
+        g.lineBetween(e.x, e.y, end.x, end.y);
+      }
+      if (e.type === 'shooter' && e.shotClock < 0.34) {
+        g.lineStyle(5, COMIC.ink, 0.34);
+        g.lineBetween(e.x, e.y, this.player.x, this.player.y);
+        g.lineStyle(2, COMIC.magenta, 0.48);
+        g.lineBetween(e.x, e.y, this.player.x, this.player.y);
+      }
+      if (e.type === 'tank' && e.shotClock < 0.56) {
+        const grow = 1 - clamp(e.shotClock / 0.56, 0, 1);
+        g.lineStyle(7, COMIC.ink, 0.26 + grow * 0.16);
+        g.strokeCircle(e.x, e.y, e.r + 30 + grow * 24);
+        g.lineStyle(3, COMIC.cyan, 0.34 + grow * 0.25);
+        g.strokeCircle(e.x, e.y, e.r + 30 + grow * 24);
+      }
+      if (e.type === 'bomber' && e.blastClock > 0.05) {
+        const alpha = clamp(e.blastClock, 0, 1);
+        g.lineStyle(8, COMIC.ink, 0.36 + alpha * 0.24);
+        g.strokeCircle(e.x, e.y, 146 * alpha);
+        g.lineStyle(4, COMIC.orange, 0.42 + alpha * 0.36);
+        g.strokeCircle(e.x, e.y, 146 * alpha);
+      }
+      if (e.type === 'boss' && e.shotClock < 0.58) {
+        const kind = e.bossKind || 'warden';
+        const alpha = 1 - clamp(e.shotClock / 0.58, 0, 1);
+        const c = colorValue(bossColor(kind));
+        g.lineStyle(10, COMIC.ink, 0.28 + alpha * 0.22);
+        g.strokeCircle(e.x, e.y, e.r + 38 + alpha * 34);
+        g.lineStyle(4, c, 0.34 + alpha * 0.40);
+        g.strokeCircle(e.x, e.y, e.r + 38 + alpha * 34);
       }
     }
 
@@ -1024,6 +1197,15 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         }
         g.lineStyle(4, COMIC.gold, 0.64);
         g.lineBetween(e.x - e.r * 0.92, e.y, e.x + e.r * 0.92, e.y);
+        return;
+      }
+      if (e.type === 'bomber') {
+        const fuse = clamp(e.blastClock || 0, 0, 1);
+        g.lineStyle(5, COMIC.ink, 0.9);
+        g.lineBetween(e.x - e.r * 0.62, e.y - e.r * 0.62, e.x + e.r * 0.62, e.y + e.r * 0.62);
+        g.lineBetween(e.x + e.r * 0.62, e.y - e.r * 0.62, e.x - e.r * 0.62, e.y + e.r * 0.62);
+        g.fillStyle(COMIC.gold, 0.72 + fuse * 0.22);
+        g.fillCircle(e.x, e.y - e.r * 0.82, 3 + fuse * 5);
         return;
       }
       if (e.type === 'boss') {
@@ -1079,13 +1261,14 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         const ny = s.vy / speed;
         const tailX = s.x - nx * 70;
         const tailY = s.y - ny * 70;
+        const shotColor = s.color ? colorValue(s.color) : COMIC.red;
         g.lineStyle(17, COMIC.ink, 0.96);
         g.lineBetween(tailX, tailY, s.x + nx * 6, s.y + ny * 6);
-        g.lineStyle(10, COMIC.red, 0.94);
+        g.lineStyle(Math.max(8, s.r + 5), shotColor, 0.94);
         g.lineBetween(tailX, tailY, s.x + nx * 6, s.y + ny * 6);
         g.lineStyle(3, COMIC.gold, 1);
         g.lineBetween(tailX + nx * 14, tailY + ny * 14, s.x + nx * 8, s.y + ny * 8);
-        g.fillStyle(COMIC.magenta, 0.96);
+        g.fillStyle(shotColor, 0.96);
         g.fillCircle(s.x, s.y, s.r + 1.4);
       }
     }
@@ -1312,6 +1495,20 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     return PhaserLib.Display.Color.HexStringToColor(hex).color;
   }
 
+  function viewportSize(fallback = {}) {
+    const vv = window.visualViewport;
+    const width = Math.max(1, Math.round(vv?.width || fallback.width || window.innerWidth || document.documentElement.clientWidth || 1));
+    const height = Math.max(1, Math.round(vv?.height || fallback.height || window.innerHeight || document.documentElement.clientHeight || 1));
+    return { width, height };
+  }
+
+  function syncViewportVars(fallback = {}) {
+    const size = viewportSize(fallback);
+    document.documentElement.style.setProperty('--app-width', `${size.width}px`);
+    document.documentElement.style.setProperty('--app-height', `${size.height}px`);
+    return size;
+  }
+
   function point(x, y, a, r) {
     return { x: x + Math.cos(a) * r, y: y + Math.sin(a) * r };
   }
@@ -1348,24 +1545,71 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     return current + wrapAngle(target - current) * clamp(t, 0, 1);
   }
 
-  function enemyDef(type, wave) {
-    if (type === 'boss') return { hp: 520 + wave * 42, speed: 86, r: 38, color: '#ff4d6d' };
+  function enemyDef(type, wave, bossKind = null) {
+    if (type === 'boss') {
+      const table = {
+        warden: { hp: 520 + wave * 42, speed: 86, r: 38, color: '#ff4d6d' },
+        ironclad: { hp: 690 + wave * 52, speed: 58, r: 44, color: '#8aa3ff' },
+        crystalQueen: { hp: 560 + wave * 44, speed: 78, r: 42, color: '#ffd166' },
+        riftlord: { hp: 540 + wave * 40, speed: 104, r: 40, color: '#ff3df2' },
+        artillery: { hp: 620 + wave * 46, speed: 66, r: 43, color: '#ff8c22' },
+        starcore: { hp: 760 + wave * 58, speed: 76, r: 46, color: '#ffdf68' }
+      };
+      return table[bossKind] || table.warden;
+    }
     if (type === 'sprinter') return { hp: 24 + wave * 2.1, speed: 188 + wave * 3, r: 12, color: '#ff9f1c' };
     if (type === 'shooter') return { hp: 32 + wave * 2.5, speed: 116 + wave * 2, r: 14, color: '#ff3df2' };
     if (type === 'tank') return { hp: 70 + wave * 4, speed: 74 + wave * 1.4, r: 20, color: '#8aa3ff' };
+    if (type === 'bomber') return { hp: 42 + wave * 3.1, speed: 105 + wave * 1.4, r: 17, color: '#ff8c22' };
     return { hp: 34 + wave * 2.4, speed: 128 + wave * 2.2, r: 15, color: '#37f6ff' };
   }
 
   function pickEnemyType(wave) {
     const roll = Math.random();
     const zone = meta.selectedZone;
-    if (zone === 'crystal' && roll < 0.34) return 'sprinter';
-    if (zone === 'scrapyard' && roll < 0.28) return 'tank';
-    if (zone === 'rift' && roll < 0.30) return 'shooter';
+    if (zone === 'crystal' && roll < 0.30) return 'sprinter';
+    if (zone === 'scrapyard' && roll < 0.32) return 'tank';
+    if (zone === 'rift' && roll < 0.25) return 'shooter';
+    if (zone === 'rift' && wave >= 3 && roll < 0.46) return 'bomber';
     if (wave >= 7 && roll < 0.22) return 'tank';
-    if (wave >= 4 && roll < 0.48) return 'shooter';
+    if (wave >= 5 && roll < 0.42) return 'bomber';
+    if (wave >= 4 && roll < 0.60) return 'shooter';
     if (roll < 0.33) return 'sprinter';
     return 'chaser';
+  }
+
+  function bossKindForWave(wave) {
+    if (wave >= 10) {
+      if (meta.selectedZone === 'rift') return 'riftlord';
+      if (meta.selectedZone === 'crystal') return 'crystalQueen';
+      return 'starcore';
+    }
+    if (meta.selectedZone === 'scrapyard') return 'ironclad';
+    if (meta.selectedZone === 'crystal') return 'crystalQueen';
+    if (meta.selectedZone === 'rift') return 'artillery';
+    return 'warden';
+  }
+
+  function bossName(kind) {
+    return {
+      warden: '核心守衛',
+      ironclad: '鐵壁殘骸王',
+      crystalQueen: '晶礦女王',
+      riftlord: '裂隙主宰',
+      artillery: '重砲裂隙艦',
+      starcore: '星環核心主宰'
+    }[kind] || '核心守衛';
+  }
+
+  function bossColor(kind) {
+    return {
+      warden: '#ff4d6d',
+      ironclad: '#8aa3ff',
+      crystalQueen: '#ffd166',
+      riftlord: '#ff3df2',
+      artillery: '#ff8c22',
+      starcore: '#ffdf68'
+    }[kind] || '#ff4d6d';
   }
 
   function zoneRouteEffect() {
@@ -1443,6 +1687,10 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       if (e.code === 'KeyP') togglePause();
       if (e.code === 'KeyE') cycleAimAssist();
     });
+    const syncViewport = () => syncViewportVars(sceneRef?.scale || {});
+    window.addEventListener('resize', syncViewport);
+    window.visualViewport?.addEventListener('resize', syncViewport);
+    window.visualViewport?.addEventListener('scroll', syncViewport);
   }
 
   function boot() {
@@ -1452,11 +1700,12 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     updateSettingsLabels();
     hideUpgradeSurfaces();
     bindUi();
+    const size = syncViewportVars();
     const config = {
       type: PhaserLib.AUTO,
       parent: 'game',
-      width: window.innerWidth,
-      height: window.innerHeight,
+      width: size.width,
+      height: size.height,
       backgroundColor: '#050712',
       render: { antialias: true, pixelArt: false, roundPixels: false },
       scale: { mode: PhaserLib.Scale.RESIZE, autoCenter: PhaserLib.Scale.CENTER_BOTH },
