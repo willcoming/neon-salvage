@@ -17,10 +17,10 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   const PhaserLib = window.Phaser;
   if (!PhaserLib) throw new Error('Phaser runtime missing: vendor/phaser.min.js was not loaded');
 
-  const VERSION = 'v7.1 美式漫畫火線版';
+  const VERSION = 'v7.2 漫畫爆擊視覺版';
   const WORLD = { w: 3200, h: 2200 };
   const PLAYER_BASE = { hp: 122, speed: 310, damage: 17, fireRate: 0.19, bulletSpeed: 760, radius: 14 };
-  const MAX_PARTICLES = 220;
+  const MAX_PARTICLES = 320;
   const ZONE_DEFS = [
     { id: 'random', name: '隨機航線', desc: '每局抽一個星域，保持新鮮感。', color: '#bdfcff' },
     { id: 'scrapyard', name: '電磁殘骸帶', desc: '敵彈稍慢，戰場更擁擠。', color: '#37f6ff' },
@@ -156,9 +156,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     const eyebrow = card.querySelector('.eyebrow');
     const h2 = card.querySelector('h2');
     const p = card.querySelector('p:not(.eyebrow)');
-    if (eyebrow) eyebrow.textContent = 'BETA DEMO // American comic combat style';
+    if (eyebrow) eyebrow.textContent = 'BETA DEMO // Comic impact visual pass';
     if (h2) h2.textContent = '霓虹拾荒者 Neon Salvage';
-    if (p) p.textContent = 'v7.1 套用美式漫畫戰鬥風格：粗黑描線、半色調網點、強烈紅藍橘色塊，以及少量但有壓迫感的交叉火線。';
+    if (p) p.textContent = 'v7.2 加強漫畫爆擊視覺：命中星芒、擊破字卡、拾取拖尾、受傷紅閃與高速分鏡速度線，讓戰鬥更有衝擊。';
     if (ui.startBtn) {
       ui.startBtn.style.display = '';
       ui.startBtn.textContent = '開始 Phaser 版';
@@ -186,8 +186,8 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
   }
 
   function updateMetaPanels() {
-    if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜Comic Phaser 3.90`;
-    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.1：Phaser runtime 加上美式漫畫描線、網點與火線視覺；舊 Canvas 版仍保留在 game.js 供回滾。';
+    if (ui.achievementPanel) ui.achievementPanel.textContent = `最佳波次 ${meta.bestWave || 1}｜累積碎晶 ${meta.scrap || 0}｜Comic FX Phaser 3.90`;
+    if (ui.offlineNotice) ui.offlineNotice.textContent = 'v7.2：新增命中星芒、擊破爆字、傷害閃框、拾取拖尾與速度線；舊 Canvas 版仍保留在 game.js 供回滾。';
   }
 
   function hideUpgradeSurfaces() {
@@ -219,6 +219,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.surgeCount = 0;
       this.shakeTime = 0;
       this.shakeAmount = 0;
+      this.screenFlash = 0;
+      this.screenFlashColor = '#ffdf68';
+      this.damageCue = null;
       this.message = 'Phaser 引擎就緒';
       this.messageTimer = 2.4;
       this.player = { x: WORLD.w / 2, y: WORLD.h / 2, vx: 0, vy: 0, hp: PLAYER_BASE.hp, maxHp: PLAYER_BASE.hp, angle: -Math.PI / 2, invuln: 1.8 };
@@ -277,6 +280,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.message = n % 5 === 0 ? `第 ${n} 波｜核心守衛` : `第 ${n} 波｜敵群 ${this.waveBudget}`;
       this.messageTimer = 2.2;
       flash(this.message);
+      this.screenFlash = Math.max(this.screenFlash, n % 5 === 0 ? 0.24 : 0.13);
+      this.screenFlashColor = n % 5 === 0 ? '#e83b3b' : '#ffdf68';
+      this.comicSplash(this.player.x, this.player.y, n % 5 === 0 ? 'BOSS!!' : 'WAVE!', n % 5 === 0 ? '#e83b3b' : '#ffdf68');
     }
 
     handlePointerDown(pointer) {
@@ -392,7 +398,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           e.hp -= b.damage;
           e.hit = 0.12;
           b.dead = true;
+          const hitAngle = Math.atan2(b.vy, b.vx);
           this.burst(b.x, b.y, '#bdfcff', 5, 0.45);
+          this.comicImpact(b.x, b.y, e.hp <= 0 ? '#ffdf68' : '#f6f2dc', hitAngle, e.hp <= 0 ? 1.05 : 0.72);
           if (e.hp <= 0) this.killEnemy(e);
           break;
         }
@@ -459,6 +467,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           const a = angleBetween(s.x, s.y, this.player.x, this.player.y);
           s.vx += Math.cos(a) * 520 * dt;
           s.vy += Math.sin(a) * 520 * dt;
+          if (Math.random() < 0.18) this.particles.push({ x: s.x, y: s.y, vx: -Math.cos(a) * 45, vy: -Math.sin(a) * 45, r: 2.1, life: 0.22, max: 0.22, color: '#ffdf68', kind: 'spark' });
         }
         s.x += s.vx * dt;
         s.y += s.vy * dt;
@@ -468,6 +477,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           s.dead = true;
           meta.scrap += s.value;
           meta.score += s.value * 4;
+          this.comicImpact(s.x, s.y, '#ffdf68', angleBetween(s.x, s.y, this.player.x, this.player.y), 0.45);
         }
       }
       this.shards = this.shards.filter(s => !s.dead);
@@ -476,6 +486,11 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
     updateParticles(dt) {
       this.messageTimer = Math.max(0, this.messageTimer - dt);
       this.shakeTime = Math.max(0, this.shakeTime - dt);
+      this.screenFlash = Math.max(0, this.screenFlash - dt);
+      if (this.damageCue) {
+        this.damageCue.life -= dt;
+        if (this.damageCue.life <= 0) this.damageCue = null;
+      }
       for (const p of this.particles) {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
@@ -508,6 +523,10 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.player.invuln = 0.42;
       this.addFloatingText(this.player.x, this.player.y - 28, `-${Math.round(amount)}`, '#ff4d6d', 650);
       this.burst(sx, sy, '#ff4d6d', 10, 0.85);
+      this.comicImpact(sx, sy, '#e83b3b', angleBetween(sx, sy, this.player.x, this.player.y), 0.95);
+      this.screenFlash = Math.max(this.screenFlash, 0.22);
+      this.screenFlashColor = '#e83b3b';
+      this.damageCue = { x: sx, y: sy, life: 0.34, max: 0.34 };
       this.addShake(4, 0.18);
       beep('hurt');
       haptic(28);
@@ -522,6 +541,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       meta.score += boss ? 550 : 70;
       this.addFloatingText(e.x, e.y - e.r, boss ? 'CORE BREAK' : '+KILL', boss ? '#ffd166' : '#bdfcff', 800);
       this.burst(e.x, e.y, boss ? '#ffd166' : e.color, boss ? 34 : 13, boss ? 1.45 : 0.8);
+      this.comicSplash(e.x, e.y, boss ? 'KRAK!!' : 'BLAM!', boss ? '#ffdf68' : e.color, boss ? 1.28 : 0.82);
+      this.screenFlash = Math.max(this.screenFlash, boss ? 0.22 : 0.08);
+      this.screenFlashColor = boss ? '#ffdf68' : '#78f6ff';
       this.dropShards(e.x, e.y, boss ? 18 : PhaserLib.Math.Between(2, 4));
       beep(boss ? 'surge' : 'hit');
       haptic(boss ? 38 : 10);
@@ -553,6 +575,9 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
         if (e.hp <= 0) this.killEnemy(e);
       }
       this.particles.push({ x: source.x, y: source.y, vx: 0, vy: 0, r: 18, grow: radius * 4, life: 0.35, max: 0.35, color: COMBAT_SURGE_DEF.color, ring: true });
+      this.comicSplash(source.x, source.y, 'SURGE!', COMBAT_SURGE_DEF.color, 1.45);
+      this.screenFlash = Math.max(this.screenFlash, 0.20);
+      this.screenFlashColor = COMBAT_SURGE_DEF.color;
       this.addFloatingText(source.x, source.y - 48, `${COMBAT_SURGE_DEF.name}｜${hits}`, COMBAT_SURGE_DEF.color, 1050);
       this.addShake(8, 0.22);
       beep('surge');
@@ -571,8 +596,23 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       for (let i = 0; i < count; i++) {
         const a = PhaserLib.Math.FloatBetween(0, Math.PI * 2);
         const speed = PhaserLib.Math.Between(50, 260) * scale;
-        this.particles.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: PhaserLib.Math.FloatBetween(1.6, 4.2) * scale, life: PhaserLib.Math.FloatBetween(0.18, 0.52), color });
+        this.particles.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: PhaserLib.Math.FloatBetween(1.6, 4.2) * scale, life: PhaserLib.Math.FloatBetween(0.18, 0.52), max: 0.52, color, kind: 'spark' });
       }
+    }
+
+    comicImpact(x, y, color, angle = 0, scale = 1) {
+      this.particles.push({ x, y, vx: 0, vy: 0, r: 12 * scale, grow: 180 * scale, life: 0.22, max: 0.22, color, ring: true });
+      this.particles.push({ x, y, vx: 0, vy: 0, r: 22 * scale, grow: 86 * scale, life: 0.18, max: 0.18, color, kind: 'star' });
+      for (let i = -2; i <= 2; i++) {
+        const a = angle + i * 0.28 + PhaserLib.Math.FloatBetween(-0.08, 0.08);
+        const speed = PhaserLib.Math.Between(170, 330) * scale;
+        this.particles.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, r: PhaserLib.Math.FloatBetween(2.2, 4.8) * scale, life: 0.20 + Math.random() * 0.18, max: 0.32, color, kind: 'slash' });
+      }
+    }
+
+    comicSplash(x, y, text, color = '#ffdf68', scale = 1) {
+      this.comicImpact(x, y, color, -Math.PI / 2, scale);
+      this.addFloatingText(x, y - 30 * scale, text, color, 880 + scale * 120, 22 + scale * 10);
     }
 
     addShake(amount, duration) {
@@ -634,6 +674,7 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       this.drawEnemies();
       this.drawPlayer();
       this.drawParticles();
+      this.drawComicOverlay();
       this.drawScreenHints();
     }
 
@@ -861,14 +902,16 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
           g.strokeCircle(p.x, p.y, p.r);
           g.lineStyle(2, COMIC.white, alpha * 0.6);
           g.strokeCircle(p.x, p.y, p.r + 7);
+        } else if (p.kind === 'star') {
+          this.drawStarburst(g, p.x, p.y, p.r, color, alpha);
         } else {
           const tail = Math.min(24, Math.hypot(p.vx, p.vy) * 0.045);
           const speed = Math.hypot(p.vx, p.vy) || 1;
           const tx = p.x - (p.vx / speed) * tail;
           const ty = p.y - (p.vy / speed) * tail;
-          g.lineStyle(Math.max(3, p.r + 4), COMIC.ink, alpha * 0.78);
+          g.lineStyle(Math.max(3, p.r + (p.kind === 'slash' ? 8 : 4)), COMIC.ink, alpha * 0.78);
           g.lineBetween(tx, ty, p.x, p.y);
-          g.lineStyle(Math.max(2, p.r), color, alpha);
+          g.lineStyle(Math.max(2, p.r + (p.kind === 'slash' ? 3 : 0)), color, alpha);
           g.lineBetween(tx, ty, p.x, p.y);
           g.fillStyle(color, alpha);
           g.fillCircle(p.x, p.y, Math.max(2, p.r));
@@ -876,19 +919,83 @@ import { SAVE_KEY, readSaveFromStorage } from './src/save.js';
       }
     }
 
-    addFloatingText(x, y, text, color = '#ffffff', duration = 760) {
+    drawStarburst(g, x, y, r, color, alpha = 1) {
+      for (let i = 0; i < 12; i++) {
+        const a = i * Math.PI * 2 / 12;
+        const c = point(x, y, a, r * 0.20);
+        const p1 = point(x, y, a - 0.12, r * (i % 2 ? 0.82 : 1.18));
+        const p2 = point(x, y, a + 0.12, r * (i % 2 ? 0.82 : 1.18));
+        g.lineStyle(3, COMIC.ink, alpha * 0.88);
+        g.strokeTriangle(c.x, c.y, p1.x, p1.y, p2.x, p2.y);
+        g.fillStyle(i % 3 === 0 ? COMIC.white : color, alpha);
+        g.fillTriangle(c.x, c.y, p1.x, p1.y, p2.x, p2.y);
+      }
+    }
+
+    drawComicOverlay() {
+      const g = this.uiG;
+      const w = this.scale.width;
+      const h = this.scale.height;
+      if (this.running && !this.gameOver && !this.pausedRun) {
+        const move = clamp(Math.hypot(this.player.vx, this.player.vy) / PLAYER_BASE.speed, 0, 1.25);
+        const drama = clamp(move * 0.55 + Math.min(this.combo, 8) * 0.045 + (this.screenFlash > 0 ? 0.45 : 0), 0, 1);
+        if (drama > 0.08) {
+          for (let i = 0; i < 7; i++) {
+            const y = ((performance.now() * 0.055) + i * 117) % (h + 220) - 110;
+            const fromLeft = i % 2 === 0;
+            const x1 = fromLeft ? -80 : w + 80;
+            const x2 = fromLeft ? w * (0.42 + i * 0.035) : w * (0.62 - i * 0.035);
+            const yy = y + (fromLeft ? 68 : -68);
+            g.lineStyle(7, COMIC.ink, 0.12 * drama);
+            g.lineBetween(x1, y, x2, yy);
+            g.lineStyle(3, i % 3 === 0 ? COMIC.gold : COMIC.cyan, 0.18 * drama);
+            g.lineBetween(x1, y, x2, yy);
+          }
+        }
+      }
+
+      if (this.screenFlash > 0) {
+        const c = PhaserLib.Display.Color.HexStringToColor(this.screenFlashColor || '#ffdf68').color;
+        const alpha = clamp(this.screenFlash / 0.24, 0, 1);
+        g.fillStyle(c, 0.14 * alpha);
+        g.fillRect(0, 0, w, h);
+        g.lineStyle(16, COMIC.ink, 0.22 * alpha);
+        g.strokeRect(8, 8, w - 16, h - 16);
+        g.lineStyle(7, c, 0.42 * alpha);
+        g.strokeRect(18, 18, w - 36, h - 36);
+      }
+
+      if (this.damageCue) {
+        const alpha = clamp(this.damageCue.life / this.damageCue.max, 0, 1);
+        const cam = this.cameras.main;
+        const sx = this.damageCue.x - cam.scrollX;
+        const sy = this.damageCue.y - cam.scrollY;
+        const angle = Math.atan2(sy - h / 2, sx - w / 2);
+        const edge = point(w / 2, h / 2, angle, Math.max(w, h) * 0.42);
+        const p1 = point(edge.x, edge.y, angle + 2.62, 48);
+        const p2 = point(edge.x, edge.y, angle - 2.62, 48);
+        g.lineStyle(6, COMIC.ink, 0.74 * alpha);
+        g.strokeTriangle(edge.x, edge.y, p1.x, p1.y, p2.x, p2.y);
+        g.fillStyle(COMIC.red, 0.35 * alpha);
+        g.fillTriangle(edge.x, edge.y, p1.x, p1.y, p2.x, p2.y);
+      }
+    }
+
+    addFloatingText(x, y, text, color = '#ffffff', duration = 760, fontSize = 18) {
       const label = this.add.text(x, y, text, {
-        fontFamily: 'ui-sans-serif, system-ui, sans-serif',
-        fontSize: '16px',
-        fontStyle: '800',
+        fontFamily: 'Impact, ui-sans-serif, system-ui, sans-serif',
+        fontSize: `${fontSize}px`,
+        fontStyle: '900',
         color,
-        stroke: '#050712',
-        strokeThickness: 4
+        stroke: '#07080c',
+        strokeThickness: 7
       }).setOrigin(0.5).setDepth(8);
+      label.setAngle(PhaserLib.Math.FloatBetween(-8, 8));
       this.labels.push(label);
       this.tweens.add({
         targets: label,
-        y: y - 42,
+        y: y - 50,
+        scale: 1.14,
         alpha: 0,
         duration,
         ease: 'Cubic.easeOut',
